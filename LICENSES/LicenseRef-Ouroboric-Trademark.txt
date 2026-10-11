@@ -1,0 +1,8 @@
+Copyright 2026 Bruno Guilhermo de Barros Valério. All rights reserved.
+
+The Ouroboric logos, wordmark, favicons, app icons and logo concepts are used as trademarks. They are
+not licensed under the code or documentation licences of this repository.
+
+You may show them unmodified to refer to Ouroboric and its projects, as described in TRADEMARKS.md.
+Any other use, including modifying them or using them for another project, product or service,
+requires written permission.
