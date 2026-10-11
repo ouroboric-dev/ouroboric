@@ -87,7 +87,10 @@ The long-term picture: solid means v0, dashed means later, dotted means an optio
 means illustrative.
 
 <!-- diagram: assets/diagrams/ouroboric-long-term-map.d2 -->
-![Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Asgard, the company factory, runs on Odin; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), realms (web now; game and mobile later), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); future product, research and art factories are illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok](../../assets/diagrams/rendered/ouroboric-long-term-map.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/diagrams/rendered/ouroboric-long-term-map.dark.svg">
+  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Asgard, the company factory, runs on Odin; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), realms (web now; game and mobile later), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); future product, research and art factories are illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
+</picture>
 
 | Name | Role | Status |
 |---|---|---|

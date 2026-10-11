@@ -81,7 +81,10 @@ runs stay comparable.
 ## 4. Stages and approval points
 
 <!-- diagram: assets/diagrams/sdd-flow.mmd -->
-![Spec-driven development: charter and design doc need human approval; the spec is approved automatically unless it deviates; plan, build, merge gate, living spec and journal follow automatically](../assets/diagrams/rendered/sdd-flow.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/rendered/sdd-flow.dark.svg">
+  <img alt="Spec-driven development: charter and design doc need human approval; the spec is approved automatically unless it deviates; plan, build, merge gate, living spec and journal follow automatically" src="../assets/diagrams/rendered/sdd-flow.svg">
+</picture>
 
 ```
 (tier 0 once: intent ─► charter ─► [charter] ─► shape, brand seed, roadmap)

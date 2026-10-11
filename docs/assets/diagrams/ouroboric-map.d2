@@ -1,8 +1,3 @@
-vars: {
-  d2-config: {
-    theme-id: 1
-  }
-}
 direction: down
 operator: "Operator" {shape: person}
 ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
@@ -26,7 +21,7 @@ ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
   asgard -> yggdrasil.odin: "runs on"
 }
 products: "Companies and products it makes\ne.g. photografy, client gallery"
-operator -> ouroboric.asgard: "approves direction" {style.stroke: "#FF4F00"; style.stroke-width: 3}
+operator -> ouroboric.asgard: "approves direction" {style.stroke: ${accent}; style.stroke-width: 3}
 ouroboric.asgard -> products: "kickstarts"
 ouroboric.yggdrasil -> products: "builds and verifies"
-products -> ouroboric: "lessons and benchmarks feed back" {style.stroke-dash: 4; style.stroke: "#FF4F00"}
+products -> ouroboric: "lessons and benchmarks feed back" {style.stroke-dash: 4; style.stroke: ${accent}}

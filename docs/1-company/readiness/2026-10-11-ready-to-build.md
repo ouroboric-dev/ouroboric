@@ -20,7 +20,10 @@ level 1.
 ## Summary
 
 <!-- diagram: assets/diagrams/readiness-levels.mmd -->
-![Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion](../../assets/diagrams/rendered/readiness-levels.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/diagrams/rendered/readiness-levels.dark.svg">
+  <img alt="Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion" src="../../assets/diagrams/rendered/readiness-levels.svg">
+</picture>
 
 Of 21 items, 7 are met, 11 are partial and 3 are missing.
 
