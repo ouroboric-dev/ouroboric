@@ -32,7 +32,7 @@ Repositories in the `ouroboric-dev` organisation:
 Each operator also keeps a **private instance umbrella** (L0), outside this repository, with pinned
 factory versions, their own projects, hidden benchmarks and private notes. It never lives here.
 
-Products (submodules once their repos are public):
+Products, as submodules under [`products/`](../products/) (clone with `--recurse-submodules`):
 
 | Product | What it is |
 |---|---|

@@ -1,0 +1,6 @@
+[submodule "products/yggdrasil"]
+	path = products/yggdrasil
+	url = https://github.com/ouroboric-dev/yggdrasil.git
+[submodule "products/asgard"]
+	path = products/asgard
+	url = https://github.com/ouroboric-dev/asgard.git
