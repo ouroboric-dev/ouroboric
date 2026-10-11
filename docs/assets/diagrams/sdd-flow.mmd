@@ -1,0 +1,17 @@
+flowchart TD
+  subgraph DIR["Direction: humans approve"]
+    direction LR
+    C[Charter] --> GC{{approval: charter}}
+    GC --> D[Design doc] --> CC[Charter-conformance check] --> GD{{approval: design}}
+  end
+  subgraph EXE["Execution: automatic unless it deviates"]
+    direction LR
+    S[Spec] --> R[Design-conformance review] --> GS{{spec: stops on deviation}}
+    GS --> P[Plan, tasks, DoR check] --> B[Implement and check ladder]
+    B --> M[Merge gate] --> L[Living spec and journal]
+  end
+  GD --> S
+  classDef gate fill:#FF4F00,color:#FFFFFF,stroke:#0B0D12
+  classDef cond fill:#FFFFFF,color:#0B0D12,stroke:#FF4F00,stroke-width:2px,stroke-dasharray:5 3
+  class GC,GD gate
+  class GS cond

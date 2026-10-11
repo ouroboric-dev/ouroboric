@@ -1,0 +1,20 @@
+---
+title: Ouroboric roadmap
+status: draft
+date: 2026-10-11
+related: [charter.md]
+style: direction
+---
+
+# Ouroboric roadmap
+
+This roadmap sets the order of work, not dates. Each product keeps its own detailed roadmap.
+
+0. **Kickstart (tier 0):** company charter, brand seed (the Norse story), shape (this umbrella with
+   Yggdrasil and Asgard), readiness assessment. Done retroactively on 2026-10-11.
+1. **Yggdrasil v0:** the software factory builds client gallery lite
+   ([Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md)).
+2. **Asgard v0:** templates, the readiness checklist and the documented manual kickstart.
+3. **Yggdrasil iteration 2 and self-hosting stage 1.**
+4. **Asgard automation:** kickstart skills and scripts, the Ginnungagap graph on Odin.
+5. **Later:** benchmark kit (Mimir), game realm, promotion (Bragi); new factories only after these.

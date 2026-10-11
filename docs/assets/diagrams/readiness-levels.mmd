@@ -1,0 +1,4 @@
+flowchart LR
+  K[Kickstart] --> RB{{Ready to build}} --> B[Spec, plan, build] --> RL{{Ready to launch}} --> D[deploy-prod] --> RP{{Ready to promote}} --> P[Promotion]
+  classDef gate fill:#FF4F00,color:#FFFFFF,stroke:#0B0D12
+  class RB,RL,RP gate
