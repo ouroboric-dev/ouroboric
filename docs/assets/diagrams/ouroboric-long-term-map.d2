@@ -1,0 +1,82 @@
+vars: {
+  d2-config: {
+    theme-id: 1
+  }
+}
+grid-rows: 2
+vertical-gap: 40
+ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
+  grid-columns: 2
+  journal: "Journal and content" {
+    sagas: "Sagas\nthe journal"
+    bragi: "Bragi\nposts from the sagas" {style.stroke-dash: 4}
+    sagas -> bragi: "feeds"
+  }
+  asgard: "Asgard: company factory (runs on Odin)" {
+    style.stroke-dash: 4
+    readiness: "Readiness checklist"
+    ginnungagap: "Ginnungagap\nkickstart graph" {style.stroke-dash: 4}
+  }
+  yggdrasil: "Yggdrasil: software factory" {
+    grid-columns: 2
+    core: "Core (v0)" {
+      odin: "Odin\norchestrator"
+      jorm: "Jormungandr\nloop"
+      gleipnir: "Gleipnir\nharness"
+      havamal: "Havamal\nskill library"
+      gungnir: "Gungnir\ncontract"
+      odin -> jorm
+      odin -> gleipnir
+      gleipnir -> havamal: "loads"
+    }
+    realms: "Realms (recipes for Odin)" {
+      web: "web"
+      game: "game" {style.stroke-dash: 4}
+      mobile: "mobile" {style.stroke-dash: 4}
+    }
+    later: "Later modules" {
+      style.stroke-dash: 4
+      grid-columns: 1
+      ratatoskr: "Ratatoskr\nrouting" {style.stroke-dash: 4}
+      norns: "Norns\nobservability" {style.stroke-dash: 4}
+      mimir: "Mimir\nbenchmarks" {style.stroke-dash: 4}
+    }
+    optional: "Optional names" {
+      style.stroke-dash: 1
+      grid-columns: 1
+      heimdall: "Heimdall\napproval points" {style.stroke-dash: 1}
+      bifrost: "Bifrost\nintegrations" {style.stroke-dash: 1}
+    }
+  }
+  future: "Future factories" {
+    style.stroke-dash: 4
+    style.fill: "#F7F7F5"
+    style.font-color: "#6B6B6B"
+    product: "product factory"
+    research: "research factory"
+    art: "art factories:\ndesign, copy, music, video"
+  }
+}
+notes: "" {
+  style.stroke-width: 0
+  style.fill: transparent
+  grid-columns: 3
+  legend: "Legend" {
+    v0: "v0 (now)"
+    later: "later" {style.stroke-dash: 4}
+    optional: "optional name" {style.stroke-dash: 1}
+    illustrative: "illustrative, not committed" {
+      style.stroke-dash: 4
+      style.fill: "#F7F7F5"
+      style.font-color: "#6B6B6B"
+    }
+  }
+  fenrir: "Fenrir\nthe models and agents,\nbound by Gleipnir"
+  adversaries: "Adversaries" {
+    style.stroke: "#FF4F00"
+    style.stroke-width: 2
+    loki: "Loki\nprompt injection"
+    nidhogg: "Nidhogg\nentropy, AI slop"
+    ragnarok: "Ragnarok\nthe cascade"
+  }
+}
