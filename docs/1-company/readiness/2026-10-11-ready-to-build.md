@@ -22,12 +22,12 @@ level 1.
 <!-- diagram: assets/diagrams/readiness-levels.mmd -->
 ![Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion](../../assets/diagrams/rendered/readiness-levels.svg)
 
-Of 20 items, 7 are met, 10 are partial and 3 are missing.
+Of 21 items, 7 are met, 11 are partial and 3 are missing.
 
 | Status | Count | Items |
 |---|---|---|
 | met | 7 | RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17 |
-| partial | 10 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
+| partial | 11 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20, RB-21 |
 | missing | 3 | RB-05, RB-13, RB-18 |
 
 ## Suggested review order
@@ -65,6 +65,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-18 | Implementation plan accepted? | missing | none yet; [plans folder](https://github.com/ouroboric-dev/yggdrasil/tree/main/docs/2-engineering/plans) is empty | write after RB-03 and the spec are accepted |
 | RB-19 | Technical risks identified, tested first? | partial | listed in [v0 spec §16](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/specs/2026-10-11-yggdrasil-v0-spec.md#16-open-items-and-first-spike) (devcontainer + rootless Podman, `--bare` with subscription auth, OpenRouter privacy settings, humanizer licence; and whether the container engine is rootless, since this machine's Podman uses a Podman Desktop machine's rootful socket; that the Podman VM can't mount WSL paths; and that host registry credentials leak into image pulls) | make the throwaway spike the plan's first task |
 | RB-20 | Success measure fixed in advance? | partial | v0 success criteria in the [design doc §2.3](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md#23-success-criteria); the client gallery brief exists; the hidden suite doesn't | freeze the brief and write the hidden suite before the first factory run, without looking at any factory output |
+| RB-21 | Minimal visual identity defined? | partial | an informal palette is in use (Midnight #0B0D12, International Orange #FF4F00) in [diagrams](../../4-ways-of-working/diagrams.md) and [logo prompts](../../7-branding/prompts/nano-banana-logo-prompts.md); no logo chosen, no typography, no design-language document; **contrast check:** orange text on white and white text on orange are 3.3:1, failing WCAG AA for normal text (our diagrams' approval labels use white on orange); Midnight on orange is 5.9:1 | choose the logo from the prompts' output; pick typefaces under an open licence (for example SIL OFL); write `7-branding/identity/` (palette with accessible pairs, typography, logo rules) and design tokens; fix the diagram labels to an accessible pair |
 
 ## Next assessment
 
