@@ -1,8 +1,8 @@
 ---
 title: Identity
 status: accepted
-date: 2026-10-11
-related: [tokens.css, tokens.json, ../story/naming-and-mythology.md, ../prompts/nano-banana-logo-prompts.md]
+date: 2026-10-12
+related: [tokens.css, tokens.json, logo/README.md, ../story/naming-and-mythology.md, ../prompts/nano-banana-logo-prompts.md]
 style: guide
 ---
 
@@ -121,13 +121,18 @@ The body is 17 px. Serif text reads better slightly larger than a sans at the sa
    text, chat link previews and terminals all use their own fonts. Banners and social cards therefore
    are images exported from the wordmark.
 
-## Still open
+## Logo
 
-- **Logo:** the concept (an ouroboros snake over a ring of orange blocks, with the `OUROBORIC.DEV`
-  wordmark and `.DEV` in orange) needs final vector artwork.
-- **Dark-mode logo:** the Midnight snake merges with the dark background. A contour, light or accent,
-  is needed; to be decided with the vector artwork.
-- **Favicon:** in progress. Below 32 px the icon's fine details disappear; the ring of orange blocks
-  is the most recognisable part at 16 px.
-- **Wordmark lettering:** the logo's `OUROBORIC.DEV` should be set in Cinzel 800, kerned by hand, and
-  converted to outlines in the vector artwork.
+**Decided 2026-10-12.** An ouroboros of carved, interlocking scales biting its orange tail, which
+carries a gate, with the `OUROBORIC.DEV` wordmark in Cinzel 800. In dark mode the snake turns light
+(`#EDEFF3`), so it never merges with the background; the tail stays International Orange in both
+modes.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="logo/ouroboric-logo-horizontal-dark.svg">
+  <img alt="Ouroboric logo: a carved snake biting its orange tail, next to the wordmark OUROBORIC.DEV" src="logo/ouroboric-logo-horizontal.svg" width="420">
+</picture>
+
+The files, usage rules and favicon are in [logo](logo/README.md); the proposals and explorations
+behind them are in [logo concepts](logo/concepts/README.md). The logo files are trademarks, covered by
+`TRADEMARKS.md` rather than the documentation licence.

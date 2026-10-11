@@ -11,3 +11,10 @@ path = ["scripts/**"]
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 Bruno Guilhermo de Barros Valério"
 SPDX-License-Identifier = "AGPL-3.0-only"
+
+# Logo files are trademarks, not documentation (see TRADEMARKS.md); their READMEs stay CC BY 4.0.
+[[annotations]]
+path = ["docs/7-branding/identity/logo/*.svg", "docs/7-branding/identity/logo/*.png", "docs/7-branding/identity/logo/*.ico", "docs/7-branding/identity/logo/concepts/*.svg"]
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 Bruno Guilhermo de Barros Valério"
+SPDX-License-Identifier = "LicenseRef-Ouroboric-Trademark"

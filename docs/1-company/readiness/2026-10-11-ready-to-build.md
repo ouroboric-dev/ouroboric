@@ -25,12 +25,12 @@ level 1.
   <img alt="Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion" src="../../assets/diagrams/rendered/readiness-levels.svg">
 </picture>
 
-Of 21 items, 7 are met, 11 are partial and 3 are missing.
+Of 21 items, 8 are met, 10 are partial and 3 are missing.
 
 | Status | Count | Items |
 |---|---|---|
-| met | 7 | RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17 |
-| partial | 11 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20, RB-21 |
+| met | 8 | RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17, RB-21 |
+| partial | 10 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
 | missing | 3 | RB-05, RB-13, RB-18 |
 
 ## Suggested review order
@@ -68,7 +68,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-18 | Implementation plan accepted? | missing | none yet; [plans folder](https://github.com/ouroboric-dev/yggdrasil/tree/main/docs/2-engineering/plans) is empty | write after RB-03 and the spec are accepted |
 | RB-19 | Technical risks identified, tested first? | partial | listed in [v0 spec §16](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/specs/2026-10-11-yggdrasil-v0-spec.md#16-open-items-and-first-spike) (devcontainer + rootless Podman, `--bare` with subscription auth, OpenRouter privacy settings, humanizer licence; and whether the container engine is rootless, since this machine's Podman uses a Podman Desktop machine's rootful socket; that the Podman VM can't mount WSL paths; and that host registry credentials leak into image pulls) | make the throwaway spike the plan's first task |
 | RB-20 | Success measure fixed in advance? | partial | v0 success criteria in the [design doc §2.3](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md#23-success-criteria); the client gallery brief exists; the hidden suite doesn't | freeze the brief and write the hidden suite before the first factory run, without looking at any factory output |
-| RB-21 | Minimal visual identity defined? | partial | **palette and typography decided** ([identity](../../7-branding/identity/README.md)): Midnight neutrals with International Orange, design tokens, all pairs WCAG AA, Midnight text on orange; diagrams fixed; Cinzel wordmark and initials, Fjalla One display, Literata headings and body, Inter interface, JetBrains Mono, runic ornament, all under the OFL, with a type scale and rules | final vector logo; dark-mode logo contour; favicon |
+| RB-21 | Minimal visual identity defined? | met | [identity](../../7-branding/identity/README.md): palette (Midnight with International Orange, all pairs WCAG AA), typography (Cinzel, Fjalla One, Literata, Inter, JetBrains Mono, runic ornament, all under the OFL), diagrams in the palette and Inter in light and dark, and the [logo](../../7-branding/identity/logo/README.md): icon, Cinzel wordmark, light and dark versions, favicon and app icons, under the trademark policy | — |
 
 ## Next assessment
 
