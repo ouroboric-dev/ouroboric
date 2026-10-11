@@ -9,8 +9,8 @@ style: direction
 # Ready to build — assessment 2026-10-11
 
 **Bottom line: not ready to build yet, as expected at this stage.** Direction, research and process
-are drafted and waiting for review. The blocking gaps are the reviews themselves, a licence, credentials
-and caps, and the implementation plan. Nothing here needs new design work; most
+are drafted and waiting for review. The blocking gaps are the reviews themselves, credentials and caps,
+and the implementation plan. Nothing here needs new design work; most
 gaps close through review and a few setup tasks.
 
 Scope: Ouroboric (company) and Yggdrasil v0 (first product to build). Checklist: Asgard's
@@ -22,13 +22,13 @@ level 1.
 <!-- diagram: assets/diagrams/readiness-levels.mmd -->
 ![Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion](../../assets/diagrams/rendered/readiness-levels.svg)
 
-Of 20 items, 5 are met, 10 are partial and 5 are missing.
+Of 20 items, 7 are met, 10 are partial and 3 are missing.
 
 | Status | Count | Items |
 |---|---|---|
-| met | 5 | RB-07, RB-10, RB-11, RB-16, RB-17 |
+| met | 7 | RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17 |
 | partial | 10 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
-| missing | 5 | RB-05, RB-08, RB-09, RB-13, RB-18 |
+| missing | 3 | RB-05, RB-13, RB-18 |
 
 ## Suggested review order
 
@@ -38,7 +38,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 2. **Yggdrasil product charter** (RB-02), then the **v0 design doc** (RB-03) and **roadmaps** (RB-04).
 3. **Standards** (RB-15): spec-driven development, docs standard, writing styles.
 4. **v0 engineering spec**: not a readiness item itself, but RB-18 (the plan) depends on it.
-5. **Decisions only you can make**: licence (RB-08), budgets (RB-13), name checks
+5. **Decisions only you can make**: budgets (RB-13), name checks
    (RB-06).
 
 ## Items
@@ -52,8 +52,8 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-05 | Principles as `AGENTS.md` invariants? | missing | no `AGENTS.md` exists in any repo yet | write them as the first plan task, derived from the accepted charters |
 | RB-06 | Name checked? | partial | GitHub org `ouroboric-dev` exists; known collisions noted in the [naming record](../../7-branding/story/naming-and-mythology.md#naming-rules) (Yggdrasil network, Cardano's Ouroboros, the Odin language) | check the `ouroboric.dev` domain, package registry names, and trademarks for "Ouroboric", "Yggdrasil" and "Asgard" in the classes that matter |
 | RB-07 | Brand seed written? | met | [naming and mythology](../../7-branding/story/naming-and-mythology.md); [logo prompts](../../7-branding/prompts/nano-banana-logo-prompts.md) | — |
-| RB-08 | Licence chosen for public work? | missing | no `LICENSE` in any repo | choose before publishing anything. Without a licence, published code is "all rights reserved": nobody can legally use, fork or contribute to it, which defeats the open-source boundary. Common choices: Apache-2.0 (patent grant), MIT (simplest). Copyleft licences (AGPL) would keep hosted forks open but deter many companies |
-| RB-09 | Contribution terms in place? | missing | none | add `CONTRIBUTING.md`, a code of conduct, `SECURITY.md` (how to report a vulnerability privately), and a DCO or contributor agreement |
+| RB-08 | Licence chosen for public work? | met | [licence map](../legal/README.md): AGPL-3.0 factory code, MIT copied templates, CC BY 4.0 docs; [trademarks](../../../TRADEMARKS.md) | — |
+| RB-09 | Contribution terms in place? | met | read-only publication: code of conduct, security policy and contributing guide in the organisation's `.github` repository; a contributor licence agreement is required before the first outside contribution ([legal](../legal/README.md#contributions)) | — |
 | RB-10 | Ownership clear? | met | confirmed by the founder on 2026-10-11 | — |
 | RB-11 | Shape decided? | met | company umbrella `ouroboric` with products `yggdrasil` (umbrella with `gungnir`, `odin`, `gleipnir`, `jormungandr`, `havamal`, `realm-web`) and `asgard`; local git only; hosting target for products in the [v0 spec](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/specs/2026-10-11-yggdrasil-v0-spec.md#93-infrastructure-target) | — |
 | RB-12 | Repos exist and follow the docs standard? | partial | `.github`, `ouroboric`, `yggdrasil`, `asgard` exist locally and follow the standard; component repos and GitHub remotes don't exist yet | create remotes when ready to publish (after RB-08, RB-09, RB-10); component repos come with the plan |
@@ -69,5 +69,5 @@ Review in this order to close the most items fastest. This assessment doubles as
 ## Next assessment
 
 Re-run this assessment after the review. Expected results after review and setup: RB-01–04 and
-RB-15 met; RB-08, RB-09, RB-13 and RB-14 met through decisions and setup; RB-05, RB-12 and RB-18–20
+RB-15 met; RB-13 and RB-14 met through decisions and setup; RB-05, RB-12 and RB-18–20
 closed during the first plan tasks.

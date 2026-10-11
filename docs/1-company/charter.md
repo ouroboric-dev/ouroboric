@@ -81,7 +81,8 @@ research and papers; artistic factories for design, copywriting, music, video an
 ## Boundaries
 
 - **Learning first.** Commercial use is not a goal for now.
-- **Open source** for the factories. What they produce may be public or private, at each operator's
-  choice.
+- **Open source** for the factories: AGPL-3.0 for factory code, MIT for anything copied into what
+  operators build, CC BY 4.0 for docs; names and logos reserved ([legal](legal/README.md)). What the
+  factories produce belongs to the operators and may be public or private, at their choice.
 - **Focus:** Yggdrasil and Asgard before any new factory.
 - **Cost-conscious:** subscriptions and free tiers first, hard budget caps everywhere.

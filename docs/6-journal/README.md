@@ -33,6 +33,7 @@ considered, what we chose, and the measured result. In the naming story these en
 | 2026-10-11 | [two factories and a company](2026-10-11-two-factories-and-a-company.md) | architecture, company, asgard, readiness | open | yes |
 | 2026-10-11 | [the style guide applied to itself](2026-10-11-the-style-guide-applied-to-itself.md) | docs, writing, dogfooding | resolved | yes |
 | 2026-10-11 | [diagrams as code](2026-10-11-diagrams-as-code.md) | docs, diagrams, security, tooling | resolved | yes |
+| 2026-10-11 | [choosing a licence](2026-10-11-choosing-a-licence.md) | licensing, open-source, publishing | resolved | yes |
 
 ## When to write an entry
 

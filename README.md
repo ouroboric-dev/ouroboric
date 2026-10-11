@@ -38,3 +38,11 @@ Products (submodules once their repos are public):
 |---|---|
 | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the software factory |
 | [Asgard](https://github.com/ouroboric-dev/asgard) | the company factory, running on Yggdrasil |
+
+## Licence
+
+- **Documentation** (this repository's main content): [CC BY 4.0](LICENSE).
+- **Scripts** (`scripts/`): [AGPL-3.0](LICENSES/AGPL-3.0-only.txt).
+- **Names and logos** are not licensed: see [TRADEMARKS.md](TRADEMARKS.md).
+- The products use AGPL-3.0 for factory code and MIT for anything copied into what operators build.
+  **What you build with Ouroboric factories is yours.**
