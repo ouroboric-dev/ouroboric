@@ -1,7 +1,7 @@
 ---
 title: Ouroboric charter
-status: draft
-date: 2026-10-11
+status: accepted
+date: 2026-10-12
 related: [roadmap.md, readiness/2026-10-11-ready-to-build.md]
 style: direction
 ---
@@ -9,19 +9,17 @@ style: direction
 # Ouroboric charter
 
 This charter sets the highest-level direction for Ouroboric (ouroboric.dev) and everything it builds.
-Every product charter must conform to it. The vision and mission below are drafts for the founder to
-rewrite.
+Every product charter must conform to it.
 
 ## Vision
 
-Every kind of creative and productive work can be done by systems that improve themselves, with
-people steering.
+A world where anyone can steer systems that build, learn and improve themselves: openly, measurably
+and safely.
 
 ## Mission
 
-Build open factories, for software, companies, research and art, that learn from every run, get
-measurably better with every iteration, and show their work, so that anyone can build, adapt and
-trust their own.
+Build open, self-improving factories, starting with software and companies, that anyone can run,
+adapt and trust.
 
 ## What "ouroboric" means
 
@@ -35,8 +33,8 @@ when it:
 
 ## Principles
 
-1. **Humans steer, agents build.** People approve direction. Work within approved direction runs
-   automatically; any deviation from it stops.
+1. **Humans steer, agents build.** Anyone running a factory approves its direction. Work within
+   approved direction runs automatically; any deviation from it stops.
 2. **Checks, not promises.** Verify claims mechanically wherever possible. Saying "done" proves
    nothing.
 3. **Measure everything.** Every run produces evidence, and every claim about a factory rests on runs.
@@ -77,13 +75,15 @@ research and papers; artistic factories for design, copywriting, music, video an
 
 ## North-star measures
 
-- **Each factory measurably improves per iteration** on its own benchmarks.
+- **Each factory measurably improves per iteration** on its own benchmarks: hidden acceptance score,
+  first-pass rate and cost per task, run against run.
 - **Factories in real use**, by us and by others.
 - **Lessons shared:** journal entries with measured results, and later published posts.
 
 ## Boundaries
 
-- **Learning first.** Commercial use is not a goal for now.
+- **Learning first.** Making money is not a goal for Ouroboric for now. Others may use the factories
+  commercially under their licences.
 - **Open source** for the factories: AGPL-3.0 for factory code, MIT for anything copied into what
   operators build, CC BY 4.0 for docs; names and logos reserved ([legal](legal/README.md)). What the
   factories produce belongs to the operators and may be public or private, at their choice.
