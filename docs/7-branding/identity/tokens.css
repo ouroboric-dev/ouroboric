@@ -1,0 +1,31 @@
+/* Ouroboric design tokens: dark first. Source of truth: README.md in this folder. */
+:root {
+  --bg: #0B0D12;
+  --surface: #14171F;
+  --border: #2A303C;
+  --text: #EDEFF3;
+  --muted: #9AA3B2;
+  --accent: #FF4F00;
+  --accent-text: #FF4F00;
+  --on-accent: #0B0D12;
+  --ok: #3FB950;
+  --warn: #D29922;
+  --crit: #F85149;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #FFFFFF;
+    --surface: #F4F5F7;
+    --border: #D8DCE3;
+    --text: #0B0D12;
+    --muted: #4F5868;
+    --accent: #FF4F00;
+    --accent-text: #B83A00;
+    --on-accent: #0B0D12;
+    --ok: #1A7F37;
+    --warn: #9A6700;
+    --crit: #CF222E;
+    color-scheme: light;
+  }
+}

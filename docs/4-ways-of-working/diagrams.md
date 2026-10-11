@@ -34,7 +34,8 @@ build lands, it renders the same sources itself.
 - **Colour has one meaning.** International Orange (#FF4F00) marks human approval points, hard stops,
   and trust boundaries. Everything else is neutral: the render script injects a Midnight (#0B0D12) on
   white palette into Mermaid, and D2 sources use D2's neutral grey theme (`theme-id: 1`) with orange set
-  inline on the elements that need it.
+  inline on the elements that need it. Text on orange is Midnight, never white (see the
+  [identity](../7-branding/identity/README.md) rules).
 - **Every image has alt text** that states what the diagram shows, for readers who can't see it.
 - **Mermaid labels are plain SVG text.** The render script sets `htmlLabels: false`, because GitHub and
   some Markdown previewers drop the HTML labels Mermaid uses by default, leaving empty boxes.
