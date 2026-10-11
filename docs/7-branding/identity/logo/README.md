@@ -23,6 +23,7 @@ tail is International Orange, and it carries a gate. The wordmark is `OUROBORIC.
 | `ouroboric-logo-horizontal.svg`, `-dark.svg` | the full logo: icon and wordmark side by side |
 | `ouroboric-icon.svg`, `-dark.svg` | the icon alone, from 48 px up |
 | `ouroboric-wordmark.svg`, `-dark.svg` | the wordmark alone |
+| `ouroboric-banner-dark.svg` | a 1280×320 banner, always dark: the logo on Midnight with the runic ornament, for profile pages and README headers |
 | `favicon.svg` | browser tabs and bookmarks; switches to the dark version by itself |
 | `favicon.ico` | older browsers: 16, 32 and 48 px, each drawn at its own size |
 | `apple-touch-icon.png` | 180 px, for iOS home screens |
@@ -67,6 +68,9 @@ To add the favicon to a page:
   ring of the icon. The tail and its gate come from the founder's favicon drawing. Gaps are 2 units
   between scales (1 px at 16 px) and 0.8 units around the head, cut as even offsets of its outline so
   the pieces interlock.
+- **Banner:** the dark horizontal logo with `ᛟᚢᚱᛟᛒᛟᚱᛁᚲ` (OUROBORIC in Elder Futhark) beneath it, set in
+  Noto Sans Runic from the Google Fonts repository (commit `8b0a1d0f`) and converted to outlines. It
+  carries its own Midnight background, so it looks the same on light and dark pages.
 - **Raster files:** rendered by headless Chrome and packed with Pillow.
 
 The proposals and favicon explorations that led here are in [concepts](concepts/README.md).
