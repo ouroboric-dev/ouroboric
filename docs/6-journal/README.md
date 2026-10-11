@@ -36,6 +36,7 @@ considered, what we chose, and the measured result. In the naming story these en
 | 2026-10-11 | [choosing a licence](2026-10-11-choosing-a-licence.md) | licensing, open-source, publishing | resolved | yes |
 | 2026-10-11 | [first publish](2026-10-11-first-publish.md) | publishing, security, github, tooling | resolved | yes |
 | 2026-10-11 | [choosing the palette](2026-10-11-choosing-the-palette.md) | brand, design, accessibility | resolved | yes |
+| 2026-10-11 | [choosing the typography](2026-10-11-choosing-the-typography.md) | brand, design, typography, accessibility | resolved | yes |
 
 ## When to write an entry
 
