@@ -7,7 +7,10 @@ and in time research and art. This repository is the company umbrella. Start wit
 ## The map
 
 <!-- diagram: assets/diagrams/ouroboric-map.d2 -->
-![Ouroboric map: the operator approves direction in Asgard, the company factory (readiness checklist, Ginnungagap kickstart graph), which runs on Odin; Yggdrasil, the software factory, contains Odin, Jormungandr, Gleipnir, Havamal and the realms, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; Asgard kickstarts and Yggdrasil builds companies and products, whose lessons and benchmarks feed back into Ouroboric](assets/diagrams/rendered/ouroboric-map.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/rendered/ouroboric-map.dark.svg">
+  <img alt="Ouroboric map: the operator approves direction in Asgard, the company factory (readiness checklist, Ginnungagap kickstart graph), which runs on Odin; Yggdrasil, the software factory, contains Odin, Jormungandr, Gleipnir, Havamal and the realms, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; Asgard kickstarts and Yggdrasil builds companies and products, whose lessons and benchmarks feed back into Ouroboric" src="assets/diagrams/rendered/ouroboric-map.svg">
+</picture>
 
 The names come from Norse myth; the [naming and mythology record](7-branding/story/naming-and-mythology.md) tells the story behind each one, and its
 [long-term map](7-branding/story/naming-and-mythology.md#glossary) shows what comes after v0.

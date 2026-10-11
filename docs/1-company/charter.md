@@ -59,7 +59,10 @@ when it:
 ## Portfolio
 
 <!-- diagram: assets/diagrams/ouroboric-portfolio.d2 -->
-![Ouroboric portfolio: the operator approves direction in Asgard, the company factory, which runs on Yggdrasil, the software factory; Asgard kickstarts a company such as photografy and Yggdrasil builds its product; future factories are illustrative](../assets/diagrams/rendered/ouroboric-portfolio.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/rendered/ouroboric-portfolio.dark.svg">
+  <img alt="Ouroboric portfolio: the operator approves direction in Asgard, the company factory, which runs on Yggdrasil, the software factory; Asgard kickstarts a company such as photografy and Yggdrasil builds its product; future factories are illustrative" src="../assets/diagrams/rendered/ouroboric-portfolio.svg">
+</picture>
 
 Ouroboric has two defined factories: Yggdrasil and Asgard.
 

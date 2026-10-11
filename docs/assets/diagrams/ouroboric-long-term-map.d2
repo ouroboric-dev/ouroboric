@@ -1,8 +1,3 @@
-vars: {
-  d2-config: {
-    theme-id: 1
-  }
-}
 grid-rows: 2
 vertical-gap: 40
 ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
@@ -50,8 +45,8 @@ ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
   }
   future: "Future factories" {
     style.stroke-dash: 4
-    style.fill: "#F7F7F5"
-    style.font-color: "#6B6B6B"
+    style.fill: ${surface}
+    style.font-color: ${muted}
     product: "product factory"
     research: "research factory"
     art: "art factories:\ndesign, copy, music, video"
@@ -67,13 +62,13 @@ notes: "" {
     optional: "optional name" {style.stroke-dash: 1}
     illustrative: "illustrative, not committed" {
       style.stroke-dash: 4
-      style.fill: "#F7F7F5"
-      style.font-color: "#6B6B6B"
+      style.fill: ${surface}
+      style.font-color: ${muted}
     }
   }
   fenrir: "Fenrir\nthe models and agents,\nbound by Gleipnir"
   adversaries: "Adversaries" {
-    style.stroke: "#FF4F00"
+    style.stroke: ${accent}
     style.stroke-width: 2
     loki: "Loki\nprompt injection"
     nidhogg: "Nidhogg\nentropy, AI slop"

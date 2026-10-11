@@ -99,8 +99,9 @@ The body is 17 px. Serif text reads better slightly larger than a sans at the sa
 
 1. **Cinzel appears only in the wordmark and in initials.** Never use it for headings or running
    text. Limiting Cinzel to rare moments keeps it memorable and keeps readers from tiring of it.
-2. **One initial per article at most.** Use it in journal entries, blog posts, the brand story and
-   the charter. Reference docs and specs don't get one.
+2. **One initial per article at most, in the plain style:** a Cinzel 800 letter in `accent-text`, three
+   lines of body text tall, with no box or ring. Use it in journal entries, blog posts, the brand story
+   and the charter. Reference docs and specs don't get one.
 3. **Never fake a style.** Fjalla One has one weight and no italic. Set `font-synthesis: none` so
    browsers don't invent bold or italic. Load only the weights in the table above.
 4. **Numbers in tables use Inter with tabular figures** (`font-variant-numeric: tabular-nums`) so
@@ -114,7 +115,9 @@ The body is 17 px. Serif text reads better slightly larger than a sans at the sa
    breached the GDPR, which set off a wave of warning letters to site owners. The OFL allows
    redistribution. When font files are committed to a repo, add `LICENSES/OFL-1.1.txt` and a
    `REUSE.toml` entry for them.
-7. **Where our fonts don't reach, the brand is the name, the colour and the tone.** GitHub README
+7. **Diagrams use Inter and the token palette, in a light and a dark render.** The render script
+   applies both; see [diagrams](../../4-ways-of-working/diagrams.md).
+8. **Where our fonts don't reach, the brand is the name, the colour and the tone.** GitHub README
    text, chat link previews and terminals all use their own fonts. Banners and social cards therefore
    are images exported from the wordmark.
 
@@ -126,9 +129,5 @@ The body is 17 px. Serif text reads better slightly larger than a sans at the sa
   is needed; to be decided with the vector artwork.
 - **Favicon:** in progress. Below 32 px the icon's fine details disappear; the ring of orange blocks
   is the most recognisable part at 16 px.
-- **Drop cap style:** plain (an `accent-text` Cinzel letter) is the default. Framed (a Midnight
-  letter in an orange box) and ring (the letter in an orange circle) were tested and remain options.
 - **Wordmark lettering:** the logo's `OUROBORIC.DEV` should be set in Cinzel 800, kerned by hand, and
   converted to outlines in the vector artwork.
-- **Diagrams** still use the renderer's default font (Open Sans in Mermaid); switching them to Inter
-  needs the font inside the local Kroki pod.
