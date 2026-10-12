@@ -25,12 +25,12 @@ level 1.
   <img alt="Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion" src="../../assets/diagrams/rendered/readiness-levels.svg">
 </picture>
 
-Of 21 items, 13 are met, 6 are partial and 2 are missing.
+Of 21 items, 14 are met, 5 are partial and 2 are missing.
 
 | Status | Count | Items |
 |---|---|---|
-| met | 13 | RB-01, RB-02, RB-03, RB-04, RB-07, RB-08, RB-09, RB-10, RB-11, RB-15, RB-16, RB-17, RB-21 |
-| partial | 6 | RB-06, RB-12, RB-13, RB-14, RB-19, RB-20 |
+| met | 14 | RB-01, RB-02, RB-03, RB-04, RB-06, RB-07, RB-08, RB-09, RB-10, RB-11, RB-15, RB-16, RB-17, RB-21 |
+| partial | 5 | RB-12, RB-13, RB-14, RB-19, RB-20 |
 | missing | 2 | RB-05, RB-18 |
 
 ## Suggested review order
@@ -53,7 +53,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-03 | Milestone 1 design doc accepted? | met | [v0 design doc](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md), accepted on 2026-10-12, with a measured self-improvement as success criterion 7 | — |
 | RB-04 | Roadmaps written? | met | [company roadmap](../roadmap.md) and [Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md), accepted on 2026-10-12; self-hosting stage 1 requires the change graph, the Go realm and `guardrail-change` first | — |
 | RB-05 | Principles as `AGENTS.md` invariants? | missing | no `AGENTS.md` exists in any repo yet | write them as the first plan task, derived from the accepted charters |
-| RB-06 | Name checked? | partial | GitHub org `ouroboric-dev` exists; known collisions noted in the [naming record](../../7-branding/story/naming-and-mythology.md#naming-rules) (Yggdrasil network, Cardano's Ouroboros, the Odin language) | check the `ouroboric.dev` domain, package registry names, and trademarks for "Ouroboric", "Yggdrasil" and "Asgard" in the classes that matter |
+| RB-06 | Name checked? | met | [name checks](../../5-research/2026-10-12-name-checks.md), 2026-10-12: `ouroboric.dev` owned; `ouroboric` free on npm, PyPI, crates.io, Docker Hub and Homebrew; trademark screening found no "Ouroboric" mark (nearest: OROBOROUS, status unknown); product names used under the Ouroboric umbrella | formal trademark search before launch (Asgard checklist RL-08); founder claims `ouroboric` on the registries |
 | RB-07 | Brand seed written? | met | [naming and mythology](../../7-branding/story/naming-and-mythology.md); [logo prompts](../../7-branding/prompts/nano-banana-logo-prompts.md) | — |
 | RB-08 | Licence chosen for public work? | met | [licence map](../legal/README.md): AGPL-3.0 factory code, MIT copied templates, CC BY 4.0 docs; [trademarks](../../../TRADEMARKS.md) | — |
 | RB-09 | Contribution terms in place? | met | read-only publication: code of conduct, security policy and contributing guide in the organisation's `.github` repository; a contributor licence agreement is required before the first outside contribution ([legal](../legal/README.md#contributions)) | — |
