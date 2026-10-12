@@ -1,7 +1,7 @@
 ---
 title: Writing styles
-status: draft
-date: 2026-10-11
+status: accepted
+date: 2026-10-12
 related: [docs-standard.md, spec-driven-development.md]
 ---
 
@@ -29,7 +29,7 @@ Fourteen styles:
 
 | Style id | Readers | Skills (vendored) | House rules |
 |---|---|---|---|
-| `direction` | decision-makers | `business-writing`, `plain-language` | bottom line first; one decision per paragraph; the charter's vision and mission lines follow `7-branding/voice/` |
+| `direction` | decision-makers | `business-writing`, `plain-language` | bottom line first; one decision per paragraph; the charter's vision and mission lines follow `7-branding/voice/` once it exists |
 | `spec` | engineers and agents | `google-dev-docs`, `asd-ste100` | prose follows Google developer style; **requirements and acceptance criteria follow ASD-STE100** (one meaning per sentence, approved vocabulary, at most 20 words); normative words follow RFC 2119 (MUST, SHOULD, MAY) |
 | `guide` | operators and developers | `google-dev-docs` | structured by Diátaxis (tutorial, how-to, explanation); second person; tasks start with a verb |
 | `procedure` | someone following steps, possibly under pressure | `asd-ste100` | numbered steps, one action each; warnings and cautions before the step they concern; no explanation inside steps |
@@ -69,6 +69,7 @@ or `agent-facing` text, where it would trade precision for natural-sounding pros
 | `5-research/` | `research` |
 | `6-journal/` | `journal` |
 | `7-branding/story/` | `brand-story` |
+| `7-branding/identity/` | `guide` |
 | `7-branding/voice/` | `marketing` |
 | `7-branding/prompts/` | `prompt` |
 | `AGENTS.md`, realm prompts, skill files | `agent-facing` |

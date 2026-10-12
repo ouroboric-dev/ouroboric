@@ -25,12 +25,12 @@ level 1.
   <img alt="Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion" src="../../assets/diagrams/rendered/readiness-levels.svg">
 </picture>
 
-Of 21 items, 12 are met, 6 are partial and 3 are missing.
+Of 21 items, 13 are met, 5 are partial and 3 are missing.
 
 | Status | Count | Items |
 |---|---|---|
-| met | 12 | RB-01, RB-02, RB-03, RB-04, RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17, RB-21 |
-| partial | 6 | RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
+| met | 13 | RB-01, RB-02, RB-03, RB-04, RB-07, RB-08, RB-09, RB-10, RB-11, RB-15, RB-16, RB-17, RB-21 |
+| partial | 5 | RB-06, RB-12, RB-14, RB-19, RB-20 |
 | missing | 3 | RB-05, RB-13, RB-18 |
 
 ## Suggested review order
@@ -62,7 +62,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-12 | Repos exist and follow the docs standard? | partial | published on 2026-10-11: [`.github`](https://github.com/ouroboric-dev/.github), [`ouroboric`](https://github.com/ouroboric-dev/ouroboric), [`yggdrasil`](https://github.com/ouroboric-dev/yggdrasil), [`asgard`](https://github.com/ouroboric-dev/asgard), all public with secret scanning, push protection, private vulnerability reporting and a protected `main`; the component repos (`gungnir`, `odin`, `gleipnir`, `jormungandr`, `havamal`, `realm-web`) don't exist yet | create the component repos with the first plan tasks |
 | RB-13 | Budgets and caps set? | missing | caps designed ([v0 spec §7.4](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/specs/2026-10-11-yggdrasil-v0-spec.md#74-budget-cap)) but no keys or limits exist | decide the monthly budget; create an OpenRouter key with a hard credit limit; decide which Claude subscription the factory uses (see RB-10) |
 | RB-14 | Credentials and secret scanning? | partial | no secrets in any repo (manual scans of the journal); dedicated tokens and `gitleaks` designed, not set up | create a `claude setup-token` token for the factory only; add `gitleaks` as a pre-commit check in each repo |
-| RB-15 | Standards accepted? | partial | [spec-driven development](../../4-ways-of-working/spec-driven-development.md), [docs standard](../../4-ways-of-working/docs-standard.md), [writing styles](../../4-ways-of-working/writing-styles.md), all draft | review and accept |
+| RB-15 | Standards accepted? | met | [spec-driven development](../../4-ways-of-working/spec-driven-development.md), [docs standard](../../4-ways-of-working/docs-standard.md), [writing styles](../../4-ways-of-working/writing-styles.md) and [diagrams](../../4-ways-of-working/diagrams.md), accepted on 2026-10-12 | — |
 | RB-16 | Research recorded? | met | [Yggdrasil research](https://github.com/ouroboric-dev/yggdrasil/tree/main/docs/5-research): six briefs, cited | — |
 | RB-17 | Journal started? | met | [journal](../../6-journal/README.md): 26 entries | — |
 | RB-18 | Implementation plan accepted? | missing | none yet; [plans folder](https://github.com/ouroboric-dev/yggdrasil/tree/main/docs/2-engineering/plans) is empty | write after RB-03 and the spec are accepted |

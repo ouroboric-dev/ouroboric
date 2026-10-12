@@ -1,7 +1,7 @@
 ---
 title: Documentation standard
-status: draft
-date: 2026-10-11
+status: accepted
+date: 2026-10-12
 related: [spec-driven-development.md]
 ---
 
@@ -41,11 +41,17 @@ docs/
   6-journal/               challenges, solutions, measured results (the sagas)
   7-branding/              everything identity flows from
     story/                 naming, mythology, narrative
-    identity/              logo system, icon, palette, typography: the design language
+    identity/              palette, typography, design tokens: the design language
+      logo/                logo, wordmark, favicon and app icons (trademark licence)
+        concepts/          proposals and explorations kept for the record
     voice/                 tone, vocabulary, messaging pillars, copywriting rules
     prompts/               image-generation and copy prompts
-    assets/                source SVG and PNG files
+  assets/
+    diagrams/              diagram sources and their light and dark renders (see diagrams.md)
 ```
+
+Raw sources that shouldn't be published, such as AI-generated rasters, stay out of the repo; only
+final vectors and exports are committed.
 
 The numeric prefixes order the rendered navigation. `3-using/` follows [Diátaxis](https://diataxis.fr/):
 tutorials teach, how-to guides solve a task, reference describes, explanation gives the why.
@@ -143,8 +149,8 @@ As marola puts it, writing a doc is a deploy.
 - **Renderer: Zensical**, the successor to Material for MkDocs from the same
   team. It reads `mkdocs.yml`. Material for MkDocs is in maintenance mode, with security fixes only until
   about November 2026.
-- **Stay renderer-agnostic:** plain Markdown, front matter, Mermaid. Don't use renderer-specific syntax in
-  the docs themselves. Then switching renderers means a new config file, not rewritten docs.
+- **Stay renderer-agnostic:** plain Markdown, front matter, Mermaid, and the HTML `<picture>` element
+  for light and dark images. Don't use renderer-specific syntax in the docs themselves. Then switching renderers means a new config file, not rewritten docs.
 - **Aggregation:** each umbrella's site includes its children's docs at their pinned SHAs, recursively
   down the tree (marola's `prepare-docs.sh` pattern). The site shows what has actually been validated.
 - **Known gaps:** Zensical doesn't yet have every Material plugin (redirects, blog, RSS, social cards).

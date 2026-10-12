@@ -1,7 +1,7 @@
 ---
 title: Diagrams
-status: draft
-date: 2026-10-11
+status: accepted
+date: 2026-10-12
 related: [docs-standard.md, writing-styles.md]
 style: guide
 ---
