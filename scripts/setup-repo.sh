@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Apply the required setup to an ouroboric-dev repo, fixing drift. Safe to run twice.
 # Leaves Discussions alone: ouroboric uses them as its public channel.
+# A push after approval dismisses the approval, and the last push needs approval from someone else,
+# so the pr-bot can't land commits nobody reviewed.
 # Founder-run: GH_TOKEN must hold the short-lived admin token (agents' tokens can't change settings).
 #   GH_TOKEN=... setup-repo.sh <repo>
 set -euo pipefail
@@ -16,7 +18,7 @@ RULESET='{"name":"protect-main","target":"branch","enforcement":"active",
  "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
  "bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}],
  "rules":[{"type":"deletion"},{"type":"non_fast_forward"},
-  {"type":"pull_request","parameters":{"allowed_merge_methods":["squash"],"dismiss_stale_reviews_on_push":false,"require_code_owner_review":false,"require_last_push_approval":false,"required_approving_review_count":1,"required_review_thread_resolution":false}}]}'
+  {"type":"pull_request","parameters":{"allowed_merge_methods":["squash"],"dismiss_stale_reviews_on_push":true,"require_code_owner_review":false,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":false}}]}'
 id="$(gh_api "$R/rulesets" -q '.[]|select(.name=="protect-main")|.id' | head -1)"
 if [ -n "$id" ]; then gh_api -X PUT "$R/rulesets/$id" --input - >/dev/null <<<"$RULESET"
 else gh_api -X POST "$R/rulesets" --input - >/dev/null <<<"$RULESET"; fi
