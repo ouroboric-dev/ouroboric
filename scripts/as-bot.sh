@@ -3,23 +3,28 @@
 # The command gets the token as GH_TOKEN, and git gets it for https://github.com only. SSH remotes
 # are rewritten to HTTPS, so the SSH key is never used. This script never prints the token, and it
 # is the only thing that reads the bot's key. Agent-run.
-#   as-bot.sh [--read] <repo[,repo...]> <command...>
+#   as-bot.sh [--read] <repo[,repo...]|all> <command...>     (all: read-only, every repo)
 #   as-bot.sh yggdrasil git push -u origin my-branch
 #   as-bot.sh yggdrasil gh pr create --title ... --body-file ...
-#   as-bot.sh --read ouroboric,yggdrasil scripts/check-repos.sh ouroboric yggdrasil
+#   as-bot.sh --read all scripts/check-repos.sh
 set -euo pipefail
 ORG="ouroboric-dev"
 DIR="${PR_BOT_DIR:-$HOME/.config/ouroboric/pr-bot}"
 API="${PR_BOT_API:-https://api.github.com}"
 die() { echo "as-bot: $*" >&2; exit 2; }
 
+read=false
 perms='{"contents":"write","pull_requests":"write","metadata":"read"}'
 if [ "${1:-}" = --read ]; then
-  perms='{"contents":"read","pull_requests":"read","administration":"read","metadata":"read"}'; shift
+  read=true; perms='{"contents":"read","pull_requests":"read","administration":"read","metadata":"read"}'; shift
 fi
-[ $# -ge 2 ] || die "usage: as-bot.sh [--read] <repo[,repo...]> <command...>"
+[ $# -ge 2 ] || die "usage: as-bot.sh [--read] <repo[,repo...]|all> <command...>"
 repos="$1"; shift
-[[ "$repos" =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*(,[A-Za-z0-9_-][A-Za-z0-9._-]*)*$ ]] || die "bad repo list: $repos"
+if [ "$repos" = all ]; then
+  $read || die "all needs --read: a write token names its repos"
+else
+  [[ "$repos" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]] || die "bad repo list: $repos"
+fi
 [ -r "$DIR/key.pem" ] && [ -r "$DIR/app.env" ] || die "no bot key in $DIR (the founder runs create-pr-bot.sh)"
 client_id="$(sed -n 's/^PR_BOT_CLIENT_ID=//p' "$DIR/app.env")"
 [ -n "$client_id" ] || die "no PR_BOT_CLIENT_ID in $DIR/app.env"
@@ -40,7 +45,8 @@ call() { # call METHOD PATH [JSON]: prints the reply; stops on any error with Gi
   printf '%s' "$out"
 }
 inst="$(call GET "/orgs/$ORG/installation" | jq -r .id)"
-req="$(jq -cn --arg r "$repos" --argjson p "$perms" '{repositories: ($r | split(",")), permissions: $p}')"
+# No repositories field means every repo the bot is installed on.
+req="$(jq -cn --arg r "$repos" --argjson p "$perms" '{permissions: $p} + (if $r == "all" then {} else {repositories: ($r | split(","))} end)')"
 token="$(call POST "/app/installations/$inst/access_tokens" "$req" | jq -r .token)"
 [ -n "$token" ] && [ "$token" != null ] || die "GitHub's reply held no token"
 
