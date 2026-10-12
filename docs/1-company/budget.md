@@ -8,8 +8,19 @@ style: direction
 
 # Budget
 
-What Ouroboric's factories may spend, and the caps that enforce it. The charter's boundary applies:
+What **Ouroboric itself** spends, and the caps that enforce it. The charter's boundary applies:
 cost-conscious, with hard caps everywhere.
+
+## Scope
+
+- **Covered:** Ouroboric's own work. That means building and improving its factories, and the runs in
+  which Yggdrasil builds Ouroboric's own demonstration and benchmark products, such as client gallery
+  lite.
+- **Not covered:** what operators build. An operator who runs a factory sets their own budget, caps,
+  subscriptions and keys in their own factory configuration, and is responsible for the software
+  they produce with it. The factory provides the mechanism (the caps and the `budget-cap` hard
+  approval point) and enforces whatever limits the operator sets. The figures below are Ouroboric's
+  choices, not defaults for operators.
 
 ## Accounts
 
