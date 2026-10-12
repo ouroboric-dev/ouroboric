@@ -170,8 +170,17 @@ protection, private vulnerability reporting, the `protect-main` ruleset, `reuse 
 `AGENTS.md` structure and the pinned `gitleaks` pre-commit hook. Run one check with
 `--check <name>`, or name repos to check only those.
 
-- **The founder sets up repos** with [`scripts/setup-repo.sh <repo>`](../../scripts/setup-repo.sh),
-  using a short-lived admin token. It is safe to run twice and fixes drift, such as an extra
-  ruleset rule.
-- **Agents never create repos or change their settings.** Their token can't, and the check script
-  only reads.
+- **The founder creates repos** with
+  [`scripts/create-repo.sh <repo> "<description>"…`](../../scripts/create-repo.sh), using a
+  short-lived admin token (Administration and Contents read and write). Each new repo gets a first
+  commit with only the licence files, then the setup below, so agents only ever see a protected
+  repo. If any named repo already exists, nothing is created.
+- **The founder sets up existing repos** with
+  [`scripts/setup-repo.sh <repo>`](../../scripts/setup-repo.sh), using the same kind of token. It is
+  safe to run twice and fixes drift, such as an extra ruleset rule.
+- **Agents never create repos or change their settings.** They reach GitHub only as
+  `ouroboric-pr-bot`, through [`scripts/as-bot.sh`](../../scripts/as-bot.sh), which can't; run the
+  checks with `scripts/as-bot.sh --read all scripts/check-repos.sh`.
+- **These scripts move into Yggdrasil.** Its `github` remote will create and protect repos behind a
+  hard approval point, and then these scripts are removed (Yggdrasil change
+  `2026-10-12-remote-creates-repos`).
