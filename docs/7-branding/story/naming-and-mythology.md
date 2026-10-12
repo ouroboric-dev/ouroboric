@@ -131,6 +131,8 @@ Names not yet used, kept for later:
    `Jormungandr`, not `Jörmungandr`.
 4. **Check collisions before adopting a name.** "Yggdrasil" is a well-known Go mesh-network project
    and "Ouroboros" is Cardano's consensus protocol. "Odin" is also a programming language. The `github.com/ouroboric-dev/...` import path
-   avoids technical conflicts, but searches will be noisy.
+   avoids technical conflicts, but searches will be noisy. The checks run on 2026-10-12 are in
+   [name checks](../../5-research/2026-10-12-name-checks.md): only "Ouroboric" is free almost
+   everywhere, so product and module names appear under the Ouroboric umbrella.
 5. **The org is `ouroboric-dev`** (ouroboric.dev): the shared symbol of iteration, of factories
    improving themselves.
