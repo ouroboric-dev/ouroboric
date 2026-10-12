@@ -1,0 +1,53 @@
+---
+title: Budget
+status: accepted
+date: 2026-10-12
+related: [charter.md, readiness/2026-10-11-ready-to-build.md]
+style: direction
+---
+
+# Budget
+
+What Ouroboric's factories may spend, and the caps that enforce it. The charter's boundary applies:
+cost-conscious, with hard caps everywhere.
+
+## Accounts
+
+- **Decided 2026-10-12:** the factory runs on a **dedicated Claude subscription** that the founder
+  owns personally and that only the factory uses. Daily work never shares its quota, so run metrics
+  stay clean, and it is never an employer's account, so ownership of the factory's output stays clear
+  (readiness RB-10).
+- **Decided 2026-10-12:** API spend goes through **one OpenRouter key with a hard credit limit of $25
+  a month**. It pays for running a role on another model or agent tool (v0 success criterion 2) and for
+  routing experiments.
+- The factory authenticates to Claude with a token from `claude setup-token`, created for the factory
+  only, so it can be revoked without touching anything else (readiness RB-14).
+
+## Caps
+
+- **Decided 2026-10-12:** default caps, enforced by the `budget-cap` hard approval point (v0 spec
+  §7.4). A run that hits a cap stops with everything resumable.
+
+| Cap | Turns | Tokens | API spend |
+|---|---|---|---|
+| per run | 400 | 8M | $5 |
+| per day | 1,000 | 20M | $10 |
+
+The per-run cap fits one full client-gallery build with retries; the daily cap allows two or three
+runs. The OpenRouter key's credit limit is the backstop behind both: even if every cap failed, API
+spend can't exceed $25 a month.
+
+## Keeping keys safe
+
+- Keys and tokens live in a password manager and in an environment file outside every repository
+  (for example `~/.config/ouroboric/factory.env`, readable only by its owner). They never go into a
+  repository, a chat, a ticket or a log.
+- A key pasted into a chat stays in its transcript. A key committed to a public repository is copied
+  by scanners within minutes, even if the commit is removed right after. `gitleaks` and GitHub push
+  protection are there to catch mistakes, not to replace care.
+- If a key leaks, revoke it first, then investigate.
+
+## Review
+
+Revisit this budget after v0's first real runs, using `ygg metrics`: cost per task and the share of
+the subscription's limits that a run uses.
