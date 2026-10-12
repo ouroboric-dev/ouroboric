@@ -49,7 +49,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | ID | Question | Status | Evidence | To close |
 |---|---|---|---|---|
 | RB-01 | Company charter accepted? | met | [Ouroboric charter](../charter.md), accepted on 2026-10-12 with the founder's vision and mission | — |
-| RB-02 | Product charter accepted and conforming? | met | [Yggdrasil product charter](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/charter.md), accepted on 2026-10-12; mission carries the ouroboric property and principles inherit from the company charter | — |
+| RB-02 | Product charter accepted and conforming? | met | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/charter.md) and [Asgard](https://github.com/ouroboric-dev/asgard/blob/main/docs/1-product/charter.md) product charters, accepted on 2026-10-12; both missions carry the ouroboric property and their principles inherit from the company charter | — |
 | RB-03 | Milestone 1 design doc accepted? | met | [v0 design doc](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md), accepted on 2026-10-12, with a measured self-improvement as success criterion 7 | — |
 | RB-04 | Roadmaps written? | partial | [company roadmap](../roadmap.md), [Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md), both draft | accept with the charters |
 | RB-05 | Principles as `AGENTS.md` invariants? | missing | no `AGENTS.md` exists in any repo yet | write them as the first plan task, derived from the accepted charters |
