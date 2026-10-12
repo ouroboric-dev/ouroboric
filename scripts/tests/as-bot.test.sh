@@ -14,8 +14,10 @@ mkdir -p "$T/bot" "$T/home"
 openssl genrsa -out "$T/bot/key.pem" 2048 2>/dev/null
 openssl rsa -in "$T/bot/key.pem" -pubout -out "$T/pub.pem" 2>/dev/null
 echo "PR_BOT_CLIENT_ID=Iv1.test" > "$T/bot/app.env"
-# A global credential helper that must never win for github.com.
+# A global credential helper that must never win for github.com, and the founder's global rules
+# that send HTTPS URLs to SSH.
 printf '[credential]\n\thelper = "!f() { echo password=WRONG; }; f"\n' > "$T/home/.gitconfig"
+printf '[url "git@github.com:"]\n\tinsteadOf = https://github.com/\n[url "ssh://git@github.com/"]\n\tinsteadOf = https://github.com/\n' >> "$T/home/.gitconfig"
 FAKE_PEM="$T/bot/key.pem" python3 -I "$HERE/fake-github.py" "$T/log" "$T/port" &
 for _ in $(seq 50); do [ -s "$T/port" ] && break; sleep 0.1; done
 export HOME="$T/home" PR_BOT_DIR="$T/bot" PR_BOT_API="http://127.0.0.1:$(cat "$T/port")" GITHUB_TOKEN=must-be-removed
@@ -56,6 +58,10 @@ out="$(printf 'protocol=https\nhost=example.com\n\n' | "$BOT" yggdrasil git cred
 check "git never sends the token to another host" bash -c "! grep -q ghs_FAKE <<<'$out'"
 check "git uses HTTPS for SSH remotes, so the SSH key is never used" \
   [ "$("$BOT" yggdrasil git ls-remote --get-url git@github.com:ouroboric-dev/yggdrasil.git)" = https://github.com/ouroboric-dev/yggdrasil.git ]
+check "git keeps HTTPS URLs on HTTPS, even when global rules send them to SSH" \
+  [ "$("$BOT" yggdrasil git ls-remote --get-url https://github.com/ouroboric-dev/yggdrasil.git)" = https://github.com/ouroboric-dev/yggdrasil.git ]
+check "git uses HTTPS for ssh:// remotes too" \
+  [ "$("$BOT" yggdrasil git ls-remote --get-url ssh://git@github.com/ouroboric-dev/yggdrasil.git)" = https://github.com/ouroboric-dev/yggdrasil.git ]
 
 n="$(wc -l < "$T/log")"
 PR_BOT_DIR="$T/none" "$BOT" yggdrasil touch "$T/ran" 2> "$T/err"; rc=$?
