@@ -25,7 +25,7 @@ Each registry's public API, queried on 2026-10-12. "Taken" means the name exists
 
 | Name | npm | PyPI | crates.io | Docker Hub | Homebrew core | GitHub account |
 |---|---|---|---|---|---|---|
-| `ouroboric` | free | free | free | free | free | taken (organisation "Ouroboric", created 2018, no public repos) |
+| `ouroboric` | free | free | free | taken (see the note below) | free | taken (organisation "Ouroboric", created 2018, no public repos) |
 | `yggdrasil` | taken | taken | taken | taken | free | taken |
 | `asgard` | taken | taken | taken | redirect (unclear) | free | taken |
 | `ygg` | taken | taken | taken | free | free | taken |
@@ -37,6 +37,11 @@ Each registry's public API, queried on 2026-10-12. "Taken" means the name exists
 
 Method notes: Docker Hub's `namespaces/<name>/repositories` endpoint answers for any name, so the
 `users/<name>` endpoint decided the Docker column. The GitHub column used the public `users` API.
+
+**Correction, 2026-10-12:** the `users` endpoint does not see organisations or reserved names. When
+the founder tried to claim `ouroboric` on Docker Hub, it was already in use, although the lookup had
+reported it free. Treat the Docker column's "free" results as unconfirmed. Docker namespaces also
+allow only lowercase letters and digits, so `ouroboric.dev` and `ouroboric-dev` are not possible.
 
 ## Trademarks
 
@@ -54,7 +59,7 @@ Web searches on 2026-10-12 found:
 
 ## Analysis
 
-[ANALYSIS] Only "Ouroboric" is distinctive and free almost everywhere, so it is the name worth
+[ANALYSIS] Only "Ouroboric" is distinctive and free almost everywhere (Docker Hub is the exception), so it is the name worth
 protecting. "Yggdrasil", "Asgard" and the module names are common Norse words used by many projects.
 They work as product names under the Ouroboric umbrella ("Ouroboric Yggdrasil"), and the factory
 needs none of the taken registry names: it ships as Go modules under `github.com/ouroboric-dev/...`
@@ -72,6 +77,9 @@ could matter for a commercial launch. It does not affect building or learning in
 - **Decided 2026-10-12:** RB-06 is met for building. A formal trademark search for "Ouroboric" in
   the official registers (USPTO, EUIPO through TMview), including OROBOROUS, happens before any
   public launch or commercial use (Asgard checklist RL-08).
-- **Decided 2026-10-12:** the founder claims `ouroboric` on Docker Hub (organisation), npm (scope
-  `@ouroboric`), PyPI and crates.io. PyPI and crates.io need a minimal, honest package rather than an
-  empty placeholder, because their policies allow reclaiming names without a real project.
+- **Decided 2026-10-12:** the founder claims `ouroboric` on npm (scope `@ouroboric`), PyPI and
+  crates.io. PyPI and crates.io need a minimal, honest package rather than an empty placeholder,
+  because their policies allow reclaiming names without a real project.
+- **Decided 2026-10-12:** official container images live on GitHub Container Registry under the org
+  we own, `ghcr.io/ouroboric-dev/...`. Ouroboric has no Docker Hub namespace, and documentation
+  names GHCR as the only official source, so a look-alike on Docker Hub can't pass as ours.
