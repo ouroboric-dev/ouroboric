@@ -51,11 +51,14 @@ token="$(call POST "/app/installations/$inst/access_tokens" "$req" | jq -r .toke
 [ -n "$token" ] && [ "$token" != null ] || die "GitHub's reply held no token"
 
 # An empty helper drops every helper configured before it, so ours is the only one for github.com.
-export GH_TOKEN="$token" GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=4 \
+# Git applies the longest matching insteadOf, so the ouroboric-dev rule beats any global rule that
+# sends https://github.com/ to SSH.
+export GH_TOKEN="$token" GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=5 \
   GIT_CONFIG_KEY_0="credential.https://github.com.helper" GIT_CONFIG_VALUE_0="" \
   GIT_CONFIG_KEY_1="credential.https://github.com.helper" \
   GIT_CONFIG_VALUE_1='!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f' \
   GIT_CONFIG_KEY_2="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_2="git@github.com:" \
-  GIT_CONFIG_KEY_3="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_3="ssh://git@github.com/"
+  GIT_CONFIG_KEY_3="url.https://github.com/.insteadOf" GIT_CONFIG_VALUE_3="ssh://git@github.com/" \
+  GIT_CONFIG_KEY_4="url.https://github.com/ouroboric-dev/.insteadOf" GIT_CONFIG_VALUE_4="https://github.com/ouroboric-dev/"
 unset GITHUB_TOKEN
 exec "$@"
