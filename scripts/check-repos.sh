@@ -12,9 +12,10 @@ fail=0
 ok()  { echo "PASS $1 $2${3:+: $3}"; }
 bad() { echo "FAIL $1 $2: $3"; fail=1; }
 
-check_settings() {
-  local v; v="$(gh_api "repos/$ORG/$1" -q '[.visibility,.has_issues,.has_wiki,.allow_merge_commit,.allow_rebase_merge]|map(tostring)|join(" ")')"
-  [ "$v" = "public false false false false" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, no issues, no wiki, squash only)"
+check_settings() { # GraphQL: REST hides the merge settings from tokens that can't push
+  local v; v="$(gh_api graphql -f query="{repository(owner:\"$ORG\",name:\"$1\"){visibility hasIssuesEnabled hasWikiEnabled mergeCommitAllowed rebaseMergeAllowed}}" \
+    -q '.data.repository|[.visibility,.hasIssuesEnabled,.hasWikiEnabled,.mergeCommitAllowed,.rebaseMergeAllowed]|map(tostring)|join(" ")')"
+  [ "$v" = "PUBLIC false false false false" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, no issues, no wiki, squash only)"
 }
 check_security() {
   local s p
