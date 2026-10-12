@@ -161,3 +161,17 @@ As marola puts it, writing a doc is a deploy.
 
 The journal's scrubbing rules apply to every doc in a public repo: no secrets, no private product
 names or code, no client data, no raw transcripts or ledger excerpts from private runs.
+
+## 9. Repository setup
+
+Every `ouroboric-dev` repo must pass [`scripts/check-repos.sh`](../../scripts/check-repos.sh). It checks
+the repo settings (public, squash merges only, no issues or wiki), secret scanning with push
+protection, private vulnerability reporting, the `protect-main` ruleset, `reuse lint`, the
+`AGENTS.md` structure and the pinned `gitleaks` pre-commit hook. Run one check with
+`--check <name>`, or name repos to check only those.
+
+- **The founder sets up repos** with [`scripts/setup-repo.sh <repo>`](../../scripts/setup-repo.sh),
+  using a short-lived admin token. It is safe to run twice and fixes drift, such as an extra
+  ruleset rule.
+- **Agents never create repos or change their settings.** Their token can't, and the check script
+  only reads.
