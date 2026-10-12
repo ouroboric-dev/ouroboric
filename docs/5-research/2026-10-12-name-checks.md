@@ -77,9 +77,13 @@ could matter for a commercial launch. It does not affect building or learning in
 - **Decided 2026-10-12:** RB-06 is met for building. A formal trademark search for "Ouroboric" in
   the official registers (USPTO, EUIPO through TMview), including OROBOROUS, happens before any
   public launch or commercial use (Asgard checklist RL-08).
-- **Decided 2026-10-12:** the founder claims `ouroboric` on npm (scope `@ouroboric`), PyPI and
-  crates.io. PyPI and crates.io need a minimal, honest package rather than an empty placeholder,
-  because their policies allow reclaiming names without a real project.
+- **Decided 2026-10-12:** the founder claims `ouroboric` on npm (organisation and scope
+  `@ouroboric`) and PyPI. PyPI needs a minimal, honest package rather than an empty placeholder,
+  because its policy allows reclaiming names without a real project; the package lives in
+  [ouroboric-packages](https://github.com/ouroboric-dev/ouroboric-packages).
+- **Decided 2026-10-12:** crates.io is skipped. Ouroboric has no Rust code planned, so a look-alike
+  crate would reach few people, and the official channels in `ouroboric-packages` say any
+  `ouroboric` crate is not ours. If Ouroboric ever ships Rust, the crate may need another name.
 - **Decided 2026-10-12:** official container images live on GitHub Container Registry under the org
   we own, `ghcr.io/ouroboric-dev/...`. Ouroboric has no Docker Hub namespace, and documentation
   names GHCR as the only official source, so a look-alike on Docker Hub can't pass as ours.
