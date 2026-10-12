@@ -25,4 +25,5 @@ loosen these.
   diagrams).
 - Research and journal: `docs/5-research/`, `docs/6-journal/`.
 - Brand: `docs/7-branding/` (story, identity, logo).
-- Repo checks: `scripts/check-repos.sh`. Only the founder runs `scripts/setup-repo.sh`.
+- Repo checks: `scripts/as-bot.sh --read all scripts/check-repos.sh`. Only the founder runs
+  `scripts/create-repo.sh` and `scripts/setup-repo.sh`.
