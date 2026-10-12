@@ -25,12 +25,12 @@ level 1.
   <img alt="Readiness levels: kickstart, then ready to build before spec and build, ready to launch before deploy-prod, ready to promote before promotion" src="../../assets/diagrams/rendered/readiness-levels.svg">
 </picture>
 
-Of 21 items, 11 are met, 7 are partial and 3 are missing.
+Of 21 items, 12 are met, 6 are partial and 3 are missing.
 
 | Status | Count | Items |
 |---|---|---|
-| met | 11 | RB-01, RB-02, RB-03, RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17, RB-21 |
-| partial | 7 | RB-04, RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
+| met | 12 | RB-01, RB-02, RB-03, RB-04, RB-07, RB-08, RB-09, RB-10, RB-11, RB-16, RB-17, RB-21 |
+| partial | 6 | RB-06, RB-12, RB-14, RB-15, RB-19, RB-20 |
 | missing | 3 | RB-05, RB-13, RB-18 |
 
 ## Suggested review order
@@ -51,7 +51,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 | RB-01 | Company charter accepted? | met | [Ouroboric charter](../charter.md), accepted on 2026-10-12 with the founder's vision and mission | — |
 | RB-02 | Product charter accepted and conforming? | met | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/charter.md) and [Asgard](https://github.com/ouroboric-dev/asgard/blob/main/docs/1-product/charter.md) product charters, accepted on 2026-10-12; both missions carry the ouroboric property and their principles inherit from the company charter | — |
 | RB-03 | Milestone 1 design doc accepted? | met | [v0 design doc](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md), accepted on 2026-10-12, with a measured self-improvement as success criterion 7 | — |
-| RB-04 | Roadmaps written? | partial | [company roadmap](../roadmap.md), [Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md), both draft | accept with the charters |
+| RB-04 | Roadmaps written? | met | [company roadmap](../roadmap.md) and [Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md), accepted on 2026-10-12; self-hosting stage 1 requires the change graph, the Go realm and `guardrail-change` first | — |
 | RB-05 | Principles as `AGENTS.md` invariants? | missing | no `AGENTS.md` exists in any repo yet | write them as the first plan task, derived from the accepted charters |
 | RB-06 | Name checked? | partial | GitHub org `ouroboric-dev` exists; known collisions noted in the [naming record](../../7-branding/story/naming-and-mythology.md#naming-rules) (Yggdrasil network, Cardano's Ouroboros, the Odin language) | check the `ouroboric.dev` domain, package registry names, and trademarks for "Ouroboric", "Yggdrasil" and "Asgard" in the classes that matter |
 | RB-07 | Brand seed written? | met | [naming and mythology](../../7-branding/story/naming-and-mythology.md); [logo prompts](../../7-branding/prompts/nano-banana-logo-prompts.md) | — |
