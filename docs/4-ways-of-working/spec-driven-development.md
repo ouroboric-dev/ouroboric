@@ -1,7 +1,7 @@
 ---
 title: Spec-driven development
-status: draft
-date: 2026-10-11
+status: accepted
+date: 2026-10-12
 related: [docs-standard.md, https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md]
 ---
 
@@ -33,7 +33,7 @@ OpenSpec, BMAD, Superpowers or native prompts are interchangeable ways to produc
 | **Plan and tasks** | In what order, in which repo, proven by which tests? | an engineering agent | automatic in every mode except step-by-step |
 
 The charter bounds every design doc. A **charter-conformance check** stops a design doc that drifts
-from it (for example, a design doc for payments when the charter says "not commercial yet"). The
+from it (for example, a design doc for payments when the charter's boundaries rule out payments). The
 charter's principles also become `AGENTS.md` invariants in every repo of the product.
 
 The design doc is the handover from product to engineering. The spec must stay within it. When
@@ -71,7 +71,7 @@ graph.)
 | 1. Intent and research | brainstorm notes; research briefs in `docs/5-research/` | — |
 | 2. Charter | `docs/1-product/charter.md` | `charter` (human) |
 | 3. Shape | realm(s), the repo tree (umbrella and leaves), org, visibility and hosting target, recorded in the charter's boundaries; the umbrella scaffolded to the [docs standard](docs-standard.md), with `AGENTS.md` invariants derived from the principles | — |
-| 4. Brand seed | name and story theme in `docs/7-branding/story/` | `charter` (approved together) |
+| 4. Brand seed | name and story theme in `docs/7-branding/story/`; a minimal visual identity (palette, typography, logo) in `docs/7-branding/identity/`, which readiness requires before building | `charter` (approved together) |
 | 5. Roadmap | `docs/1-product/roadmap.md`: ordered milestones | `charter` (approved together) |
 | 6. First design doc | milestone 1's design doc; from here the regular tier-3 flow | `design` |
 
