@@ -1,0 +1,15 @@
+{
+  "name": "ouroboric-pr-bot",
+  "description": "Pushes branches and opens pull requests for Ouroboric's agents. It never merges.",
+  "url": "https://github.com/ouroboric-dev",
+  "hook_attributes": { "url": "https://github.com/ouroboric-dev", "active": false },
+  "redirect_url": "http://localhost:8719/done",
+  "public": false,
+  "default_permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "administration": "read",
+    "metadata": "read"
+  },
+  "default_events": []
+}
