@@ -43,6 +43,10 @@ Products, as submodules under [`products/`](products/) (clone with `--recurse-su
 | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the software factory |
 | [Asgard](https://github.com/ouroboric-dev/asgard) | the company factory, running on Yggdrasil |
 
+## Contributing
+
+Run `uvx pre-commit install` once after cloning, so `gitleaks` checks each commit for secrets.
+
 ## Licence
 
 - **Documentation** (this repository's main content): [CC BY 4.0](LICENSE).
