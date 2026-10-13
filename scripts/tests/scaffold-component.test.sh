@@ -27,7 +27,10 @@ newrepo "$T/alpha"
 "$SCAFFOLD" alpha "$JOB" "$T/alpha" > "$T/out" 2>&1; rc=$?
 check "exit 0" [ "$rc" = 0 ]
 check "it writes the scaffold files" \
-  [ "$(cd "$T/alpha" && git status --short --untracked-files=all | sort | tr '\n' ' ')" = "?? .devcontainer/devcontainer.json ?? .gitignore ?? AGENTS.md ?? README.md ?? docs/architecture.md ?? go.mod " ]
+  [ "$(cd "$T/alpha" && git status --short --untracked-files=all | sort | tr '\n' ' ')" = "?? .devcontainer/devcontainer.json ?? .gitignore ?? .pre-commit-config.yaml ?? AGENTS.md ?? README.md ?? docs/architecture.md ?? go.mod " ]
+check "the gitleaks hook is pinned to v8.30.1, as check-repos.sh's gitleaks check wants" \
+  bash -c "grep -q 'repo: https://github.com/gitleaks/gitleaks' '$T/alpha/.pre-commit-config.yaml' && grep -q 'rev: v8.30.1' '$T/alpha/.pre-commit-config.yaml'"
+check "the README says to install the hook" grep -qF 'Run `uvx pre-commit install` once after cloning' "$T/alpha/README.md"
 check "go.mod names the module and Go 1.26" \
   [ "$(cat "$T/alpha/go.mod")" = "$(printf 'module github.com/ouroboric-dev/alpha\n\ngo 1.26')" ]
 check "the job sentence is copied exactly, special characters included" \

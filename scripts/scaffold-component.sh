@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Write the scaffold of a new Yggdrasil Go component into a clone of its repo: go.mod, README.md,
-# AGENTS.md, docs/architecture.md, the devcontainer and .gitignore, from templates/go-component/.
+# AGENTS.md, docs/architecture.md, the devcontainer, .gitignore and the pinned gitleaks pre-commit
+# hook, from templates/go-component/.
 # The repo must hold create-repo.sh's first commit. Never overwrites a file. The architecture doc's
 # Responsibilities and Depends on are left for a person to write from the spec; then commit on a
 # branch and open a PR. Agent-run.
@@ -30,7 +31,7 @@ if [[ "$r" == *-* ]]; then title="$r"; else title="${r^}"; fi
 # template -> destination
 FILES=(go.mod.tmpl:go.mod README.md.tmpl:README.md AGENTS.md.tmpl:AGENTS.md
   architecture.md.tmpl:docs/architecture.md devcontainer.json.tmpl:.devcontainer/devcontainer.json
-  gitignore.tmpl:.gitignore)
+  gitignore.tmpl:.gitignore pre-commit-config.yaml.tmpl:.pre-commit-config.yaml)
 $mit && FILES+=(templates-README.md.tmpl:templates/README.md)
 for f in "${FILES[@]}"; do [ ! -e "$d/${f#*:}" ] || die "$d/${f#*:} exists; nothing was written"; done
 if $mit; then
