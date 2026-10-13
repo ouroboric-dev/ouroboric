@@ -24,13 +24,16 @@ cost-conscious, with hard caps everywhere.
 
 ## Accounts
 
-- **Decided 2026-10-12:** the factory runs on a **dedicated Claude subscription** that the founder
-  owns personally and that only the factory uses. Daily work never shares its quota, so run metrics
-  stay clean, and it is never an employer's account, so ownership of the factory's output stays clear
-  (readiness RB-10).
+- **Decided 2026-10-13:** the factory runs on the founder's **personal Claude subscription, which the
+  founder started for Ouroboric**. It replaces the 2026-10-12 decision to buy a second, dedicated one.
+  It is never an employer's account, so ownership of the factory's output stays clear (readiness
+  RB-10). The founder's sessions that build the factory share its quota with factory runs, so the
+  per-run and per-day caps below matter from the first run. Run metrics come from the factory's own
+  ledger (`ygg metrics`), not from the subscription's usage page, so the shared quota doesn't mix them.
 - **Decided 2026-10-12:** API spend goes through **one OpenRouter key with a hard credit limit of $25
   a month**. It pays for running a role on another model or agent tool (v0 success criterion 2) and for
-  routing experiments.
+  routing experiments. **Decided 2026-10-13:** the key runs open-weight models only, chosen for cost.
+  Claude runs on the subscription, never through this key.
 - The factory authenticates to Claude with a token from `claude setup-token`, created for the factory
   only, so it can be revoked without touching anything else (readiness RB-14).
 
