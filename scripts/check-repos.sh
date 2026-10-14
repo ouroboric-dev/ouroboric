@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Check that ouroboric-dev repos have the required setup. See docs/4-ways-of-working/docs-standard.md.
-#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks]... [repo...]
+#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|bot]... [repo...]
+# The bot check also checks that the pr-bot can't reach any hidden repo. Run it under
+# as-bot.sh --read all, because it reads the pr-bot's own list of repos.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # holds the side-by-side clones
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
 LEAVES=" gungnir odin gleipnir jormungandr realm-web havamal "
+LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
+HIDDEN=" huldra "   # private repos that agents must never see
+unset BOT_REPOS     # set only by bot_repos below, never from the environment
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
 local_path() { if [[ "$LEAVES" == *" $1 "* ]]; then echo "$ROOT/yggdrasil/$1"; else echo "$ROOT/$1"; fi; }
 fail=0
@@ -56,13 +61,33 @@ check_gitleaks() {
     && ok "$1" gitleaks || bad "$1" gitleaks "no pinned gitleaks pre-commit hook"
 }
 
+bot_repos() { # the pr-bot's installation repos, once; ERROR if they can't be listed
+  [ -n "${BOT_REPOS+x}" ] && return
+  local out
+  # On an HTTP error gh prints the error body to stdout, so trust the exit status, not the output.
+  out="$(gh_api installation/repositories --paginate -q '.repositories[].name' 2>/dev/null)" && [ -n "$out" ] \
+    || { BOT_REPOS=ERROR; return; }
+  BOT_REPOS=" $(tr '\n' ' ' <<<"$out")"
+}
+check_bot() {
+  bot_repos
+  [ "$BOT_REPOS" != ERROR ] || { bad "$1" bot "can't list the pr-bot's repos (run under as-bot.sh --read all)"; return; }
+  [[ "$BOT_REPOS" == *" $1 "* ]] && ok "$1" bot || bad "$1" bot "the pr-bot can't reach it; add it to the installation"
+}
+check_hidden() { # fails closed: a repo agents must never see
+  bot_repos
+  [ "$BOT_REPOS" != ERROR ] || { bad "$1" hidden "can't list the pr-bot's repos (run under as-bot.sh --read all)"; return; }
+  [[ "$BOT_REPOS" == *" $1 "* ]] && bad "$1" hidden "the pr-bot can reach it; remove it from the installation now" || ok "$1" hidden
+}
+
 checks=(); repos=()
 while [ $# -gt 0 ]; do case "$1" in --check) checks+=("${2:?--check needs a name}"); shift 2 ;; *) repos+=("$1"); shift ;; esac; done
-[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks)
+[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks bot)
 for c in "${checks[@]}"; do declare -F "check_$c" >/dev/null || { echo "unknown check: $c"; exit 1; }; done
 if [ ${#repos[@]} -eq 0 ]; then
   repos=(.github ouroboric yggdrasil asgard ouroboric-packages)
-  for r in $LEAVES; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
+  for r in $LEAVES $LATER; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
 fi
 for r in "${repos[@]}"; do for c in "${checks[@]}"; do "check_$c" "$r"; done; done
+[[ " ${checks[*]} " == *" bot "* ]] && for h in $HIDDEN; do check_hidden "$h"; done
 exit $fail
