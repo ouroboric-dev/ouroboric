@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # holds the side-by
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
 LEAVES=" gungnir odin gleipnir jormungandr realm-web havamal "
+LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
 HIDDEN=" huldra "   # private repos that agents must never see
 unset BOT_REPOS     # set only by bot_repos below, never from the environment
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
@@ -85,7 +86,7 @@ while [ $# -gt 0 ]; do case "$1" in --check) checks+=("${2:?--check needs a name
 for c in "${checks[@]}"; do declare -F "check_$c" >/dev/null || { echo "unknown check: $c"; exit 1; }; done
 if [ ${#repos[@]} -eq 0 ]; then
   repos=(.github ouroboric yggdrasil asgard ouroboric-packages)
-  for r in $LEAVES; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
+  for r in $LEAVES $LATER; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
 fi
 for r in "${repos[@]}"; do for c in "${checks[@]}"; do "check_$c" "$r"; done; done
 [[ " ${checks[*]} " == *" bot "* ]] && for h in $HIDDEN; do check_hidden "$h"; done
