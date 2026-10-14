@@ -40,6 +40,8 @@ check "the key is saved" cmp -s "$T/fake.pem" "$T/cfg/pr-bot/key.pem"
 check "the key and its folder are private" [ "$(stat -c %a "$T/cfg/pr-bot" "$T/cfg/pr-bot/key.pem" | tr '\n' ' ')" = "700 600 " ]
 check "app.env holds the client id" grep -qx 'PR_BOT_CLIENT_ID=Iv1.test' "$T/cfg/pr-bot/app.env"
 check "the output links the install page" grep -q 'http://example.invalid/apps/ouroboric-pr-bot/installations/new' "$T/out"
+check "the output says selected repos only, never the hidden ones" \
+  bash -c "grep -q 'Only select repositories' '$T/out' && grep -q 'never huldra' '$T/out' && ! grep -q 'all repositories' '$T/out'"
 check "the output holds no key and no client secret" bash -c "! grep -q -e 'PRIVATE KEY' -e SECRET_CS '$T/out'"
 
 PR_BOT_DIR="$T/cfg/pr-bot" PR_BOT_PORT=1 "$CREATE" > "$T/out" 2>&1; rc=$?
