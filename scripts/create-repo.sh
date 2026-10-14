@@ -5,7 +5,10 @@
 # error.
 # Founder-run: GH_TOKEN must hold the short-lived admin token, with Administration and Contents read
 # and write (the pr-bot can't create repos).
-#   GH_TOKEN=... create-repo.sh <repo> "<description>" [<repo> "<description>"]...
+#   GH_TOKEN=... create-repo.sh [--private] <repo> "<description>" [<repo> "<description>"]...
+# The pr-bot is installed on selected repos only. A public repo must then be added to it, which the
+# output says how to do. --private makes private repos that the pr-bot must never get, such as huldra,
+# the hidden benchmark suite.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORG="ouroboric-dev"
@@ -16,7 +19,9 @@ LICENSES="$HERE/../LICENSES"
 die() { echo "create-repo: $*" >&2; exit 2; }
 
 [ -n "${GH_TOKEN:-}" ] || die "GH_TOKEN must hold the short-lived admin token"
-[ $# -ge 2 ] && [ $(($# % 2)) = 0 ] || die 'usage: create-repo.sh <repo> "<description>" [<repo> "<description>"]...'
+visibility=public
+if [ "${1:-}" = --private ]; then visibility=private; shift; fi
+[ $# -ge 2 ] && [ $(($# % 2)) = 0 ] || die 'usage: create-repo.sh [--private] <repo> "<description>" [<repo> "<description>"]...'
 args=("$@")
 T="$(mktemp -d)"
 trap 'rm -rf -- "${T:?}"' EXIT
@@ -38,8 +43,8 @@ done
 
 for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}"
-  body="$(jq -cn --arg n "$r" --arg d "${args[i + 1]}" \
-    '{name: $n, description: $d, visibility: "public", auto_init: false, has_issues: false, has_wiki: false, has_projects: false}')"
+  body="$(jq -cn --arg n "$r" --arg d "${args[i + 1]}" --arg v "$visibility" \
+    '{name: $n, description: $d, visibility: $v, auto_init: false, has_issues: false, has_wiki: false, has_projects: false}')"
   code="$(request POST "/orgs/$ORG/repos" "$body")"
   [ "$code" = 201 ] || die "$r: GitHub refused to create it (HTTP $code: $(message))"
 
@@ -72,4 +77,9 @@ EOF
 
   "$SETUP" "$r"
   echo "created $r"
+  if [ "$visibility" = public ]; then
+    echo "Add $r to the pr-bot: https://github.com/organizations/$ORG/settings/installations, ouroboric-pr-bot, Configure, Repository access."
+  else
+    echo "Never add $r to the pr-bot: agents must not see this repo."
+  fi
 done

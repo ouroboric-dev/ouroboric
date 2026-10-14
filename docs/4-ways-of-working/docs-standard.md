@@ -164,17 +164,29 @@ names or code, no client data, no raw transcripts or ledger excerpts from privat
 
 ## 9. Repository setup
 
-Every `ouroboric-dev` repo must pass [`scripts/check-repos.sh`](../../scripts/check-repos.sh). It checks
-the repo settings (public, squash merges only, no issues or wiki), secret scanning with push
-protection, private vulnerability reporting, the `protect-main` ruleset, `reuse lint`, the
-`AGENTS.md` structure and the pinned `gitleaks` pre-commit hook. Run one check with
-`--check <name>`, or name repos to check only those.
+Every public `ouroboric-dev` repo must pass [`scripts/check-repos.sh`](../../scripts/check-repos.sh). It
+checks:
+- the repo settings: public, squash merges only, no issues or wiki;
+- secret scanning with push protection, and private vulnerability reporting;
+- the `protect-main` ruleset;
+- `reuse lint`;
+- the `AGENTS.md` structure;
+- the pinned `gitleaks` pre-commit hook;
+- that the pr-bot can reach the repo.
 
+Run one check with `--check <name>`, or name repos to check only those.
+
+- **Hidden repos are the one exception.** `huldra` holds the hidden benchmark suite. It is private,
+  and the pr-bot must never be installed on it, so agents can't read it. The pr-bot is installed on
+  selected repos only, and `check-repos.sh`'s `bot` check fails if the pr-bot can reach a hidden
+  repo.
 - **The founder creates repos** with
-  [`scripts/create-repo.sh <repo> "<description>"…`](../../scripts/create-repo.sh), using a
-  short-lived admin token (Administration and Contents read and write). Each new repo gets a first
-  commit with only the licence files, then the setup below, so agents only ever see a protected
-  repo. If any named repo already exists, nothing is created.
+  [`scripts/create-repo.sh [--private] <repo> "<description>"…`](../../scripts/create-repo.sh),
+  using a short-lived admin token (Administration and Contents read and write). Each new repo gets
+  a first commit with only the licence files, then the setup below, so agents only ever see a
+  protected repo. If any named repo already exists, nothing is created. Then the founder adds each
+  public repo to the pr-bot's installation, as the script's output says. `--private` makes a hidden
+  repo, which is never added.
 - **The founder sets up existing repos** with
   [`scripts/setup-repo.sh <repo>`](../../scripts/setup-repo.sh), using the same kind of token. It is
   safe to run twice and fixes drift, such as an extra ruleset rule.

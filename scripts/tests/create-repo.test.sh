@@ -51,5 +51,13 @@ check "REUSE.toml makes docs, README.md and AGENTS.md CC-BY-4.0, and the rest AG
 check "setup-repo.sh runs on each repo, after its first commit is pushed" \
   [ "$(tr '\n' ' ' < "$T/setup.log")" = "alpha 1 beta 1 " ]
 check "the token is never printed" bash -c "! grep -q ghp_FAKE '$T/out'"
+check "a public repo's output says to add it to the pr-bot" grep -q 'Add alpha to the pr-bot' "$T/out"
+
+GH_TOKEN=ghp_FAKE "$CREATE" --private gamma "The gamma repo." > "$T/out" 2>&1; rc=$?
+check "--private: exit 0" [ "$rc" = 0 ]
+check "--private creates a private repo" \
+  [ "$(grep '"method": "POST"' "$T/log" | tail -1 | jq -r '.body|fromjson|.visibility')" = private ]
+check "--private says the pr-bot must never get the repo" grep -q 'Never add gamma to the pr-bot' "$T/out"
+check "--private never says to add the repo to the pr-bot" bash -c "! grep -q 'Add gamma to the pr-bot' '$T/out'"
 
 exit $fail
