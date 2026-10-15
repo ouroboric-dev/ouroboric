@@ -29,4 +29,10 @@ GH_TOKEN=fake "$HERE/../setup-repo.sh" beta > /dev/null
 check "a repo with CI: the existing ruleset is replaced" bash -c "jq -e 'select(.method==\"PUT\" and .path==\"repos/ouroboric-dev/beta/rulesets/7\")' '$FAKE_GH_DIR/log' >/dev/null"
 check "a repo with CI: test from GitHub Actions is required, on an up-to-date branch" bash -c "ruleset_body beta | has_check"
 check "the other rules stay" bash -c "ruleset_body beta | jq -e '[.rules[].type]|sort==[\"deletion\",\"non_fast_forward\",\"pull_request\",\"required_status_checks\"]' >/dev/null"
+
+export FAKE_GH_DIR="$T/lookup-fails"; mkdir -p "$FAKE_GH_DIR/GET" "$FAKE_GH_DIR/ERR"
+echo '[{"id":9,"name":"protect-main"}]' > "$FAKE_GH_DIR/GET/${G}_gamma_rulesets.json"
+echo 'Server Error (HTTP 500)' > "$FAKE_GH_DIR/ERR/${G}_gamma_contents_.github_workflows_ci.yml"
+check "a failed CI lookup stops the script" bash -c "! GH_TOKEN=fake '$HERE/../setup-repo.sh' gamma >/dev/null 2>&1"
+check "a failed CI lookup leaves the ruleset alone" bash -c "! grep -q rulesets '$FAKE_GH_DIR/log' 2>/dev/null"
 exit $fail

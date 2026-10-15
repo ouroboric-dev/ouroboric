@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fake gh for the script tests: "gh api" answers GETs from $FAKE_GH_DIR/GET/<path, / as _>.json
-# (404 when the file is missing) and logs every other request as a JSON line in $FAKE_GH_DIR/log.
+# (404 when the file is missing; see ERR below) and logs every other request as a JSON line in
+# $FAKE_GH_DIR/log.
 set -uo pipefail
 [ "${1:-}" = api ] || { echo "fake gh: only 'gh api' is faked" >&2; exit 2; }
 shift
@@ -21,5 +22,8 @@ if [ "$method" != GET ]; then
   echo '{}'; exit 0
 fi
 f="$FAKE_GH_DIR/GET/${path//\//_}.json"
+# A file at $FAKE_GH_DIR/ERR/<path, / as _> makes that GET fail with its contents, such as "HTTP 500".
+e="$FAKE_GH_DIR/ERR/${path//\//_}"
+[ -f "$e" ] && { echo "gh: $(cat "$e")" >&2; exit 1; }
 [ -f "$f" ] || { echo '{"message":"Not Found"}'; echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
 if [ -n "$q" ]; then jq -r "$q" "$f"; else cat "$f"; fi
