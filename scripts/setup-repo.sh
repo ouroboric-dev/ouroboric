@@ -20,9 +20,13 @@ RULESET='{"name":"protect-main","target":"branch","enforcement":"active",
  "rules":[{"type":"deletion"},{"type":"non_fast_forward"},
   {"type":"pull_request","parameters":{"allowed_merge_methods":["squash"],"dismiss_stale_reviews_on_push":true,"require_code_owner_review":false,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":false}}'
 # A repo with CI requires its "test" job, reported by GitHub Actions (app 15368) so no other app can
-# pass it, on a branch that is up to date with main.
-if gh_api "$R/contents/.github/workflows/ci.yml" --silent >/dev/null 2>&1; then
+# pass it, on a branch that is up to date with main. Only a 404 means "no CI": any other failure stops
+# the script, so an error never drops the required check.
+if ci_err="$(gh_api "$R/contents/.github/workflows/ci.yml" --silent 2>&1 >/dev/null)"; then
   RULESET+=',{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"do_not_enforce_on_create":false,"required_status_checks":[{"context":"test","integration_id":15368}]}}'
+elif [[ "$ci_err" != *"HTTP 404"* ]]; then
+  echo "setup-repo: can't tell whether ${1} has CI, so the ruleset is unchanged: $ci_err" >&2
+  exit 1
 fi
 RULESET+=']}'
 id="$(gh_api "$R/rulesets" -q '.[]|select(.name=="protect-main")|.id' | head -1)"
