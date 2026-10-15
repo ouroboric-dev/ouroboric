@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fake gh for the script tests: "gh api" answers GETs from $FAKE_GH_DIR/GET/<path, / as _>.json
+# (404 when the file is missing) and logs every other request as a JSON line in $FAKE_GH_DIR/log.
+set -uo pipefail
+[ "${1:-}" = api ] || { echo "fake gh: only 'gh api' is faked" >&2; exit 2; }
+shift
+method=GET path='' q='' input=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X) method="$2"; shift 2 ;;
+    -q) q="$2"; shift 2 ;;
+    --input) input="$2"; shift 2 ;;
+    -F|-f) shift 2 ;;
+    --silent|--paginate) shift ;;
+    *) path="$1"; shift ;;
+  esac
+done
+if [ "$method" != GET ]; then
+  body=''; [ "$input" = - ] && body="$(cat)"
+  jq -cn --arg m "$method" --arg p "$path" --arg b "$body" '{method:$m,path:$p,body:$b}' >> "$FAKE_GH_DIR/log"
+  echo '{}'; exit 0
+fi
+f="$FAKE_GH_DIR/GET/${path//\//_}.json"
+[ -f "$f" ] || { echo '{"message":"Not Found"}'; echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+if [ -n "$q" ]; then jq -r "$q" "$f"; else cat "$f"; fi
