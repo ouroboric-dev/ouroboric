@@ -25,5 +25,8 @@ loosen these.
   diagrams).
 - Research and journal: `docs/5-research/`, `docs/6-journal/`.
 - Brand: `docs/7-branding/` (story, identity, logo).
+- Plan tooling: `scripts/plan-*` build a plan from reference commits (`plan-generate.py`,
+  `plan-replay.py`, `plan-states.sh`, `plan-red.sh`) and run one task by task (`plan-blocks.py`,
+  `plan-task-start.sh`, `plan-task-done.sh`, `plan-task-land.sh`). Read the header of each file first.
 - Repo checks: `scripts/as-bot.sh --read all scripts/check-repos.sh`. Only the founder runs
   `scripts/create-repo.sh` and `scripts/setup-repo.sh`.
