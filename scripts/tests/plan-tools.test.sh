@@ -131,6 +131,13 @@ check "steps show a changed file as a patch and a new file whole" \
 check "a task with no red.txt entry still gets a step that expects a failure" \
   bash -c "grep -q 'Expect it to fail\.' '$T/plan2.md'"
 printf 'big %s fx-T009\n' "$BIG" > "$REF/tasks.map"
+check "steps fence what a failing test prints as an output block" \
+  bash -c "grep -q '^\`\`\`output' '$T/plan2.md'"
+WORK2="$T/work2"; mkdir "$WORK2"
+git clone -q "$REF/app" "$WORK2/app" && git -C "$WORK2/app" checkout -q "$B0"
+run python3 -I "$S/plan-replay.py" "$T/plan2.md" "$WORK2"
+check "replay leaves output blocks alone, and applies the rest of a generated plan" \
+  bash -c "[ $rc = 0 ] && grep -q 'fx-T002: 2 blocks applied to app' '$T/out' && git -C '$REF/app' show $C2:greet.go | cmp -s - '$WORK2/app/greet.go'"
 printf '### Task fx-T009: too big\n\n@@size fx-T009@@\n' > "$T/big.md"
 run python3 -I "$S/plan-generate.py" "$REF" "$T/big-plan.md" "$T/big.md"
 check "size refuses an L task, and writes nothing" \

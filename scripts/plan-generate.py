@@ -112,7 +112,7 @@ def main(argv):
             out.append(step('write the tests.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in tests))
             first = red(tid)
             out.append(step('run the named test. Expect it to fail' + (', first like this:' if first else '.')) +
-                       (('\n\n' + fence('text', first)) if first else ''))
+                       (('\n\n' + fence('output', first)) if first else ''))
         if code:
             out.append(step('write the code.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in code))
         out.append(step('run the named test. Expect `ok`.'))
