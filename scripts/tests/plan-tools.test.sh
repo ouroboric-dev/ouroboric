@@ -98,6 +98,53 @@ run python3 -I "$S/plan-generate.py" "$REF" "$T/unknown-plan.md" "$T/unknown.md"
 check "generate names an unknown task id instead of crashing" \
   bash -c "[ $rc != 0 ] && grep -q 'unknown task zz-T009' '$T/out' && ! grep -q Traceback '$T/out'"
 
+# --- plan-generate.py: the files, size and steps directives
+mkdir -p "$REF/big" && git init -q "$REF/big"
+printf 'module example.test/big\n\ngo 1.21\n' > "$REF/big/go.mod"
+g "$REF/big" add -A && g "$REF/big" commit -qm base
+seq 1 450 | sed 's/^/\/\/ line /' > "$REF/big/lines.go"
+g "$REF/big" add -A && g "$REF/big" commit -qm "fx-T009 a big file"
+BIG=$(git -C "$REF/big" rev-parse HEAD)
+printf '== fx-T002 (app) pkgs: ./\n# example.test/app\n./greet_test.go:9:5: expected failure line\n' > "$REF/red.txt"
+cat > "$T/part2.md" <<'PART'
+### Task fx-T001: add the greeting
+
+@@files fx-T001@@
+
+Size: @@size fx-T001@@
+
+@@steps fx-T001@@
+
+### Task fx-T002: greet the world
+
+@@files fx-T002@@
+
+@@steps fx-T002@@
+PART
+run python3 -I "$S/plan-generate.py" "$REF" "$T/plan2.md" "$T/part2.md"
+check "generate expands files, size and steps from the task commits" \
+  bash -c "[ $rc = 0 ] && grep -q '^\*\*Files (in \`app\`):\*\*' '$T/plan2.md' && grep -q '^- Create: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && grep -q '^- Modify: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && grep -q '^Size: S (' '$T/plan2.md'"
+check "steps write the tests first, show the first failure, then write the code" \
+  bash -c "sed -n '/^### Task fx-T002/,\$p' '$T/plan2.md' > '$T/t2.md'; a=\$(grep -n 'Step 1:\*\* write the tests' '$T/t2.md' | head -1 | cut -d: -f1); b=\$(grep -n 'expected failure line' '$T/t2.md' | head -1 | cut -d: -f1); c=\$(grep -n 'Step 3:\*\* write the code' '$T/t2.md' | head -1 | cut -d: -f1); [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ -n \"\$c\" ] && [ \"\$a\" -lt \"\$b\" ] && [ \"\$b\" -lt \"\$c\" ]"
+check "steps show a changed file as a patch and a new file whole" \
+  bash -c "grep -q 'Write \`greet_test.go\`:' '$T/plan2.md' && grep -q 'Apply to \`greet_test.go\`:' '$T/plan2.md' && grep -q '^\`\`\`diff' '$T/plan2.md'"
+check "a task with no red.txt entry still gets a step that expects a failure" \
+  bash -c "grep -q 'Expect it to fail\.' '$T/plan2.md'"
+printf 'big %s fx-T009\n' "$BIG" > "$REF/tasks.map"
+check "steps fence what a failing test prints as an output block" \
+  bash -c "grep -q '^\`\`\`output' '$T/plan2.md'"
+WORK2="$T/work2"; mkdir "$WORK2"
+git clone -q "$REF/app" "$WORK2/app" && git -C "$WORK2/app" checkout -q "$B0"
+run python3 -I "$S/plan-replay.py" "$T/plan2.md" "$WORK2"
+check "replay leaves output blocks alone, and applies the rest of a generated plan" \
+  bash -c "[ $rc = 0 ] && grep -q 'fx-T002: 2 blocks applied to app' '$T/out' && git -C '$REF/app' show $C2:greet.go | cmp -s - '$WORK2/app/greet.go'"
+printf '### Task fx-T009: too big\n\n@@size fx-T009@@\n' > "$T/big.md"
+run python3 -I "$S/plan-generate.py" "$REF" "$T/big-plan.md" "$T/big.md"
+check "size refuses an L task, and writes nothing" \
+  bash -c "[ $rc != 0 ] && grep -q 'must be split' '$T/out' && [ ! -e '$T/big-plan.md' ]"
+printf 'app %s fx-T001\napp %s fx-T002\n' "$C1" "$C2" > "$REF/tasks.map"
+rm -f "$REF/red.txt"
+
 # --- plan-replay.py
 WORK="$T/work"; mkdir "$WORK"
 git clone -q "$REF/app" "$WORK/app" && git -C "$WORK/app" checkout -q "$B0"

@@ -7,7 +7,7 @@
 # WORKSPACE is the plan's SDD workspace (see plan-lib.sh): it names the plan and the root that holds the
 # component repos. TASK is an id such as v0-T039, and the repo comes from the task's
 # "**Files (in `repo`):**" line. A file block goes to the last `path` named in backticks before it.
-# Bash blocks are listed but never applied: run them yourself. Run it as `python3 -I`.
+# Bash and output blocks are listed but never applied: run the commands yourself. Run it as `python3 -I`.
 import os
 import re
 import subprocess
@@ -49,8 +49,8 @@ def main(argv):
         if lang == 'diff':
             target = re.search(r'^\+\+\+ b/(\S+)', body, re.M).group(1)
             kind = 'diff'
-        elif lang == 'bash':
-            target, kind = '-', 'bash'
+        elif lang in ('bash', 'output'):
+            target, kind = '-', lang
         else:
             target, kind = re.findall(r'`([^`\s]+)`', before)[-1], 'file'
         blocks.append((kind, target, body))
@@ -66,8 +66,8 @@ def main(argv):
     dest = os.path.join(root, repo)
     for n in map(int, argv[3:]):
         kind, target, body = blocks[n]
-        if kind == 'bash':
-            sys.exit(f'block {n} is a bash block: run it yourself')
+        if kind in ('bash', 'output'):
+            sys.exit(f'block {n} is a {kind} block: run it yourself')
         if kind == 'diff':
             r = subprocess.run(['git', '-C', dest, 'apply', '-'], input=body + '\n', text=True, capture_output=True)
             if r.returncode:

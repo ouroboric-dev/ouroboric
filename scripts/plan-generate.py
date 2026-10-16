@@ -3,14 +3,25 @@
 # the code that was run.
 #   plan-generate.py REFERENCE OUT PART...
 # REFERENCE holds one git clone per repo and a tasks.map with a line "<repo> <commit> <task id>" for each
-# task. The parts are concatenated, and these directives, each alone on a line, are expanded:
+# task, and may hold red.txt, the output of plan-red.sh. The parts are concatenated, and these
+# directives, each alone on a line, are expanded:
 #   @@file <task id> <path> <lang>@@   the file as that task's commit leaves it, fenced as <lang>
 #   @@diff <task id> <path>@@          that commit's change to the file, as a git patch
-# It refuses a plan that leaves out any file a task commit changes (go.sum excepted), and writes
-# nothing in that case. Run it as `python3 -I`.
+#   @@files <task id>@@                the task's "**Files (in `repo`):**" list: what the commit creates and changes
+#   @@size <task id>@@                 inline: "S (n)" or "M (n)", n being the commit's insertions (go.sum excepted); an
+#                                      L task (over 400) is refused, because it must be split
+#   @@steps <task id>@@                the task's steps: the test files first, then the first failure red.txt
+#                                      shows for them, then the other files, then the passing run and the commit
+# Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
+# any file a task commit changes (go.sum excepted), and writes nothing in that case. Run it as
+# `python3 -I`.
+import os
 import re
 import subprocess
 import sys
+
+TEST_FILES = re.compile(os.environ.get('PLAN_TEST_FILES', r'_test\.go$|/[a-z]*test/|^testdata/'))
+LANGS = {'.go': 'go', '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.sh': 'sh', '.md': 'md', '.toml': 'toml', '.mod': 'text'}
 
 
 def main(argv):
@@ -34,6 +45,80 @@ def main(argv):
             sys.exit('a code block holds a four-backtick fence')
         return f'{f}{lang}\n{body}\n{f}'
 
+    def red(tid):
+        """The first lines red.txt shows for the task, without its header, or ''."""
+        try:
+            text = open(ref + '/red.txt').read()
+        except FileNotFoundError:
+            return ''
+        for block in re.split(r'^== ', text, flags=re.M)[1:]:
+            head, _, body = block.partition('\n')
+            if head.split()[0] == tid:
+                return body.strip('\n')
+        return ''
+
+    def changes(tid):
+        repo, sha = tasks[tid]
+        out = []
+        for line in git(repo, 'show', '--no-renames', '--name-status', '--format=', sha).splitlines():
+            status, path = line.split('\t', 1)
+            if status == 'D':
+                sys.exit(f'{tid} deletes {path}: a plan can\'t show a deletion yet')
+            if not path.endswith('go.sum'):
+                out.append((status, path))
+        return out
+
+    def block_for(tid, status, path):
+        repo, sha = tasks[tid]
+        used.add((tid, path))
+        if status == 'A':
+            lang = LANGS.get(os.path.splitext(path)[1], 'text')
+            return f'Write `{path}`:\n\n' + fence(lang, git(repo, 'show', f'{sha}:{path}'))
+        return f'Apply to `{path}`:\n\n' + fence('diff', git(repo, 'show', '--format=', sha, '--', path))
+
+    def expand_more(m):
+        kind, tid = m.group(1), m.group(2)
+        if tid not in tasks:
+            sys.exit(f'unknown task {tid}: it is not in {ref}/tasks.map')
+        repo, sha = tasks[tid]
+        ch = changes(tid)
+        if kind == 'files':
+            made = ', '.join(f'`{p}`' for s, p in ch if s == 'A')
+            edited = ', '.join(f'`{p}`' for s, p in ch if s == 'M')
+            lines = [f'**Files (in `{repo}`):**']
+            if made:
+                lines.append(f'- Create: {made}')
+            if edited:
+                lines.append(f'- Modify: {edited}')
+            return '\n'.join(lines)
+        if kind == 'size':
+            n = 0
+            for line in git(repo, 'show', '--numstat', '--format=', sha).splitlines():
+                add, _, path = line.split('\t')
+                if not path.endswith('go.sum') and add != '-':
+                    n += int(add)
+            if n >= 400 + 1:
+                sys.exit(f'{tid} adds {n} lines: that is an L task, and it must be split')
+            return f'{"S" if n < 100 else "M"} ({n})'
+        tests = [(s, p) for s, p in ch if TEST_FILES.search(p)]
+        code = [(s, p) for s, p in ch if not TEST_FILES.search(p)]
+        out, n = [], 0
+
+        def step(text):
+            nonlocal n
+            n += 1
+            return f'- [ ] **Step {n}:** {text}'
+        if tests:
+            out.append(step('write the tests.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in tests))
+            first = red(tid)
+            out.append(step('run the named test. Expect it to fail' + (', first like this:' if first else '.')) +
+                       (('\n\n' + fence('output', first)) if first else ''))
+        if code:
+            out.append(step('write the code.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in code))
+        out.append(step('run the named test. Expect `ok`.'))
+        out.append(step('commit (see "How each task lands").'))
+        return '\n\n'.join(out)
+
     def expand(m):
         kind, tid, path = m.group(1), m.group(2), m.group(3)
         if tid not in tasks:
@@ -48,6 +133,8 @@ def main(argv):
         return fence('diff', patch)
 
     text = ''.join(open(p).read() for p in parts)
+    text = re.sub(r'^@@(files|steps) (\S+-T\d+)@@$', expand_more, text, flags=re.M)
+    text = re.sub(r'@@(size) (\S+-T\d+)@@', expand_more, text)  # inline: "**Size:** @@size v0-T001@@"
     text = re.sub(r'^@@(file|diff) (\S+-T\d+) (\S+)(?: (\S+))?@@$', expand, text, flags=re.M)
     left = re.search(r'^@@(file|diff) .*$', text, flags=re.M)
     if left:

@@ -5,7 +5,8 @@
 # WORKDIR holds a clone of each repo, in a folder of its repo's name. A task's repo comes from its
 # "**Files (in `repo`):**" line; a task whose repo has no folder in WORKDIR is skipped. A file block is
 # written to the last `path` named in backticks before it, a diff block is applied with `git apply`,
-# and bash blocks are left alone. Run it as `python3 -I`.
+# and bash and output blocks (commands, and what a failing test prints) are left alone. Run it as
+# `python3 -I`.
 import os
 import re
 import subprocess
@@ -31,7 +32,7 @@ def main(argv):
             lang, body = b.group(2), b.group(3)
             before = sec[pos:b.start()]
             pos = b.end()
-            if lang == 'bash':
+            if lang in ('bash', 'output'):
                 continue
             if lang == 'diff':
                 r = subprocess.run(['git', '-C', repo, 'apply', '-'], input=body + '\n', text=True, capture_output=True)
