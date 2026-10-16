@@ -99,7 +99,7 @@ check "the retry line is in the report" has '"event":"retry"'
 check "the credential is not in the saved report" test -z "$(grep -F -- "$SECRET" "$D/h11-report.txt")"
 check "a token shape is removed from the saved report" test -z "$(grep -F -- sk-or-v1-abcdefghijklmnopqrstuvwx "$D/h11-report.txt")"
 echo dirty > "$D/smoke-loop/dirty.txt"
-run "$S/ygg-smoke-loop.sh" "${args[@]}"
-check "a project with changes is refused" test "$rc" -eq 2
+FAKE_RUN_RC=0 run "$S/ygg-smoke-loop.sh" "${args[@]}"
+check "a project that an earlier run changed still runs (ygg decides)" test "$rc" -eq 0
 
 exit "$fail"

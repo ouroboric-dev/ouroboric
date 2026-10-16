@@ -4,7 +4,8 @@
 # Needs: DIR/factory.yaml (the operator's config; this script never writes it), the devcontainer CLI 0.89.0
 # first on PATH (or in DIR/dc/node_modules/.bin), the engine up and the bind mount present. It
 #   1. checks the devcontainer CLI version and the bind mount, and stops with a reason if one is wrong;
-#   2. makes the project DIR/smoke-loop if it is missing (never touches an existing one);
+#   2. makes the project DIR/smoke-loop if it is missing (never touches an existing one: the state that an
+#      earlier run left in it is normal, and ygg itself refuses a run it cannot start);
 #   3. loads the credentials from FILE in a subshell, without printing them;
 #   4. with --build, builds the sandbox images;
 #   5. runs the realm and keeps its raw output in DIR/h11-run.txt (shown live as ygg prints it: do not paste
@@ -44,9 +45,6 @@ if [ ! -d "$project" ]; then
   git -C "$project" add umbrella.yaml
   git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the smoke loop project"
   echo "smoke-loop: made $project"
-fi
-if [ -n "$(git -C "$project" status --short)" ]; then
-  echo "smoke-loop: $project has uncommitted changes; a run needs a clean tree" >&2; exit 2
 fi
 
 ygg="${YGG_CMD:-}"
