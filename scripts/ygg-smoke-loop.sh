@@ -57,8 +57,10 @@ out="$dir/h11-run.txt"
 # The credentials live only in this subshell; nothing here prints them.
 set +e
 (
+  set -a
   # shellcheck source=/dev/null
-  set -a; . "$envfile"; set +a
+  . "$envfile"
+  set +a
   if [ "$build" -eq 1 ]; then eval "$ygg sandbox build --config '$dir/factory.yaml' --realm '$realm'"; fi
   eval "$ygg run --project '$project' --config '$dir/factory.yaml' --realm '$realm'"
 ) 2>&1 | tee "$out"
@@ -68,8 +70,10 @@ echo "smoke-loop: the run ended with exit code $rc (0 done, 1 a node failed, 3 s
 
 report="$dir/h11-report.txt"
 # The report is made with the credentials in its environment, so that it can remove their exact values.
-# shellcheck source=/dev/null
-( set -a; . "$envfile"; set +a
+( set -a
+  # shellcheck source=/dev/null
+  . "$envfile"
+  set +a
   YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --config "$dir/factory.yaml" --output "$out" ${clip[@]+"${clip[@]}"} "$project"
 ) | tee "$report"
 echo "smoke-loop: the report is in $report" >&2
