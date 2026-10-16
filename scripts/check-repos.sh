@@ -7,6 +7,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # holds the side-by-side clones
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
+FACTORIES=" yggdrasil asgard "   # the only repos with issues on
 LEAVES=" gungnir odin gleipnir jormungandr realm-web havamal "
 LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
 HIDDEN=" huldra "   # private repos that agents must never see
@@ -20,7 +21,9 @@ bad() { echo "FAIL $1 $2: $3"; fail=1; }
 check_settings() { # GraphQL: REST hides the merge settings from tokens that can't push
   local v; v="$(gh_api graphql -f query="{repository(owner:\"$ORG\",name:\"$1\"){visibility hasIssuesEnabled hasWikiEnabled mergeCommitAllowed rebaseMergeAllowed}}" \
     -q '.data.repository|[.visibility,.hasIssuesEnabled,.hasWikiEnabled,.mergeCommitAllowed,.rebaseMergeAllowed]|map(tostring)|join(" ")')"
-  [ "$v" = "PUBLIC false false false false" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, no issues, no wiki, squash only)"
+  local issues=false desc="no issues"   # issues are on for the factories only
+  [[ "$FACTORIES" == *" $1 "* ]] && { issues=true; desc="issues on (a factory)"; }
+  [ "$v" = "PUBLIC $issues false false false" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, $desc, no wiki, squash only)"
 }
 check_security() {
   local s p

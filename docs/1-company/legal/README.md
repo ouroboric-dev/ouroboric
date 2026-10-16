@@ -28,7 +28,9 @@ source-available licences such as FSL and PolyForm Shield (not open source).
 
 ## Contributions
 
-- **Read-only for now:** issues and pull requests are closed; Discussions are open.
+- **Issues only for now:** issues are open on the factories (`yggdrasil`, `asgard`) through issue
+  forms; other repos keep issues off. Outside pull requests stay closed until a contributor licence
+  agreement is in place. Discussions are open.
 - **Before the first outside contribution,** a contributor licence agreement must be in place, so the
   project can keep offering code under more than one licence (for example, closed components later).
 - **Code of conduct:** Contributor Covenant 2.1, in the organisation's `.github` repository.
