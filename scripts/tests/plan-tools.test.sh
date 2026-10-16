@@ -252,4 +252,29 @@ check "red shows the first failure of each task's tests against its parent commi
 check "red leaves no worktree behind in the reference repo" \
   bash -c "[ \$(git -C '$REF/app' worktree list | wc -l) = 1 ]"
 
+# --- plan-defences.py: remove a defence, run the test that should catch it, put the code back
+DW="$T/defw"; mkdir "$DW"
+git clone -q "$REF/app" "$DW/app" && git -C "$DW/app" checkout -q "$C2"
+cat > "$T/rows.json" <<'JSON'
+[
+  {"task": "fx-T001", "repo": "app", "file": "greet.go", "old": "return \"hello, world\"", "new": "return \"nope\"", "run": "TestGreeting", "what": "the greeting is checked"},
+  {"task": "fx-T002", "repo": "app", "file": "greet.go", "old": "package app", "new": "package app // changed", "run": "TestGreeting", "what": "a comment"},
+  {"task": "fx-T002", "repo": "app", "file": "greet.go", "old": "return \"hello, world\"", "new": "return", "run": "TestGreeting", "what": "a mutation that does not compile"},
+  {"task": "fx-T003", "repo": "app", "file": "greet.go", "old": "this text is not in the file", "new": "x", "run": "TestGreeting", "what": "a defence that is not there"}
+]
+JSON
+run python3 -I "$S/plan-defences.py" "$DW" "$T/rows.json" fx-T001
+check "defences fails the test of a defence that is tested, prints it, and restores the file"   bash -c "[ $rc = 0 ] && grep -q '^| fx-T001 | the greeting is checked | \`TestGreeting\` |' '$T/out' && git -C '$DW/app' diff --quiet && ! grep -q fx-T002 '$T/out'"
+run python3 -I "$S/plan-defences.py" "$DW" "$T/rows.json" fx-T002
+check "defences exits 1 for a defence nothing tests, and for a mutation that does not compile"   bash -c "[ $rc = 1 ] && grep -q '^| fx-T002 | a comment | NOT FAILED |' '$T/out' && grep -q '^| fx-T002 | a mutation that does not compile | NOT FAILED |' '$T/out' && grep -q 'does the mutation compile' '$T/out' && git -C '$DW/app' diff --quiet"
+run python3 -I "$S/plan-defences.py" "$DW" "$T/rows.json" fx-T003
+check "defences exits 1 when the text to remove is not in the file"   bash -c "[ $rc = 1 ] && grep -q 'NOT RUN' '$T/out' && grep -q 'the text to remove is not in app/greet.go' '$T/out'"
+run python3 -I "$S/plan-defences.py" "$DW" "$T/rows.json"
+check "defences runs every task when none is named, and fails if any row failed"   bash -c "[ $rc = 1 ] && [ \$(grep -c '^| fx-' '$T/out') = 4 ]"
+printf '\n// edited by hand\n' >> "$DW/app/greet.go"
+run python3 -I "$S/plan-defences.py" "$DW" "$T/rows.json" fx-T001
+check "defences refuses a file with changes that aren't committed, and leaves it as it is" \
+  bash -c "[ $rc != 0 ] && grep -q \"aren't committed\" '$T/out' && grep -q 'edited by hand' '$DW/app/greet.go'"
+git -C "$DW/app" checkout -q -- greet.go
+
 exit $fail
