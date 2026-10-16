@@ -25,4 +25,15 @@ repo unrequired yes "$STD";        check "CI, but its check isn't required: FAIL
 repo required yes "$STD,$CHECK";   check "CI, and test from GitHub Actions is required: PASS" [ "$(result required)" = PASS ]
 repo spoofable yes "$STD,$OTHER";  check "CI, but another app can satisfy the check: FAIL" [ "$(result spoofable)" = FAIL ]
 repo stray no "$STD,$CHECK";       check "a required check with no CI to pass it: FAIL" [ "$(result stray)" = FAIL ]
+# settings: a factory repo passes only with issues on, any other repo only with issues off.
+# The fake answers the GraphQL query with one canned reply per FAKE_GH_DIR.
+settings_result() { # <repo> <hasIssuesEnabled>
+  local d; d="$(mktemp -d -p "$T")"; mkdir -p "$d/GET"
+  echo "{\"data\":{\"repository\":{\"visibility\":\"PUBLIC\",\"hasIssuesEnabled\":$2,\"hasWikiEnabled\":false,\"mergeCommitAllowed\":false,\"rebaseMergeAllowed\":false}}}" > "$d/GET/graphql.json"
+  FAKE_GH_DIR="$d" "$HERE/../check-repos.sh" --check settings "$1" | cut -d' ' -f1
+}
+check "settings, factory repo with issues on: PASS" [ "$(settings_result yggdrasil true)" = PASS ]
+check "settings, factory repo with issues off: FAIL" [ "$(settings_result asgard false)" = FAIL ]
+check "settings, other repo with issues off: PASS" [ "$(settings_result gungnir false)" = PASS ]
+check "settings, other repo with issues on: FAIL" [ "$(settings_result ouroboric true)" = FAIL ]
 exit $fail

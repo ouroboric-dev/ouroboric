@@ -166,7 +166,8 @@ names or code, no client data, no raw transcripts or ledger excerpts from privat
 
 Every public `ouroboric-dev` repo must pass [`scripts/check-repos.sh`](../../scripts/check-repos.sh). It
 checks:
-- the repo settings: public, squash merges only, no issues or wiki;
+- the repo settings: public, squash merges only, no wiki, and issues on for the factories
+  (`yggdrasil`, `asgard`) and off for every other repo;
 - secret scanning with push protection, and private vulnerability reporting;
 - the `protect-main` ruleset;
 - `reuse lint`;

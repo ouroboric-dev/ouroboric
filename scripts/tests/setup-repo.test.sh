@@ -35,4 +35,17 @@ echo '[{"id":9,"name":"protect-main"}]' > "$FAKE_GH_DIR/GET/${G}_gamma_rulesets.
 echo 'Server Error (HTTP 500)' > "$FAKE_GH_DIR/ERR/${G}_gamma_contents_.github_workflows_ci.yml"
 check "a failed CI lookup stops the script" bash -c "! GH_TOKEN=fake '$HERE/../setup-repo.sh' gamma >/dev/null 2>&1"
 check "a failed CI lookup leaves the ruleset alone" bash -c "! grep -q rulesets '$FAKE_GH_DIR/log' 2>/dev/null"
+# Issues are on for the factories only. issues_field <repo>: the has_issues value setup-repo.sh sent
+issues_field() { jq -rs "map(select(.method==\"PATCH\" and .path==\"repos/ouroboric-dev/$1\"))|first|.fields[]|select(startswith(\"has_issues=\"))" "$FAKE_GH_DIR/log"; }
+for r in yggdrasil asgard gungnir; do
+  export FAKE_GH_DIR="$T/issues-$r"; mkdir -p "$FAKE_GH_DIR/GET"
+  echo '[]' > "$FAKE_GH_DIR/GET/${G}_${r}_rulesets.json"
+  GH_TOKEN=fake "$HERE/../setup-repo.sh" "$r" > /dev/null
+done
+export FAKE_GH_DIR="$T/issues-yggdrasil"
+check "a factory repo (yggdrasil): issues on" [ "$(issues_field yggdrasil)" = has_issues=true ]
+export FAKE_GH_DIR="$T/issues-asgard"
+check "a factory repo (asgard): issues on" [ "$(issues_field asgard)" = has_issues=true ]
+export FAKE_GH_DIR="$T/issues-gungnir"
+check "another repo (gungnir): issues off" [ "$(issues_field gungnir)" = has_issues=false ]
 exit $fail
