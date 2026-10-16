@@ -5,7 +5,8 @@
 # first on PATH (or in DIR/dc/node_modules/.bin), the engine up and the bind mount present. It
 #   1. checks the devcontainer CLI version and the bind mount, and stops with a reason if one is wrong;
 #   2. makes the project DIR/smoke-loop if it is missing (never touches an existing one: the state that an
-#      earlier run left in it is normal, and ygg itself refuses a run it cannot start);
+#      earlier run left in it is allowed: the untracked .factory/ and a moved repos/<leaf> pointer; any
+#      other change stops the script);
 #   3. loads the credentials from FILE in a subshell, without printing them;
 #   4. with --build, builds the sandbox images;
 #   5. runs the realm and keeps its raw output in DIR/h11-run.txt (shown live as ygg prints it: do not paste
@@ -45,6 +46,15 @@ if [ ! -d "$project" ]; then
   git -C "$project" add umbrella.yaml
   git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the smoke loop project"
   echo "smoke-loop: made $project"
+fi
+
+# A run leaves .factory/ (untracked) and moves the pointer of repos/<leaf>: that is expected. Any other
+# change in the project is not, and a run would start on top of it.
+unexpected="$(git -C "$project" status --short | grep -v -E '^\?\? \.factory/$|^ M repos/[^/]+$' || true)"
+if [ -n "$unexpected" ]; then
+  echo "smoke-loop: $project has changes that a run does not leave behind:" >&2
+  echo "$unexpected" >&2
+  exit 2
 fi
 
 ygg="${YGG_CMD:-}"

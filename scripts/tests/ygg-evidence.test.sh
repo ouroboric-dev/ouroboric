@@ -98,8 +98,19 @@ check "the report is printed" has "# ygg evidence: run 20261017-000000-000001"
 check "the retry line is in the report" has '"event":"retry"'
 check "the credential is not in the saved report" test -z "$(grep -F -- "$SECRET" "$D/h11-report.txt")"
 check "a token shape is removed from the saved report" test -z "$(grep -F -- sk-or-v1-abcdefghijklmnopqrstuvwx "$D/h11-report.txt")"
-echo dirty > "$D/smoke-loop/dirty.txt"
+# The state a run leaves behind (.factory/ and a moved leaf pointer) is allowed; anything else is refused.
+PR="$D/smoke-loop"
+g() { git -C "$1" -c user.name=Test -c user.email=test@example.invalid -c protocol.file.allow=always "${@:2}"; }
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+git init -q -b main "$T/leaf" && g "$T/leaf" commit -q --allow-empty -m leaf
+mkdir -p "$PR/repos" && g "$PR" submodule add -q "$T/leaf" repos/app && g "$PR" commit -qm "leaf repos/app"
+g "$PR/repos/app" commit -q --allow-empty -m "the run's merge"
+check "the test project shows the moved pointer" test "$(git -C "$PR" status --short | grep -c '^ M repos/app$')" -eq 1
 FAKE_RUN_RC=0 run "$S/ygg-smoke-loop.sh" "${args[@]}"
-check "a project that an earlier run changed still runs (ygg decides)" test "$rc" -eq 0
+check "the state an earlier run left (.factory/, a moved pointer) still runs" test "$rc" -eq 0
+echo dirty > "$PR/dirty.txt"
+run "$S/ygg-smoke-loop.sh" "${args[@]}"
+check "another change is refused" test "$rc" -eq 2
+check "and the refusal names the file" has "dirty.txt"
 
 exit "$fail"
