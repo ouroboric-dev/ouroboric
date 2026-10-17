@@ -1,14 +1,16 @@
 direction: down
-operator: "Operator" {shape: person}
+founder: "Founder: approves direction" {shape: person}
 ouroboric: "Ouroboric (company): charter, standards, journal, brand" {
-  asgard: "Asgard\ncompany factory"
-  yggdrasil: "Yggdrasil\nsoftware factory"
+  yggdrasil: "Yggdrasil: software factory" {
+    asgard: "Asgard realm\nkickstart (tier 0)"
+    build: "Build realms\nweb, game, mobile"
+    asgard -> build: "sets direction for"
+  }
   future: "Future factories\n(illustrative: product, research, art)" {style.stroke-dash: 4}
-  asgard -> yggdrasil: "runs on Odin"
 }
 customer: "photografy (a company)" {
   gallery: "client gallery (a product)"
 }
-operator -> ouroboric.asgard: "approves direction" {style.stroke: ${accent}; style.stroke-width: 3}
-ouroboric.asgard -> customer: "kickstarts: charter, brand, legal, roadmap"
-ouroboric.yggdrasil -> customer.gallery: "builds and verifies"
+founder -> ouroboric.yggdrasil.asgard: {style.stroke: ${accent}; style.stroke-width: 3}
+ouroboric.yggdrasil -> customer: "Asgard realm kickstarts it:\ncharter, brand, legal, roadmap"
+ouroboric.yggdrasil.build -> customer.gallery: "builds and verifies"

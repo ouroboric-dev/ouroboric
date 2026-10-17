@@ -8,8 +8,8 @@ related: [docs-standard.md, https://github.com/ouroboric-dev/yggdrasil/blob/main
 # Spec-driven development
 
 This document describes how work goes from an idea to merged, verified code, for **every Ouroboric
-product and every product they build**. **Asgard**, the company factory, runs tier 0 (kickstart).
-**Yggdrasil**, the software factory, runs tiers 1–3. The process doesn't depend on any tool: Spec Kit,
+product and every product they build**. **Yggdrasil**, the software factory, runs every tier: its
+**Asgard** realm runs tier 0 (kickstart), and its build realms run tiers 1–3. The process doesn't depend on any tool: Spec Kit,
 OpenSpec, BMAD, Superpowers or native prompts are interchangeable ways to produce the artifacts it defines.
 
 ## 1. Principles
@@ -44,7 +44,7 @@ amendment rather than quietly building something else.
 
 | Tier | Example | Artifacts | Human approval |
 |---|---|---|---|
-| **0: kickstart** | a new product | charter, shape, brand seed, roadmap, then milestone 1's design doc (§3.1) | `charter`, then `design` |
+| **0: kickstart** | a new company or product | company: the nine steps in §3.1; product: charter, shape, roadmap, then milestone 1's design doc | company: `charter`, `brand`, readiness; product: `charter`, then `design` |
 | **1: fix or chore** | a bug, a dependency bump, a docs fix | one task: acceptance criterion and a **failing test that reproduces it** | none beyond approving the issue itself (it is the direction) |
 | **2: small change** | a new gallery setting | a **change proposal** (acts as a mini design doc, §5) and 1–3 tasks | `design` |
 | **3: initiative** | a new product, a new realm, payments | design doc → spec → plan → tasks | `design` |
@@ -54,26 +54,42 @@ stop at the matching approval point.
 
 ### 3.1 Tier 0: kickstarting a company or a product
 
-Every company and every product starts here, once, and Asgard runs it. (In the naming story, every realm
-begins in **Ginnungagap**, the void before creation; Ginnungagap is also the name of Asgard's kickstart
-graph.)
+Every company and every product starts here, once, and Yggdrasil's Asgard realm runs it. (In the
+naming story, every realm begins in **Ginnungagap**, the void before creation; Ginnungagap is also
+the name of the Asgard realm's kickstart graph.)
 
-- A **company kickstart** produces the company umbrella: `1-company/charter.md` (vision, mission,
-  principles, values and culture, portfolio, north star, boundaries), roadmap, brand seed, legal
-  basics, and a **readiness assessment** against Asgard's checklist.
+- A **company kickstart** produces the company umbrella in nine steps (below): what the business is,
+  its charter, name and brand, its basics, its roadmap, and a **readiness assessment** against the
+  Asgard realm's checklist. The founder approves direction at three stops.
 - A **product kickstart** happens inside an existing company. The product charter must conform to the
-  company charter. The table below lists its steps.
+  company charter.
 - The company's **readiness levels** gate what follows: *ready to build* before the first spec,
   *ready to launch* before `deploy-prod`, *ready to promote* before public promotion.
+
+Company kickstart: each step feeds the next. The business comes before the brand, and the name comes
+once the business is understood.
+
+| Step | Produces | Approval |
+|---|---|---|
+| 1. Intent | intent notes in `docs/5-research/`; the umbrella scaffolded to the [docs standard](docs-standard.md) under a placeholder name | — |
+| 2. Customers and offer | who the customers are, what is sold and roughly for how much; a competitor brief | — |
+| 3. Charter | `docs/1-company/charter.md` (vision, mission, principles, values and culture, portfolio, north star, boundaries); `AGENTS.md` invariants derived from the principles | `charter` |
+| 4. Name | name checks (domains, handles, trademarks); the placeholder replaced everywhere; the org created | — |
+| 5. Brand: words | story, messaging (positioning line, tagline, pitch, about text) and voice guide in `docs/7-branding/` | — |
+| 6. Brand: look | imagery guidelines and a minimal visual identity in `docs/7-branding/identity/`: light and dark palettes, typography, logo, design tokens | `brand` |
+| 7. Business basics | founders' agreement (two or more founders), admin checklist, accounts inventory, budget, customer terms, customer data; legal items flagged for a qualified person | — |
+| 8. Roadmap | `docs/1-company/roadmap.md`: ordered products and milestones | approved at the `brand` stop |
+| 9. Readiness | a level 1 assessment in `docs/1-company/readiness/` | readiness |
+
+Product kickstart:
 
 | Step | Produces | Approval |
 |---|---|---|
 | 1. Intent and research | brainstorm notes; research briefs in `docs/5-research/` | — |
 | 2. Charter | `docs/1-product/charter.md` | `charter` (human) |
 | 3. Shape | realm(s), the repo tree (umbrella and leaves), org, visibility and hosting target, recorded in the charter's boundaries; the umbrella scaffolded to the [docs standard](docs-standard.md), with `AGENTS.md` invariants derived from the principles | — |
-| 4. Brand seed | name and story theme in `docs/7-branding/story/`; a minimal visual identity (palette, typography, logo) in `docs/7-branding/identity/`, which readiness requires before building | `charter` (approved together) |
-| 5. Roadmap | `docs/1-product/roadmap.md`: ordered milestones | `charter` (approved together) |
-| 6. First design doc | milestone 1's design doc; from here the regular tier-3 flow | `design` |
+| 4. Roadmap | `docs/1-product/roadmap.md`: ordered milestones; a product sub-brand only if the product needs its own | `charter` (approved together) |
+| 5. First design doc | milestone 1's design doc; from here the regular tier-3 flow in a build realm | `design` |
 
 **Benchmark runs skip tier 0:** a frozen benchmark brief stands in for charter and design intent, so
 runs stay comparable.
@@ -87,7 +103,7 @@ runs stay comparable.
 </picture>
 
 ```
-(tier 0 once: intent ─► charter ─► [charter] ─► shape, brand seed, roadmap)
+(tier 0 once, company: intent ─► offer ─► charter ─► [charter] ─► name ─► brand ─► [brand] ─► basics, roadmap ─► readiness)
 intent ─► design doc ─► charter-conformance check ─► [design] ─► spec ─► conformance review ─► [spec] ─► plan + reuse review
        ─► tasks + DoR check ─► [plan] ─► implement (TDD, fresh session per task)
        ─► check ladder + reviewers (typed findings) ─► [feature] ─► merge gate ─► [merge]
@@ -97,6 +113,7 @@ intent ─► design doc ─► charter-conformance check ─► [design] ─►
 | Approval point | step-by-step | key-points (default) | unattended |
 |---|---|---|---|
 | `charter` | stop | stop | stop (default; explicit override only) |
+| `brand` | stop | stop | stop (default; explicit override only) |
 | `design` | stop | stop | stop (default; explicit override only) |
 | `spec` | stop | auto, stop on deviation (option: `spec: stop`) | auto, stop on deviation |
 | `plan`, `feature`, `merge`, `pointer` | stop | auto | auto |

@@ -14,7 +14,7 @@ routing and docs checks work the same everywhere.
 ## 1. Umbrella template
 
 A node is one of three kinds: **company umbrellas** (for example, `ouroboric`, or a company that
-Asgard kickstarted), **product umbrellas** (for example, `yggdrasil`, `asgard`, a client gallery) and
+the Asgard realm kickstarted), **product umbrellas** (for example, `yggdrasil`, a client gallery) and
 **leaves**. Company
 umbrellas use `1-company/` (charter, roadmap, legal, readiness) instead of `1-product/`, and hold the
 standards their products inherit. Every umbrella otherwise uses this layout:
@@ -75,7 +75,7 @@ Direction, journal and branding live in the umbrella above the leaf.
 |---|---|---|---|
 | `README.md` | required | required | required |
 | `1-company/charter.md`, `roadmap.md` | required | — | — |
-| `1-company/readiness/` | required (readiness assessments, from Asgard's checklist) | — | — |
+| `1-company/readiness/` | required (readiness assessments, from the Asgard realm's checklist) | — | — |
 | `1-company/legal/` | required before going public (licence, contribution terms, trademarks) | — | — |
 | `1-product/charter.md`, `roadmap.md`, `design/` | — | required | — |
 | `1-product/legal/` | — | optional while in development; **required before `deploy-prod`** | — |
