@@ -20,10 +20,10 @@ The software factory is that tree. Every run climbs it from root to leaf, and ev
 **realm** hanging from a branch.
 
 High in the tree sits **Asgard**, the realm of the gods, where direction and order are decided. Asgard
-is the **company factory**: it sets charters, brands, legal ground and roadmaps for new companies and
-products. Like the realm in the myth, it rests on Yggdrasil: the company factory runs on the software
-factory's engine. Every new company or product begins in **Ginnungagap**, the yawning void before
-creation, which is the name of Asgard's kickstart graph. The **repo tree** (umbrellas and leaves) is the tree's shape.
+is the factory's **kickstart realm**: it sets charters, brands, legal ground and roadmaps for new
+companies and products. Like the realm in the myth, it is one of the realms of Yggdrasil, and every
+other realm builds on the direction it sets. Every new company or product begins in **Ginnungagap**,
+the yawning void before creation, which is the name of Asgard's kickstart graph. The **repo tree** (umbrellas and leaves) is the tree's shape.
 
 **Odin**, the All-Father, sits in his high seat and sees all nine worlds. He is the **orchestrator**:
 the graph engine that directs the work and sends his ravens (the agents) out across the realms to
@@ -89,15 +89,15 @@ means illustrative.
 <!-- diagram: assets/diagrams/ouroboric-long-term-map.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../assets/diagrams/rendered/ouroboric-long-term-map.dark.svg">
-  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Asgard, the company factory, runs on Odin; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), realms (web now; game and mobile later), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); future product, research and art factories are illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
+  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), realms (web now; the Asgard kickstart realm with its Ginnungagap graph, game and mobile later), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); future product, research and art factories are illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
 </picture>
 
 | Name | Role | Status |
 |---|---|---|
 | **Ouroboric** | the company: builds open, self-improving factories. The Ouroboros is its symbol | company |
 | **Yggdrasil** (`ygg`) | the software factory, and its product umbrella repo. The CLI is `ygg` | v0 |
-| **Asgard** | the company factory: direction realms (kickstart, branding, legal, readiness) running on Odin | defined; after Yggdrasil v0 |
-| **Ginnungagap** | Asgard's kickstart graph (tier 0) for companies and products | later |
+| **Asgard** | Yggdrasil's kickstart realm (tier 0): charters, brands, legal basics, roadmaps and readiness for companies and products. A company factory until 2026-10-17 | designed; v0 after Yggdrasil v0 |
+| **Ginnungagap** | the Asgard realm's kickstart graph for companies and products | later (v0 runs the journey by hand) |
 | **Odin** | the orchestrator / graph engine: approval points, modes, checkpoints, tree topology, pointer propagation | v0 |
 | **Gungnir** | the component contract: Go interface types and schemas (ledger events, graph.yaml, pack.yaml) | v0 |
 | **Gleipnir** | harness layer: agent adapters, sandbox drivers, context assembly, policies, check runner | v0 |

@@ -15,8 +15,9 @@ This roadmap sets the order of work, not dates. Each product keeps its own detai
    the visual identity was finished on 2026-10-12.
 1. **Yggdrasil v0:** the software factory builds client gallery lite
    ([Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md)).
-2. **Asgard v0:** templates, the readiness checklist (in use since the Ouroboric kickstart) and the
-   documented manual kickstart.
+2. **Asgard v0:** Yggdrasil's Asgard realm, used by hand: the kickstart journey, the company
+   template, the readiness checklist (in use since the Ouroboric kickstart) and its check script,
+   the kickstart skills and the scripts ([Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md)).
 3. **Yggdrasil iteration 2 and self-hosting stage 1.**
-4. **Asgard automation:** kickstart skills and scripts, the Ginnungagap graph on Odin.
+4. **Asgard automation:** the Ginnungagap graph on Odin.
 5. **Later:** benchmark kit (Mimir), game realm, promotion (Bragi); new factories only after these.

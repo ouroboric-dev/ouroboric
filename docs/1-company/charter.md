@@ -59,15 +59,16 @@ when it:
 <!-- diagram: assets/diagrams/ouroboric-portfolio.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/rendered/ouroboric-portfolio.dark.svg">
-  <img alt="Ouroboric portfolio: the operator approves direction in Asgard, the company factory, which runs on Yggdrasil, the software factory; Asgard kickstarts a company such as photografy and Yggdrasil builds its product; future factories are illustrative" src="../assets/diagrams/rendered/ouroboric-portfolio.svg">
+  <img alt="Ouroboric portfolio: the founder approves direction in the Asgard realm of Yggdrasil, the software factory; the Asgard realm kickstarts a company such as photografy and Yggdrasil's build realms build its product; future factories are illustrative" src="../assets/diagrams/rendered/ouroboric-portfolio.svg">
 </picture>
 
-Ouroboric has two defined factories: Yggdrasil and Asgard.
+Ouroboric has one defined factory, Yggdrasil, with two kinds of realm. **Amended on 2026-10-17:**
+Asgard, defined until then as a second factory, became Yggdrasil's kickstart realm.
 
-| Factory | Produces | Depends on | Status |
-|---|---|---|---|
-| **Yggdrasil** | software | — | in design (v0) |
-| **Asgard** | companies and products: charters, brands, legal, roadmaps, design docs | Yggdrasil (runs on its engine) | defined; v0 after Yggdrasil v0 |
+| Factory and realm | Produces | Status |
+|---|---|---|
+| **Yggdrasil**, build realms (web first) | software | in build (v0) |
+| **Yggdrasil**, Asgard realm | companies and products: charters, brands, legal basics, roadmaps, readiness | designed; v0 after Yggdrasil v0 |
 
 Focus stays on what is defined. Anything else is an illustration of where Ouroboric could go, **not
 a commitment**: a product factory between Asgard and Yggdrasil; a research factory for scientific
@@ -87,5 +88,5 @@ research and papers; artistic factories for design, copywriting, music, video an
 - **Open source** for the factories: AGPL-3.0 for factory code, MIT for anything copied into what
   operators build, CC BY 4.0 for docs; names and logos reserved ([legal](legal/README.md)). What the
   factories produce belongs to the operators and may be public or private, at their choice.
-- **Focus:** Yggdrasil and Asgard before any new factory.
+- **Focus:** Yggdrasil, with its Asgard realm, before any new factory.
 - **Cost-conscious:** subscriptions and free tiers first, hard budget caps everywhere.
