@@ -16,6 +16,23 @@ import sys
 block = re.compile(r'^(`{3,4})(\w*)\n(.*?)\n\1$', re.M | re.S)
 
 
+def task_starts(text):
+    """Offsets of the lines "### Task ..." that are headings, not text inside a code fence."""
+    starts, fence, pos = [], 0, 0
+    for line in text.splitlines(keepends=True):
+        s = line.rstrip('\n')
+        ticks = len(s) - len(s.lstrip('`'))
+        if fence:
+            if ticks >= fence and s.strip('`') == '':
+                fence = 0
+        elif ticks >= 3:
+            fence = ticks
+        elif s.startswith('### Task '):
+            starts.append(pos)
+        pos += len(line)
+    return starts
+
+
 def load(workspace):
     ws = os.path.realpath(workspace)
     marker = os.path.join(ws, 'plan-path')
@@ -35,10 +52,14 @@ def main(argv):
     root, plan = load(argv[1])
     tid = argv[2]
     text = open(plan).read()
-    m = re.search(r'^### Task ' + re.escape(tid) + r':.*?(?=^### Task |\Z)', text, re.M | re.S)
-    if not m:
+    starts = task_starts(text) + [len(text)]
+    sec = None
+    for a, b in zip(starts, starts[1:]):
+        if re.match(r'### Task ' + re.escape(tid) + ':', text[a:b]):
+            sec = text[a:b]
+            break
+    if sec is None:
         sys.exit(f'no task {tid} in the plan')
-    sec = m.group(0)
     repo_m = re.search(r'\*\*Files \(in `([\w.-]+)`\):\*\*', sec)
     repo = repo_m.group(1) if repo_m else None
     blocks, pos = [], 0

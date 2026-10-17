@@ -3,8 +3,8 @@
 #   ygg-evidence.sh [--config FILE] [--output FILE] [--ygg COMMAND] [--clip] PROJECT [RUN_ID]
 # PROJECT is the project folder. RUN_ID defaults to the newest run in PROJECT/.factory/runs.
 # The report holds: ygg status, ygg doctor (with --config), the ledger lines that matter (node results,
-# loop attempts, findings, retries, pauses, failures, sandboxes) and, with --output, the end of a captured
-# run output. A failed session shows up as a retry, run_paused, node_failed or run_failed line: paste
+# loop attempts, findings, retries, pauses, failures, sandboxes, realms and leaves, published documents,
+# tasks) and, with --output, the end of a captured run output. A failed session shows up as a retry, run_paused, node_failed or run_failed line: paste
 # those lines when a failure is not the agent's, so gleipnir/failure/failure.go can learn its words.
 # Redaction: the value of every environment variable whose name has TOKEN, KEY, SECRET, PASSWORD or
 # CREDENTIAL (8 characters or more) is replaced, and so are common token shapes (sk-..., ghp_...,
@@ -81,7 +81,7 @@ report() {
   echo
   echo "## ledger"
   echo '```'
-  grep -E '"event": ?"(run_started|run_resumed|run_finished|run_failed|run_paused|node_finished|node_failed|loop_attempt|finding_raised|finding_closed|finding_reopened|retry|escalation|policy_violation|budget_warning|sandbox_up|sandbox_down)"' "$ledger" || echo "(no matching ledger lines)"
+  grep -E '"event": ?"(run_started|run_resumed|run_finished|run_failed|run_paused|node_finished|node_failed|loop_attempt|finding_raised|finding_closed|finding_reopened|retry|escalation|policy_violation|budget_warning|sandbox_up|sandbox_down|realm_loaded|repo_created|docs_published|tasks_ready|node_returned|task_started|task_done|task_blocked)"' "$ledger" || echo "(no matching ledger lines)"
   echo '```'
   if [ -n "$output" ]; then
     echo

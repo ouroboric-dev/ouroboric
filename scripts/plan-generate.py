@@ -11,7 +11,8 @@
 #   @@size <task id>@@                 inline: "S (n)" or "M (n)", n being the commit's insertions (go.sum excepted); an
 #                                      L task (over 400) is refused, because it must be split
 #   @@steps <task id>@@                the task's steps: the test files first, then the first failure red.txt
-#                                      shows for them, then the other files, then the passing run and the commit
+#                                      shows for them (a task whose tests pass at once says so), then the other files,
+#                                      then the passing run and the commit
 # Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
 # any file a task commit changes (go.sum excepted), and writes nothing in that case. Run it as
 # `python3 -I`.
@@ -46,16 +47,17 @@ def main(argv):
         return f'{f}{lang}\n{body}\n{f}'
 
     def red(tid):
-        """The first lines red.txt shows for the task, without its header, or ''."""
+        """The first lines red.txt shows for the task, without its header: '' when its tests passed
+        before the code (it printed nothing), None when red.txt has no entry for the task."""
         try:
             text = open(ref + '/red.txt').read()
         except FileNotFoundError:
-            return ''
+            return None
         for block in re.split(r'^== ', text, flags=re.M)[1:]:
             head, _, body = block.partition('\n')
             if head.split()[0] == tid:
                 return body.strip('\n')
-        return ''
+        return None
 
     def changes(tid):
         repo, sha = tasks[tid]
@@ -111,8 +113,12 @@ def main(argv):
         if tests:
             out.append(step('write the tests.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in tests))
             first = red(tid)
-            out.append(step('run the named test. Expect it to fail' + (', first like this:' if first else '.')) +
-                       (('\n\n' + fence('output', first)) if first else ''))
+            if first == '':
+                out.append(step('run the named test. It passes at once, because the code or data it needs is already there '
+                                '(or the test is skipped without its build tag): expect `ok`.'))
+            else:
+                out.append(step('run the named test. Expect it to fail' + (', first like this:' if first else '.')) +
+                           (('\n\n' + fence('output', first)) if first else ''))
         if code:
             out.append(step('write the code.') + '\n\n' + '\n\n'.join(block_for(tid, s, p) for s, p in code))
         out.append(step('run the named test. Expect `ok`.'))

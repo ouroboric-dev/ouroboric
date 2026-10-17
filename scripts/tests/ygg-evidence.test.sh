@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for ygg-evidence.sh and ygg-smoke-loop.sh.   scripts/tests/ygg-evidence.test.sh
+# Tests for ygg-evidence.sh, ygg-smoke-loop.sh and ygg-smoke-realms.sh.   scripts/tests/ygg-evidence.test.sh
 # A fake `ygg` and a fake `devcontainer` stand in for the real tools: no model, no engine, no network.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,6 +50,10 @@ cat > "$P/.factory/runs/r2/ledger.jsonl" <<EOF
 {"seq":2,"event":"node_finished","ygg.node.id":"a","gen_ai.usage.input_tokens":7}
 {"seq":3,"event":"run_paused","ygg.note":"usage limit reached, key $SECRET"}
 {"seq":4,"event":"retry","ygg.note":"Bearer abcdefghijklmnopqrstuvwxyz0123"}
+{"seq":5,"event":"task_blocked","ygg.task.id":"gallery-t2","ygg.note":"its loop gave up"}
+{"seq":6,"event":"realm_loaded","ygg.realm.name":"smoke-api"}
+{"seq":7,"event":"docs_published","ygg.node.id":"spec-docs"}
+{"seq":8,"event":"node_returned","ygg.node.id":"ready"}
 EOF
 echo '{"seq":1,"event":"node_finished"}' > "$P/.factory/runs/r1/ledger.jsonl"
 : > "$T/cfg.yaml"
@@ -60,6 +64,8 @@ check "status is in the report" has "status:   done"
 check "doctor is in the report" has "OK    config: fake"
 check "node results and pauses are in the ledger part" has '"event":"run_paused"'
 check "retries are in the ledger part" has '"event":"retry"'
+check "blocked tasks are in the ledger part" has '"event":"task_blocked"'
+check "realms, published documents and returned refusals are in the ledger part" has '"event":"node_returned"'
 check "lines of other events are left out" hasnt '"event":"node_started"'
 check "an environment secret is removed" hasnt "$SECRET"
 check "a bearer token is removed" hasnt "abcdefghijklmnopqrstuvwxyz0123"
@@ -112,5 +118,29 @@ echo dirty > "$PR/dirty.txt"
 run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "another change is refused" test "$rc" -eq 2
 check "and the refusal names the file" has "dirty.txt"
+
+# --- ygg-smoke-realms.sh.
+R="$T/ygg-realms"; mkdir -p "$R"
+rargs=(--folder "$R" --env "$T/factory.env")
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "a missing factory.yaml is refused (realms)" test "$rc" -eq 2
+printf 'mode: unattended\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "a config with no realms section is refused" test "$rc" -eq 2
+check "and the refusal says why" has "no realms section"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n' > "$R/factory.yaml"
+FAKE_CLI_VERSION=0.88.0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "a wrong devcontainer version is refused (realms)" test "$rc" -eq 2
+YGG_BIND="$T/missing" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "a missing bind mount is refused (realms)" test "$rc" -eq 2
+FAKE_RUN_RC=5 run "$S/ygg-smoke-realms.sh" --build "${rargs[@]}"
+check "the exit code of the run is the script's (realms)" test "$rc" -eq 5
+check "a project is made, with no leaf" test -f "$(ls -d "$R"/smoke-realms-*/ | head -n 1)umbrella.yaml"
+check "the images of every realm are built on request" has "built"
+check "the report is printed (realms)" has "# ygg evidence: run 20261017-000000-000001"
+check "the credential is not in the saved realms report" test -z "$(grep -F -- "$SECRET" "$R/h13-report.txt")"
+sleep 1
+FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "each run gets a project of its own" test "$(ls -d "$R"/smoke-realms-*/ | wc -l)" -eq 2
 
 exit "$fail"

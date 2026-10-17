@@ -130,6 +130,12 @@ check "steps show a changed file as a patch and a new file whole" \
   bash -c "grep -q 'Write \`greet_test.go\`:' '$T/plan2.md' && grep -q 'Apply to \`greet_test.go\`:' '$T/plan2.md' && grep -q '^\`\`\`diff' '$T/plan2.md'"
 check "a task with no red.txt entry still gets a step that expects a failure" \
   bash -c "grep -q 'Expect it to fail\.' '$T/plan2.md'"
+cp "$REF/red.txt" "$T/red.keep"
+printf '== fx-T001 (app) pkgs: ./\n\n' >> "$REF/red.txt"
+run python3 -I "$S/plan-generate.py" "$REF" "$T/plan2b.md" "$T/part2.md"
+check "a task whose tests passed before its code says so, and does not claim a failure" \
+  bash -c "[ $rc = 0 ] && sed -n '/^### Task fx-T001/,/^### Task fx-T002/p' '$T/plan2b.md' | grep -q 'passes at once' && ! sed -n '/^### Task fx-T001/,/^### Task fx-T002/p' '$T/plan2b.md' | grep -q 'Expect it to fail'"
+cp "$T/red.keep" "$REF/red.txt"
 printf 'big %s fx-T009\n' "$BIG" > "$REF/tasks.map"
 check "steps fence what a failing test prints as an output block" \
   bash -c "grep -q '^\`\`\`output' '$T/plan2.md'"
@@ -156,6 +162,13 @@ check "replay leaves the code the task commits left" \
 printf '### Task zz-T001: elsewhere\n\n**Files (in `other`):**\n- Create: `x.go`\n' > "$T/other.md"
 run python3 -I "$S/plan-replay.py" "$T/other.md" "$WORK"
 check "replay skips a task whose repo is not in the work directory" bash -c "[ $rc = 0 ] && grep -q 'zz-T001: skipped' '$T/out'"
+# A heading-looking line inside a code block is the code's, not a new task (a test of a plan reader has them).
+printf '### Task fx-T031: a task whose code holds a heading\n\n**Files (in `app`):**\n- Create: `inner.txt`\n\nWrite `inner.txt`:\n\n````text\nfirst\n### Task fx-T032: not a task\nlast\n````\n\n### Task fx-T033: the next task\n\n**Files (in `app`):**\n- Create: `next.txt`\n\nWrite `next.txt`:\n\n```text\nnext\n```\n' > "$T/fenced-heading.md"
+WORK3="$T/work3"; mkdir "$WORK3"
+git clone -q "$REF/app" "$WORK3/app" && git -C "$WORK3/app" checkout -q "$B0"
+run python3 -I "$S/plan-replay.py" "$T/fenced-heading.md" "$WORK3"
+check "replay keeps a heading inside a code block with its task" \
+  bash -c "[ $rc = 0 ] && grep -q 'fx-T031: 1 blocks applied' '$T/out' && grep -q 'fx-T033: 1 blocks applied' '$T/out' && ! grep -q 'fx-T032' '$T/out' && grep -q '^### Task fx-T032: not a task\$' '$WORK3/app/inner.txt' && grep -q '^last\$' '$WORK3/app/inner.txt'"
 
 # --- An SDD workspace for the executor scripts: <root>/.superpowers/sdd/<slug>/plan-path names the plan.
 U="$T/umbrella"
@@ -186,6 +199,13 @@ run python3 -I "$S/plan-blocks.py" "$WS" fx-T099
 check "blocks names a task the plan lacks" bash -c "[ $rc != 0 ] && grep -q 'no task fx-T099' '$T/out'"
 run python3 -I "$S/plan-blocks.py" "$T/not-a-workspace" fx-T001
 check "blocks refuses a folder that is not an SDD workspace" bash -c "[ $rc != 0 ] && grep -q 'no plan-path' '$T/out'"
+WS3="$U/.superpowers/sdd/tasks-heading"; mkdir -p "$WS3" "$U/docs/plans/h"
+cp "$T/fenced-heading.md" "$U/docs/plans/h/tasks.md"; printf 'docs/plans/h/tasks.md\n' > "$WS3/plan-path"
+run python3 -I "$S/plan-blocks.py" "$WS3" fx-T031
+check "blocks lists a task whose code holds a heading, whole" \
+  bash -c "[ $rc = 0 ] && grep -q '0: file inner.txt' '$T/out'"
+run python3 -I "$S/plan-blocks.py" "$WS3" fx-T032
+check "blocks does not take a heading inside a code block for a task" bash -c "[ $rc != 0 ] && grep -q 'no task fx-T032' '$T/out'"
 
 # --- plan-task-start.sh
 fresh_app
