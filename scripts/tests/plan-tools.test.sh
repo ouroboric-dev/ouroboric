@@ -130,6 +130,12 @@ check "steps show a changed file as a patch and a new file whole" \
   bash -c "grep -q 'Write \`greet_test.go\`:' '$T/plan2.md' && grep -q 'Apply to \`greet_test.go\`:' '$T/plan2.md' && grep -q '^\`\`\`diff' '$T/plan2.md'"
 check "a task with no red.txt entry still gets a step that expects a failure" \
   bash -c "grep -q 'Expect it to fail\.' '$T/plan2.md'"
+cp "$REF/red.txt" "$T/red.keep"
+printf '== fx-T001 (app) pkgs: ./\n\n' >> "$REF/red.txt"
+run python3 -I "$S/plan-generate.py" "$REF" "$T/plan2b.md" "$T/part2.md"
+check "a task whose tests passed before its code says so, and does not claim a failure" \
+  bash -c "[ $rc = 0 ] && sed -n '/^### Task fx-T001/,/^### Task fx-T002/p' '$T/plan2b.md' | grep -q 'passes at once' && ! sed -n '/^### Task fx-T001/,/^### Task fx-T002/p' '$T/plan2b.md' | grep -q 'Expect it to fail'"
+cp "$T/red.keep" "$REF/red.txt"
 printf 'big %s fx-T009\n' "$BIG" > "$REF/tasks.map"
 check "steps fence what a failing test prints as an output block" \
   bash -c "grep -q '^\`\`\`output' '$T/plan2.md'"
