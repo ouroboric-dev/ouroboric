@@ -8,7 +8,7 @@ style: brand-story
 
 # Naming and mythology
 
-Status: agreed 2026-10-11 (loop renamed to Jormungandr; Vitruvius replaced by Gungnir; Odin added as engine). This is the story behind the names. Use it for branding and for every
+Status: agreed 2026-10-11 (loop renamed to Jormungandr; Vitruvius replaced by Gungnir; Odin added as engine); the realms agreed 2026-10-17. This is the story behind the names. Use it for branding and for every
 future naming decision, so new components fit the same world.
 
 ## The story
@@ -16,8 +16,9 @@ future naming decision, so new components fit the same world.
 Yggdrasil is the world tree. Everything hangs on it: the nine realms in its branches, the wells
 at its roots, the creatures that live on it.
 
-The software factory is that tree. Every run climbs it from root to leaf, and every product is a
-**realm** hanging from a branch.
+The agentic factory is that tree. Every run climbs it from root to leaf. The nine **realms** hang
+from its branches, one for each kind of work, and every product is built from leaves of one realm or
+more (see [the realms](#the-realms)).
 
 High in the tree sits **Asgard**, the realm of the gods, where direction and order are decided. Asgard
 is the factory's **kickstart realm**: it sets charters, brands, legal ground and roadmaps for new
@@ -71,6 +72,32 @@ misses. Gungnir is the **component contract**, the interfaces and schemas every 
 to plug into the tree. A component "sworn on Gungnir" respects the contract, which is what makes
 mix-and-match factories possible.
 
+## The realms
+
+**Decided 2026-10-17 (founder).** Each of the nine realms of the myth is one domain of work: the
+answer to "what am I building?". A realm's **flavors** are the answer to "in what?". A realm leaf
+(a repo) is named `<realm>-<flavor>` (`midgard-react`, `helheim-go`), or `<realm>` alone for a realm
+with one way of working (`asgard`). A product that crosses domains is a combination of leaves: a web
+SaaS is a Midgard leaf and a Helheim leaf, and a project may use several flavors of one realm.
+Legacy and migration are kinds of work a realm may offer, not realms.
+
+| Realm | Domain | Why the myth fits | Flavors (examples) |
+|---|---|---|---|
+| **Asgard** | kickstart: charters, brands, legal basics, roadmaps | where the gods decide direction | (one leaf: `asgard`) |
+| **Midgard** | web frontends | the human world, the part people live in and see | `react`, `vue`, `next` |
+| **Helheim** | backend: services, APIs, workers | below the world, behind the bridge Gjallarbru, where the guard Modgud asks every traveller their name and errand: the part no user sees, where every request is checked and every record is kept | `go` |
+| **Niflheim** | infrastructure: deploy, cloud, operations | under one of Yggdrasil's roots, its well Hvergelmir feeds every river: the ground everything runs on | named with the realm |
+| **Nidavellir** | desktop apps and command-line tools | the dwarves' realm; dwarves forged the gods' own tools (Mjolnir, Draupnir, Gungnir) | `tauri`, `cli` |
+| **Jotunheim** | games (engine-based clients) | at Utgard the giants test Thor with contests: a race, an eating contest, wrestling old age itself | `godot`, `unity` |
+| **Alfheim** | art: assets for apps and games (music, 3D models, sprites, icons), and later art as the work itself | the light elves' realm, "more beautiful than the sun" | `audio`, `3d`, `2d` |
+| **Vanaheim** | research: documents from sources (a synthesis) or from data (a paper) | the Vanir, masters of seidr (seeing hidden things), whose truce with the gods produced Kvasir, who could answer any question | `synthesis`, `paper` |
+| **Muspelheim** | mobile apps | the gods took sparks from Muspelheim and set them moving across the sky as the sun, moon and stars: lights that travel with you | `swift`, `kotlin`, `flutter` |
+
+Naming a realm is not a commitment to build it. The roadmap says which realms come when. Muspelheim's
+fit is the weakest of the nine. The flavor lists are examples: a flavor gets its name when its leaf is
+created. The record of the decision is Yggdrasil's change proposal
+[realm leaf naming](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/changes/2026-10-17-realm-leaf-naming/proposal.md).
+
 ## The adversaries
 
 Naming the threats makes them easier to discuss in designs, docs and incident notes.
@@ -89,13 +116,13 @@ means illustrative.
 <!-- diagram: assets/diagrams/ouroboric-long-term-map.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../assets/diagrams/rendered/ouroboric-long-term-map.dark.svg">
-  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), realms (web now; the Asgard kickstart realm with its Ginnungagap graph, game and mobile later), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); future product, research and art factories are illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
+  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), the nine realms (Midgard and Helheim now; the Asgard kickstart realm with its Ginnungagap graph, Jotunheim and Muspelheim later; Niflheim, Nidavellir, Alfheim and Vanaheim named, not committed), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); a future product factory is illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
 </picture>
 
 | Name | Role | Status |
 |---|---|---|
 | **Ouroboric** | the company: builds open, self-improving factories. The Ouroboros is its symbol | company |
-| **Yggdrasil** (`ygg`) | the software factory, and its product umbrella repo. The CLI is `ygg` | v0 |
+| **Yggdrasil** (`ygg`) | the agentic factory, and its product umbrella repo. The CLI is `ygg` | v0 |
 | **Asgard** | Yggdrasil's kickstart realm (tier 0): charters, brands, legal basics, roadmaps and readiness for companies and products. A company factory until 2026-10-17 | designed; v0 after Yggdrasil v0 |
 | **Ginnungagap** | the Asgard realm's kickstart graph for companies and products | later (v0 runs the journey by hand) |
 | **Odin** | the orchestrator / graph engine: approval points, modes, checkpoints, tree topology, pointer propagation | v0 |
@@ -103,7 +130,7 @@ means illustrative.
 | **Gleipnir** | harness layer: agent adapters, sandbox drivers, context assembly, policies, check runner | v0 |
 | **Jormungandr** | loop layer: build→check→fix semantics, attempts, backoff, budgets, feedback, escalation | v0 |
 | **Ouroboros** | the brand symbol and org (`ouroboric-dev`): self-improvement. Not a module | brand |
-| **realms** | packs: domain recipes such as web or game. A generic word, not a module | v0 (web realm) |
+| **realms** | the nine domains of Yggdrasil's work, each with its flavors as leaf repos (`<realm>-<flavor>`): the graph, prompts, stack layer, templates and checks Odin runs. See [the realms](#the-realms) | v0 (Midgard and Helheim: `midgard-react`, `helheim-go`) |
 | **Havamal** | the skill library: vendored and own skills, `skills.lock`, evals. Each skill is one of Odin's charms | v0 |
 | **Ratatoskr** | routing: per-umbrella index bundles, hierarchical descent | later as a module (v0 ships it as a package) |
 | **Norns** | observability: ledger, metrics, reports, live status | later as a module |
@@ -117,7 +144,6 @@ means illustrative.
 Names not yet used, kept for later:
 - **Huginn and Muninn:** Odin's ravens, thought and memory, who fly over the worlds and report back. Fit scout or research agents, or planner and memory roles.
 - **Urd's well:** a persistent knowledge or state store.
-- **Midgard:** the human world, e.g. the space for human-facing UIs and dashboards.
 - **Einherjar:** warriors who fall each day and rise each evening. Fits a retry/escalation sub-component of Jormungandr.
 - **Draupnir:** Odin's ring that drips eight new rings every ninth night. Fits anything that yields an increment per cycle.
 
@@ -136,3 +162,7 @@ Names not yet used, kept for later:
    everywhere, so product and module names appear under the Ouroboric umbrella.
 5. **The org is `ouroboric-dev`** (ouroboric.dev): the shared symbol of iteration, of factories
    improving themselves.
+6. **A realm leaf is `<realm>-<flavor>`**, lowercase: one of the nine realms of
+   [the realms](#the-realms), then the flavor (`midgard-react`). A realm with one way of working MAY
+   be named `<realm>` alone (`asgard`). Realms are domains of work; a component is never named after
+   a realm.
