@@ -13,7 +13,8 @@
 #   @@steps <task id>@@                the task's steps: the test files first, then the first failure red.txt
 #                                      shows for them (a task whose tests pass at once says so), then the other files,
 #                                      then the passing run and the commit
-# Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
+# A file the commit makes executable is written as "Write `path` (executable):", and plan-blocks.py and plan-replay.py
+# set the mode. Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
 # any file a task commit changes (lock files excepted: go.sum and package-lock.json), and writes nothing in that case. Run it as
 # `python3 -I`.
 import os
@@ -81,7 +82,8 @@ def main(argv):
         used.add((tid, path))
         if status == 'A':
             lang = LANGS.get(os.path.splitext(path)[1], 'text')
-            return f'Write `{path}`:\n\n' + fence(lang, git(repo, 'show', f'{sha}:{path}'))
+            exe = git(repo, 'ls-tree', sha, '--', path).startswith('100755')
+            return f'Write `{path}`' + (' (executable)' if exe else '') + ':\n\n' + fence(lang, git(repo, 'show', f'{sha}:{path}'))
         return f'Apply to `{path}`:\n\n' + fence('diff', git(repo, 'show', '--format=', sha, '--', path))
 
     def expand_more(m):

@@ -62,6 +62,8 @@ def main(argv):
                 full = os.path.join(repo, path)
                 os.makedirs(os.path.dirname(full), exist_ok=True)
                 open(full, 'w').write(body + '\n')
+                if re.search(r'`\s*\(executable\):?\s*$', before):
+                    os.chmod(full, 0o755)
             applied += 1
         print(f'{tid}: {applied} blocks applied to {m.group(1)}')
 

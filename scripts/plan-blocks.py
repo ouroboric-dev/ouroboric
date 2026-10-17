@@ -74,11 +74,11 @@ def main(argv):
             target, kind = '-', lang
         else:
             target, kind = re.findall(r'`([^`\s]+)`', before)[-1], 'file'
-        blocks.append((kind, target, body))
+        blocks.append((kind, target, body, bool(re.search(r'`\s*\(executable\):?\s*$', before))))
 
     if len(argv) == 3:
         print(f'{tid} in {repo}:')
-        for i, (kind, target, body) in enumerate(blocks):
+        for i, (kind, target, body, _) in enumerate(blocks):
             print(f'  {i}: {kind:4} {target} ({body.count(chr(10)) + 1} lines)')
         return
 
@@ -86,7 +86,7 @@ def main(argv):
         sys.exit(f'{tid} changes no component repo')
     dest = os.path.join(root, repo)
     for n in map(int, argv[3:]):
-        kind, target, body = blocks[n]
+        kind, target, body, exe = blocks[n]
         if kind in ('bash', 'output'):
             sys.exit(f'block {n} is a {kind} block: run it yourself')
         if kind == 'diff':
@@ -97,6 +97,8 @@ def main(argv):
             path = os.path.join(dest, target)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             open(path, 'w').write(body + '\n')
+            if exe:
+                os.chmod(path, 0o755)
         print(f'applied block {n}: {kind} {target}')
 
 
