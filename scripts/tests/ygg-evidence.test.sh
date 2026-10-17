@@ -15,6 +15,7 @@ run() { "$@" >"$T/out" 2>&1; rc=$?; }
 has() { grep -q -F -- "$1" "$T/out"; }
 hasnt() { ! grep -q -F -- "$1" "$T/out"; }
 export HOME="$T/home"; mkdir -p "$HOME"
+export YGG_ENGINE_CHECK=0 # the engine environment has its own test (ygg-engine.test.sh)
 
 SECRET='sekret-value-0123456789'
 # A fake ygg: `run` writes a ledger (with a retry line and a line that leaks the secret) and exits with

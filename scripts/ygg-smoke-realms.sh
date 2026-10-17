@@ -19,7 +19,7 @@
 # brief the run is given, and --tag names the files of the run and its report in DIR (h13 by default).
 # Defaults: DIR=$HOME/ygg-it, FILE=$HOME/.config/ouroboric/factory.env. For tests and other machines: YGG_CMD
 # (how ygg runs), YGG_ODIN (the odin folder), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind) and
-# YGG_CLI_VERSION (default 0.89.0).
+# YGG_CLI_VERSION (default 0.89.0). The engine environment comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" build=0 clip=() realm=smoke-lead brief="" tag=h13
@@ -37,6 +37,12 @@ while [ $# -gt 0 ]; do
 done
 want="${YGG_CLI_VERSION:-0.89.0}" bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 export PATH="$dir/dc/node_modules/.bin:$PATH"
+# The engine environment is ygg-engine.sh's: the engine of DIR/factory.yaml (never the shell's CONTAINER_HOST),
+# an empty registry config, and a check that the engine answers and is rootless. YGG_ENGINE_CHECK=0 skips it (tests).
+if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
+  engine_env="$("$HERE/ygg-engine.sh" env --folder "$dir")" || exit 2
+  eval "$engine_env"
+fi
 [ -f "$dir/factory.yaml" ] || { echo "smoke-realms: $dir/factory.yaml is missing; copy odin/testdata/smoke-realms/factory.example.yaml there and set the engine, the mount and realms.dir" >&2; exit 2; }
 [ -f "$envfile" ] || { echo "smoke-realms: the credentials file $envfile is missing" >&2; exit 2; }
 grep -q '^realms:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no realms section: the run is given a realm by name ($realm), and realms.dir says where it is" >&2; exit 2; }
