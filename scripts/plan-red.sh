@@ -5,7 +5,7 @@
 # REFERENCE holds one git clone per repo and a tasks.map ("<repo> <commit> <task id>" per line). For each
 # task, the task commit's test files go onto its parent commit in a fresh worktree, and the first lines
 # `go test` prints for their packages (apart from ok lines) are shown. Test files are files that match
-# $PLAN_TEST_FILES, an extended regular expression (default: _test.go files, folders named *test, and
+# $PLAN_TEST_FILES, an extended regular expression (default: _test.go files, .test.ts(x) and .spec.ts(x) files, folders named *test, and
 # testdata). The worktrees and their temporary directory are removed at the end.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=plan-lib.sh
 . "$HERE/plan-lib.sh"
 ref="$(cd "$1" && pwd -P)"
-pattern="${PLAN_TEST_FILES:-_test\.go\$|/[a-z]*test/|^testdata/}"
+pattern="${PLAN_TEST_FILES:-_test\.go\$|\.(test|spec)\.tsx?\$|/[a-z]*test/|^testdata/}"
 unset GOWORK
 W="$(mktemp -d)"
 trap 'rm -rf -- "$W"' EXIT
