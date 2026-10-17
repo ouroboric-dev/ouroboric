@@ -7,7 +7,7 @@ ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
     bragi: "Bragi\nposts from the sagas" {style.stroke-dash: 4}
     sagas -> bragi: "feeds"
   }
-  yggdrasil: "Yggdrasil: software factory" {
+  yggdrasil: "Yggdrasil: agentic factory" {
     grid-columns: 2
     core: "Core (v0)" {
       odin: "Odin\norchestrator"
@@ -20,10 +20,32 @@ ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
       gleipnir -> havamal: "loads"
     }
     realms: "Realms (recipes for Odin)" {
+      grid-columns: 3
+      midgard: "Midgard\nweb frontends"
+      helheim: "Helheim\nbackend"
       asgard: "Asgard\nkickstart, Ginnungagap graph" {style.stroke-dash: 4}
-      web: "web"
-      game: "game" {style.stroke-dash: 4}
-      mobile: "mobile" {style.stroke-dash: 4}
+      jotunheim: "Jotunheim\ngames" {style.stroke-dash: 4}
+      muspelheim: "Muspelheim\nmobile" {style.stroke-dash: 4}
+      niflheim: "Niflheim\ninfrastructure" {
+        style.stroke-dash: 4
+        style.fill: ${surface}
+        style.font-color: ${muted}
+      }
+      nidavellir: "Nidavellir\ndesktop and CLI" {
+        style.stroke-dash: 4
+        style.fill: ${surface}
+        style.font-color: ${muted}
+      }
+      alfheim: "Alfheim\nart" {
+        style.stroke-dash: 4
+        style.fill: ${surface}
+        style.font-color: ${muted}
+      }
+      vanaheim: "Vanaheim\nresearch" {
+        style.stroke-dash: 4
+        style.fill: ${surface}
+        style.font-color: ${muted}
+      }
     }
     later: "Later modules" {
       style.stroke-dash: 4
@@ -44,8 +66,6 @@ ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
     style.fill: ${surface}
     style.font-color: ${muted}
     product: "product factory"
-    research: "research factory"
-    art: "art factories:\ndesign, copy, music, video"
   }
 }
 notes: "" {

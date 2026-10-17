@@ -1,7 +1,7 @@
 direction: down
 founder: "Founder" {shape: person}
 ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
-  yggdrasil: "Yggdrasil: software factory" {
+  yggdrasil: "Yggdrasil: agentic factory" {
     asgard: "Asgard realm: kickstart" {
       readiness: "Readiness checklist"
       ginnungagap: "Ginnungagap\nkickstart graph (later)"
@@ -10,7 +10,7 @@ ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
     jorm: "Jormungandr\nbuild, check, fix loop"
     gleipnir: "Gleipnir\nharness: agents, sandbox"
     havamal: "Havamal\nskill library"
-    realms: "Build realms\nweb (v0), game (later)"
+    realms: "Realms\nMidgard, Helheim (v0)\nJotunheim, Muspelheim (later)"
     gungnir: "Gungnir\ncontract for all modules" {style.stroke-dash: 4}
     later: "Later: Ratatoskr routing, Norns observability,\nMimir benchmarks, Bragi content" {style.stroke-dash: 4}
     realms -> odin: "recipes"
@@ -22,5 +22,5 @@ ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
 }
 products: "Companies and products it makes\ne.g. photografy, client gallery"
 founder -> ouroboric.yggdrasil.asgard: "approves direction" {style.stroke: ${accent}; style.stroke-width: 3}
-ouroboric.yggdrasil -> products: "kickstarts (Asgard realm), builds and verifies (build realms)"
+ouroboric.yggdrasil -> products: "kickstarts (Asgard realm), builds and verifies (the other realms)"
 products -> ouroboric: "lessons and benchmarks feed back" {style.stroke-dash: 4; style.stroke: ${accent}}

@@ -9,7 +9,7 @@ and in time research and art. This repository is the company umbrella. Start wit
 <!-- diagram: assets/diagrams/ouroboric-map.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/rendered/ouroboric-map.dark.svg">
-  <img alt="Ouroboric map: the founder approves direction in the Asgard realm (readiness checklist, Ginnungagap kickstart graph); Yggdrasil, the software factory, contains Odin, Jormungandr, Gleipnir, Havamal, the build realms and the Asgard realm, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; the Asgard realm kickstarts and the build realms build companies and products, whose lessons and benchmarks feed back into Ouroboric" src="assets/diagrams/rendered/ouroboric-map.svg">
+  <img alt="Ouroboric map: the founder approves direction in the Asgard realm (readiness checklist, Ginnungagap kickstart graph); Yggdrasil, the agentic factory, contains Odin, Jormungandr, Gleipnir, Havamal, the realms (Midgard and Helheim in v0, Jotunheim and Muspelheim later) and the Asgard realm, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; the Asgard realm kickstarts and the other realms build companies and products, whose lessons and benchmarks feed back into Ouroboric" src="assets/diagrams/rendered/ouroboric-map.svg">
 </picture>
 
 The names come from Norse myth; the [naming and mythology record](7-branding/story/naming-and-mythology.md) tells the story behind each one, and its
@@ -31,7 +31,7 @@ Repositories in the `ouroboric-dev` organisation:
 |---|---|---|
 | `.github` | public | organisation profile and defaults (health files, issue forms, PR template); every change is organisation-wide |
 | `ouroboric` | public | this company umbrella |
-| `yggdrasil` | public | the product: the software factory |
+| `yggdrasil` | public | the product: the agentic factory |
 | `asgard` | public | the Asgard realm; a product umbrella until it becomes a leaf of `yggdrasil` after Yggdrasil v0 |
 
 Each operator also keeps a **private instance umbrella** (L0), outside this repository, with pinned
@@ -41,5 +41,5 @@ Products, as submodules under [`products/`](../products/) (clone with `--recurse
 
 | Product | What it is |
 |---|---|
-| [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the software factory |
+| [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the agentic factory |
 | [Asgard](https://github.com/ouroboric-dev/asgard) | Yggdrasil's kickstart realm; moves under `yggdrasil` after Yggdrasil v0 |

@@ -8,8 +8,8 @@ related: [docs-standard.md, https://github.com/ouroboric-dev/yggdrasil/blob/main
 # Spec-driven development
 
 This document describes how work goes from an idea to merged, verified code, for **every Ouroboric
-product and every product they build**. **Yggdrasil**, the software factory, runs every tier: its
-**Asgard** realm runs tier 0 (kickstart), and its build realms run tiers 1–3. The process doesn't depend on any tool: Spec Kit,
+product and every product they build**. **Yggdrasil**, the agentic factory, runs every tier: its
+**Asgard** realm runs tier 0 (kickstart), and its other realms run tiers 1–3. The process doesn't depend on any tool: Spec Kit,
 OpenSpec, BMAD, Superpowers or native prompts are interchangeable ways to produce the artifacts it defines.
 
 ## 1. Principles
@@ -247,7 +247,7 @@ Yggdrasil builds itself in stages:
 | Stage | Who builds Yggdrasil | Needs |
 |---|---|---|
 | 0 | a human with an interactive agent | this process, followed by hand |
-| 1 | Yggdrasil builds one of its own features | the change graph, a Go realm, `guardrail-change` |
+| 1 | Yggdrasil builds one of its own features | the change graph, a Go flavor of Helheim (`helheim-go`), `guardrail-change` |
 | 2 | Yggdrasil improves itself from benchmark results | the benchmark kit (Mimir) and a release regression gate |
 
 A factory that edits itself can weaken its own guardrails. For example, an agent "fixes" a flaky test

@@ -59,7 +59,7 @@ when it:
 <!-- diagram: assets/diagrams/ouroboric-portfolio.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/rendered/ouroboric-portfolio.dark.svg">
-  <img alt="Ouroboric portfolio: the founder approves direction in the Asgard realm of Yggdrasil, the software factory; the Asgard realm kickstarts a company such as photografy and Yggdrasil's build realms build its product; future factories are illustrative" src="../assets/diagrams/rendered/ouroboric-portfolio.svg">
+  <img alt="Ouroboric portfolio: the founder approves direction in the Asgard realm of Yggdrasil, the agentic factory; the Asgard realm kickstarts a company such as photografy and Yggdrasil's other realms (web frontends and backend in v0; games, mobile, art and research later) build its product; a future product factory is illustrative" src="../assets/diagrams/rendered/ouroboric-portfolio.svg">
 </picture>
 
 Ouroboric has one defined factory, Yggdrasil, with two kinds of realm. **Amended on 2026-10-17:**
@@ -67,12 +67,15 @@ Asgard, defined until then as a second factory, became Yggdrasil's kickstart rea
 
 | Factory and realm | Produces | Status |
 |---|---|---|
-| **Yggdrasil**, build realms (web first) | software | in build (v0) |
+| **Yggdrasil**, build realms (Midgard and Helheim first) | software | in build (v0) |
 | **Yggdrasil**, Asgard realm | companies and products: charters, brands, legal basics, roadmaps, readiness | designed; v0 after Yggdrasil v0 |
 
 Focus stays on what is defined. Anything else is an illustration of where Ouroboric could go, **not
-a commitment**: a product factory between Asgard and Yggdrasil; a research factory for scientific
-research and papers; artistic factories for design, copywriting, music, video and content.
+a commitment**: a product factory between Asgard and Yggdrasil. **Amended on 2026-10-17:** research
+and art, illustrated until then as factories of their own, became two of Yggdrasil's nine realms:
+Vanaheim (research: syntheses and papers) and Alfheim (art: assets for apps and games, and later art
+as the work itself). They are named, not committed; the roadmap says when a realm is built. Yggdrasil
+is now called the agentic factory, since its realms make more than software.
 
 ## North-star measures
 
