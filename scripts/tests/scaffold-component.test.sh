@@ -57,13 +57,14 @@ cp "$T/alpha/AGENTS.md" "$T/agents.before"
 check "an existing scaffold file is never overwritten" bash -c "[ $rc = 2 ] && cmp -s '$T/agents.before' '$T/alpha/AGENTS.md'"
 
 newrepo "$T/web"
-"$SCAFFOLD" --mit-templates realm-web "The web realm." "$T/web" >/dev/null 2>&1; rc=$?
+"$SCAFFOLD" --mit-templates midgard-react "The Midgard realm's React flavor." "$T/web" >/dev/null 2>&1; rc=$?
 check "--mit-templates: exit 0" [ "$rc" = 0 ]
 check "--mit-templates adds the MIT text and templates/README.md" \
   bash -c "cmp -s '$MIT' '$T/web/LICENSES/MIT.txt' && [ -f '$T/web/templates/README.md' ]"
 check "--mit-templates makes templates/** MIT in REUSE.toml" \
   bash -c "grep -A3 'path = \[\"templates/\*\*\"\]' '$T/web/REUSE.toml' | grep -q 'SPDX-License-Identifier = \"MIT\"'"
-check "a hyphenated name keeps its case in the title" grep -qx 'title: realm-web architecture' "$T/web/docs/architecture.md"
+check "a hyphenated name keeps its case in the title" grep -qx 'title: midgard-react architecture' "$T/web/docs/architecture.md"
+check "the README calls Yggdrasil the agentic factory" grep -q "the agentic factory by" "$T/web/README.md"
 check "--mit-templates: reuse lint passes" bash -c "cd '$T/web' && uvx -q --from 'reuse==5.0.2' reuse lint -q"
 
 mkdir "$T/plain"

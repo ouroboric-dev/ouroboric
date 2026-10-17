@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # holds the side-by
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
 FACTORIES=" yggdrasil asgard "   # the only repos with issues on
-LEAVES=" gungnir odin gleipnir jormungandr realm-web havamal "
+LEAVES=" gungnir odin gleipnir jormungandr midgard-react helheim-go havamal "
 LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
 HIDDEN=" huldra "   # private repos that agents must never see
 unset BOT_REPOS     # set only by bot_repos below, never from the environment

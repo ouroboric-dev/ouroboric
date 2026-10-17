@@ -7,7 +7,7 @@
 # branch and open a PR. Agent-run.
 #   scaffold-component.sh [--mit-templates] <repo> "<job sentence>" <clone dir>
 # --mit-templates also adds an MIT-licensed templates/ folder, for repos whose templates are copied
-# into products (such as realm-web).
+# into products (such as midgard-react).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TPL="$HERE/templates/go-component"
