@@ -148,6 +148,30 @@ printf '### Task fx-T009: too big\n\n@@size fx-T009@@\n' > "$T/big.md"
 run python3 -I "$S/plan-generate.py" "$REF" "$T/big-plan.md" "$T/big.md"
 check "size refuses an L task, and writes nothing" \
   bash -c "[ $rc != 0 ] && grep -q 'must be split' '$T/out' && [ ! -e '$T/big-plan.md' ]"
+# A lock file is generated, not authored: it counts for no size and the plan needs no block for it.
+mkdir -p "$REF/web" && git init -q "$REF/web"
+printf 'module example.test/web\n\ngo 1.21\n' > "$REF/web/go.mod"
+g "$REF/web" add -A && g "$REF/web" commit -qm base
+mkdir -p "$REF/web/ui"
+printf 'package ui\n' > "$REF/web/ui/a.go"
+printf '// spec\n' > "$REF/web/ui/a.test.ts"
+printf '#!/bin/sh\necho run\n' > "$REF/web/ui/run.sh"; chmod +x "$REF/web/ui/run.sh"
+seq 1 800 | sed 's/^/ "dep": "1.0.0", \/\/ /' > "$REF/web/package-lock.json"
+g "$REF/web" add -A && g "$REF/web" commit -qm "fx-T010 a lock file and a little code"
+LOCK=$(git -C "$REF/web" rev-parse HEAD)
+printf 'web %s fx-T010\n' "$LOCK" > "$REF/tasks.map"
+printf '### Task fx-T010: a lock\n\n@@files fx-T010@@\n\nSize: @@size fx-T010@@\n\n@@steps fx-T010@@\n' > "$T/lock.md"
+run python3 -I "$S/plan-generate.py" "$REF" "$T/lock-plan.md" "$T/lock.md"
+check "a lock file counts for no size and needs no block in the plan" \
+  bash -c "[ $rc = 0 ] && grep -q '^Size: S (' '$T/lock-plan.md' && ! grep -q 'package-lock' '$T/lock-plan.md'"
+check "a .test.ts file is a test file: the steps write it first" \
+  bash -c "a=\$(grep -n 'a.test.ts' '$T/lock-plan.md' | head -1 | cut -d: -f1); b=\$(grep -n 'ui/a.go' '$T/lock-plan.md' | tail -1 | cut -d: -f1); [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ \"\$a\" -lt \"\$b\" ]"
+check "a file the commit makes executable is written with the marker, and a plain one without" \
+  bash -c "grep -q 'Write \`ui/run.sh\` (executable):' '$T/lock-plan.md' && grep -q 'Write \`ui/a.go\`:' '$T/lock-plan.md'"
+WEBW="$T/webw"; mkdir "$WEBW"; git clone -q "$REF/web" "$WEBW/web" && git -C "$WEBW/web" checkout -q "$(git -C "$REF/web" rev-parse HEAD~1)"
+run python3 -I "$S/plan-replay.py" "$T/lock-plan.md" "$WEBW"
+check "replay sets the executable bit the marker asks for, and only that" \
+  bash -c "[ $rc = 0 ] && [ -x '$WEBW/web/ui/run.sh' ] && [ ! -x '$WEBW/web/ui/a.go' ]"
 printf 'app %s fx-T001\napp %s fx-T002\n' "$C1" "$C2" > "$REF/tasks.map"
 rm -f "$REF/red.txt"
 
@@ -206,6 +230,12 @@ check "blocks lists a task whose code holds a heading, whole" \
   bash -c "[ $rc = 0 ] && grep -q '0: file inner.txt' '$T/out'"
 run python3 -I "$S/plan-blocks.py" "$WS3" fx-T032
 check "blocks does not take a heading inside a code block for a task" bash -c "[ $rc != 0 ] && grep -q 'no task fx-T032' '$T/out'"
+
+WS4="$U/.superpowers/sdd/tasks-exec"; mkdir -p "$WS4" "$U/docs/plans/x"
+printf '### Task fx-T033: a script\n\n**Files (in `app`):**\n- Create: `run.sh`\n\nWrite `run.sh` (executable):\n\n```sh\n#!/bin/sh\n```\n\nWrite `plain.txt`:\n\n```text\nx\n```\n' > "$U/docs/plans/x/tasks.md"; printf 'docs/plans/x/tasks.md\n' > "$WS4/plan-path"
+run python3 -I "$S/plan-blocks.py" "$WS4" fx-T033 0 1
+check "blocks makes a file executable when the plan marks it, and no other" \
+  bash -c "[ $rc = 0 ] && [ -x '$U/app/run.sh' ] && [ ! -x '$U/app/plain.txt' ]"
 
 # --- plan-task-start.sh
 fresh_app

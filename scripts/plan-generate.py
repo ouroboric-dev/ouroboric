@@ -8,21 +8,28 @@
 #   @@file <task id> <path> <lang>@@   the file as that task's commit leaves it, fenced as <lang>
 #   @@diff <task id> <path>@@          that commit's change to the file, as a git patch
 #   @@files <task id>@@                the task's "**Files (in `repo`):**" list: what the commit creates and changes
-#   @@size <task id>@@                 inline: "S (n)" or "M (n)", n being the commit's insertions (go.sum excepted); an
+#   @@size <task id>@@                 inline: "S (n)" or "M (n)", n being the commit's insertions (lock files excepted: go.sum and package-lock.json); an
 #                                      L task (over 400) is refused, because it must be split
 #   @@steps <task id>@@                the task's steps: the test files first, then the first failure red.txt
 #                                      shows for them (a task whose tests pass at once says so), then the other files,
 #                                      then the passing run and the commit
-# Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
-# any file a task commit changes (go.sum excepted), and writes nothing in that case. Run it as
+# A file the commit makes executable is written as "Write `path` (executable):", and plan-blocks.py and plan-replay.py
+# set the mode. Test files are those that match $PLAN_TEST_FILES, as in plan-red.sh. It refuses a plan that leaves out
+# any file a task commit changes (lock files excepted: go.sum and package-lock.json), and writes nothing in that case. Run it as
 # `python3 -I`.
 import os
 import re
 import subprocess
 import sys
 
-TEST_FILES = re.compile(os.environ.get('PLAN_TEST_FILES', r'_test\.go$|/[a-z]*test/|^testdata/'))
-LANGS = {'.go': 'go', '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.sh': 'sh', '.md': 'md', '.toml': 'toml', '.mod': 'text'}
+TEST_FILES = re.compile(os.environ.get('PLAN_TEST_FILES', r'_test\.go$|\.(test|spec)\.tsx?$|/[a-z]*test/|^testdata/'))
+LANGS = {'.go': 'go', '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.sh': 'sh', '.md': 'md', '.toml': 'toml', '.mod': 'text',
+         '.ts': 'ts', '.tsx': 'tsx', '.js': 'js', '.mjs': 'js', '.css': 'css', '.html': 'html', '.sql': 'sql'}
+
+
+def is_lock(path):
+    """A file the executor generates and a plan leaves out: go.sum, and npm's package-lock.json."""
+    return os.path.basename(path) in ('go.sum', 'package-lock.json')
 
 
 def main(argv):
@@ -66,7 +73,7 @@ def main(argv):
             status, path = line.split('\t', 1)
             if status == 'D':
                 sys.exit(f'{tid} deletes {path}: a plan can\'t show a deletion yet')
-            if not path.endswith('go.sum'):
+            if not is_lock(path):
                 out.append((status, path))
         return out
 
@@ -75,7 +82,8 @@ def main(argv):
         used.add((tid, path))
         if status == 'A':
             lang = LANGS.get(os.path.splitext(path)[1], 'text')
-            return f'Write `{path}`:\n\n' + fence(lang, git(repo, 'show', f'{sha}:{path}'))
+            exe = git(repo, 'ls-tree', sha, '--', path).startswith('100755')
+            return f'Write `{path}`' + (' (executable)' if exe else '') + ':\n\n' + fence(lang, git(repo, 'show', f'{sha}:{path}'))
         return f'Apply to `{path}`:\n\n' + fence('diff', git(repo, 'show', '--format=', sha, '--', path))
 
     def expand_more(m):
@@ -97,7 +105,7 @@ def main(argv):
             n = 0
             for line in git(repo, 'show', '--numstat', '--format=', sha).splitlines():
                 add, _, path = line.split('\t')
-                if not path.endswith('go.sum') and add != '-':
+                if not is_lock(path) and add != '-':
                     n += int(add)
             if n >= 400 + 1:
                 sys.exit(f'{tid} adds {n} lines: that is an L task, and it must be split')
@@ -149,7 +157,7 @@ def main(argv):
     missing = []
     for tid, (repo, sha) in tasks.items():
         for path in git(repo, 'show', '--name-only', '--format=', sha).split():
-            if (tid, path) not in used and not path.endswith('go.sum'):
+            if (tid, path) not in used and not is_lock(path):
                 missing.append(f'{tid} {path}')
     if missing:
         sys.exit('files missing from the plan:\n  ' + '\n  '.join(missing))

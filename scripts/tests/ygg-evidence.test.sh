@@ -15,6 +15,7 @@ run() { "$@" >"$T/out" 2>&1; rc=$?; }
 has() { grep -q -F -- "$1" "$T/out"; }
 hasnt() { ! grep -q -F -- "$1" "$T/out"; }
 export HOME="$T/home"; mkdir -p "$HOME"
+export YGG_ENGINE_CHECK=0 # the engine environment has its own test (ygg-engine.test.sh)
 
 SECRET='sekret-value-0123456789'
 # A fake ygg: `run` writes a ledger (with a retry line and a line that leaks the secret) and exits with
@@ -27,6 +28,7 @@ case "$1" in
   doctor) echo "OK    config: fake" ;;
   sandbox) echo "built" ;;
   run)
+    echo "$*" >> "${FAKE_ARGS_LOG:-/dev/null}"
     while [ $# -gt 0 ]; do [ "$1" = --project ] && proj="$2"; shift; done
     id=20261017-000000-000001
     mkdir -p "$proj/.factory/runs/$id"
@@ -142,5 +144,17 @@ check "the credential is not in the saved realms report" test -z "$(grep -F -- "
 sleep 1
 FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "each run gets a project of its own" test "$(ls -d "$R"/smoke-realms-*/ | wc -l)" -eq 2
+
+# The same script runs the content smoke run: another lead realm, a brief, and a tag for its files.
+printf 'a brief\n' > "$T/brief.md"
+sleep 1 # a project is named by the second it is made in
+FAKE_ARGS_LOG="$T/args.log" FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --realm midgard-react --brief "$T/brief.md" --tag h15
+check "the lead realm and the brief are given to the run" grep -q -- "--realm midgard-react --brief $T/brief.md" "$T/args.log"
+check "the files of the run carry the tag" test -f "$R/h15-run.txt" -a -f "$R/h15-report.txt"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --brief "$T/nope.md"
+check "a brief that is not there is refused" test "$rc" -eq 2
+sleep 1
+FAKE_ARGS_LOG="$T/args2.log" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "without options the run is the smoke-lead realm with no brief, as before" bash -c "grep -q -- '--realm smoke-lead' '$T/args2.log' && ! grep -q -- '--brief' '$T/args2.log'"
 
 exit "$fail"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the realms smoke run (v0-H13) with real agents, then print the evidence report.
-#   ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip]
+#   ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--realm NAME] [--brief FILE] [--tag TAG]
 # The run builds a tiny product from two realm leaves (smoke-lead and smoke-api, in odin/testdata/smoke-realms):
 # real planners write the leaves file and the plan in scratch workspaces in sandboxes, Odin publishes them,
 # creates the leaves from their realms' templates, and a real implementer builds one task in each leaf.
@@ -14,26 +14,39 @@
 #   5. runs the realm and keeps its raw output in DIR/h13-run.txt (shown live as ygg prints it: do not paste
 #      that file, paste the report);
 #   6. prints the report of ygg-evidence.sh, with the credentials removed (also in DIR/h13-report.txt): paste it.
+# The same script runs the content smoke run (v0-H15) with --realm midgard-react --brief BRIEF --tag h15: the real
+# realms, scripted agents, the real check ladder. --realm is the lead realm (default smoke-lead), --brief the
+# brief the run is given, and --tag names the files of the run and its report in DIR (h13 by default).
 # Defaults: DIR=$HOME/ygg-it, FILE=$HOME/.config/ouroboric/factory.env. For tests and other machines: YGG_CMD
 # (how ygg runs), YGG_ODIN (the odin folder), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind) and
-# YGG_CLI_VERSION (default 0.89.0).
+# YGG_CLI_VERSION (default 0.89.0). The engine environment comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" build=0 clip=()
+dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" build=0 clip=() realm=smoke-lead brief="" tag=h13
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build=1; shift ;;
     --folder) dir="${2:?--folder needs a folder}"; shift 2 ;;
     --env) envfile="${2:?--env needs a file}"; shift 2 ;;
     --clip) clip=(--clip); shift ;;
-    *) echo "usage: ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip]" >&2; exit 2 ;;
+    --realm) realm="${2:?--realm needs a realm name}"; shift 2 ;;
+    --brief) brief="${2:?--brief needs a file}"; shift 2 ;;
+    --tag) tag="${2:?--tag needs a name}"; shift 2 ;;
+    *) echo "usage: ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--realm NAME] [--brief FILE] [--tag TAG]" >&2; exit 2 ;;
   esac
 done
 want="${YGG_CLI_VERSION:-0.89.0}" bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 export PATH="$dir/dc/node_modules/.bin:$PATH"
+# The engine environment is ygg-engine.sh's: the engine of DIR/factory.yaml (never the shell's CONTAINER_HOST),
+# an empty registry config, and a check that the engine answers and is rootless. YGG_ENGINE_CHECK=0 skips it (tests).
+if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
+  engine_env="$("$HERE/ygg-engine.sh" env --folder "$dir")" || exit 2
+  eval "$engine_env"
+fi
 [ -f "$dir/factory.yaml" ] || { echo "smoke-realms: $dir/factory.yaml is missing; copy odin/testdata/smoke-realms/factory.example.yaml there and set the engine, the mount and realms.dir" >&2; exit 2; }
 [ -f "$envfile" ] || { echo "smoke-realms: the credentials file $envfile is missing" >&2; exit 2; }
-grep -q '^realms:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no realms section: the run is given a realm by name (smoke-lead), and realms.dir says where it is" >&2; exit 2; }
+grep -q '^realms:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no realms section: the run is given a realm by name ($realm), and realms.dir says where it is" >&2; exit 2; }
+[ -z "$brief" ] || [ -f "$brief" ] || { echo "smoke-realms: the brief $brief is missing" >&2; exit 2; }
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
 [ "$got" = "$want" ] || { echo "smoke-realms: devcontainer CLI is '${got:-missing}', want $want; put the right one first on PATH" >&2; exit 2; }
 [ -d "$bind" ] || { echo "smoke-realms: the bind mount $bind is missing; a WSL restart removes it (see Phase 3 v0-H07)" >&2; exit 2; }
@@ -51,7 +64,7 @@ if [ -z "$ygg" ]; then
   odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
   if command -v ygg >/dev/null 2>&1; then ygg=ygg; else ygg="cd '$odin' && go run ./cmd/ygg"; fi
 fi
-out="$dir/h13-run.txt"
+out="$dir/$tag-run.txt"
 # The credentials live only in this subshell; nothing here prints them.
 set +e
 (
@@ -60,13 +73,13 @@ set +e
   . "$envfile"
   set +a
   if [ "$build" -eq 1 ]; then eval "$ygg sandbox build --config '$dir/factory.yaml' --all"; fi
-  eval "$ygg run --project '$project' --config '$dir/factory.yaml' --realm smoke-lead"
+  eval "$ygg run --project '$project' --config '$dir/factory.yaml' --realm '$realm' ${brief:+--brief '$brief'}"
 ) 2>&1 | tee "$out"
 rc="${PIPESTATUS[0]}"
 set -e
 echo "smoke-realms: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up)" >&2
 
-report="$dir/h13-report.txt"
+report="$dir/$tag-report.txt"
 # The report is made with the credentials in its environment, so that it can remove their exact values.
 ( set -a
   # shellcheck source=/dev/null
