@@ -15,12 +15,31 @@ import sys
 block = re.compile(r'^(`{3,4})(\w*)\n(.*?)\n\1$', re.M | re.S)
 
 
+def task_starts(text):
+    """Offsets of the lines "### Task ..." that are headings, not text inside a code fence."""
+    starts, fence, pos = [], 0, 0
+    for line in text.splitlines(keepends=True):
+        s = line.rstrip('\n')
+        ticks = len(s) - len(s.lstrip('`'))
+        if fence:
+            if ticks >= fence and s.strip('`') == '':
+                fence = 0
+        elif ticks >= 3:
+            fence = ticks
+        elif s.startswith('### Task '):
+            starts.append(pos)
+        pos += len(line)
+    return starts
+
+
 def main(argv):
     if len(argv) != 3:
         sys.exit('usage: plan-replay.py PLAN WORKDIR')
     plan, work = argv[1], argv[2]
     text = open(plan).read()
-    for sec in re.split(r'^### Task ', text, flags=re.M)[1:]:
+    starts = task_starts(text)
+    for i, a in enumerate(starts):
+        sec = text[a + len('### Task '):starts[i + 1] if i + 1 < len(starts) else len(text)]
         tid = sec.split(':', 1)[0].split()[0]
         m = re.search(r'\*\*Files \(in `([\w.-]+)`\):\*\*', sec)
         if not m or not os.path.isdir(os.path.join(work, m.group(1))):
