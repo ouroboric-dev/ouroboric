@@ -4,25 +4,27 @@
 # bare git repo, so a test can push to file://$FAKE_GIT_ROOT/<org>/<repo>.git.
 import json
 import os
+import re
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 log, portfile = sys.argv[1:3]
-repos = {"taken"}  # repos that already exist in ouroboric-dev
+repos = set()  # (org, name) of the repos created; "taken" exists in every org
 
 
 def repo_routes(method, path, body):
-    prefix = "/repos/ouroboric-dev/"
-    if method == "GET" and path.startswith(prefix):
-        return (200, {"name": path[len(prefix):]}) if path[len(prefix):] in repos else None
-    if method == "POST" and path == "/orgs/ouroboric-dev/repos":
+    if method == "GET" and (m := re.fullmatch(r"/repos/([^/]+)/([^/]+)", path)):
+        org, name = m.groups()
+        return (200, {"name": name}) if name == "taken" or (org, name) in repos else None
+    if method == "POST" and (m := re.fullmatch(r"/orgs/([^/]+)/repos", path)):
+        org = m.group(1)
         name = json.loads(body)["name"]
-        if name in repos:
+        if name == "taken" or (org, name) in repos:
             return 422, {"message": "Repository creation failed."}
-        repos.add(name)
+        repos.add((org, name))
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main",
-                        os.path.join(os.environ["FAKE_GIT_ROOT"], "ouroboric-dev", name + ".git")], check=True)
+                        os.path.join(os.environ["FAKE_GIT_ROOT"], org, name + ".git")], check=True)
         return 201, {"name": name}
     return None
 

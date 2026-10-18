@@ -182,23 +182,41 @@ Run one check with `--check <name>`, or name repos to check only those.
   selected repos only, and `check-repos.sh`'s `bot` check fails if the pr-bot can reach a hidden
   repo.
 - **The founder creates repos** with
-  [`scripts/create-repo.sh [--private] <repo> "<description>"…`](../../scripts/create-repo.sh),
-  using a short-lived admin token (Administration and Contents read and write). Each new repo gets
-  a first commit with only the licence files, then the setup below, so agents only ever see a
-  protected repo. If any named repo already exists, nothing is created. Then the founder adds each
-  public repo to the pr-bot's installation, as the script's output says. `--private` makes a hidden
-  repo, which is never added.
-- **The founder sets up existing repos** with
-  [`scripts/setup-repo.sh <repo>`](../../scripts/setup-repo.sh), using the same kind of token. It is
-  safe to run twice and fixes drift, such as an extra ruleset rule.
+  [`scripts/new-repo.sh --org <org> [--private] [--ci <piece>,...] <repo> "<description>"…`](../../scripts/new-repo.sh),
+  using one token: fine-grained, short-lived, owned by the org, repository access "All
+  repositories", with Administration, Contents and Workflows read and write. It runs every check
+  first: if any named repo already exists, or a piece or the config is wrong, nothing is created.
+  Each new repo gets a first commit with a `README.md`, whose first paragraph is the description,
+  the licence files and the base CI, then the setup below, so agents only ever see a protected
+  repo. If a step fails after a repo is created, the script names the repo and says it is not
+  protected. Then the founder adds each public repo to the pr-bot's installation, as the script's
+  output says. `--private` makes a hidden repo, which is never added. Another org copies
+  [`scripts/orgs/ouroboric-dev.json`](../../scripts/orgs/ouroboric-dev.json) to
+  `scripts/orgs/<org>.json` and changes the values ([the keys](../../scripts/orgs/README.md)).
+- **Each step also runs alone**, with the same `--org`.
+  [`create-repo.sh`](../../scripts/create-repo.sh) creates empty repos.
+  [`add-licences.sh`](../../scripts/add-licences.sh) and [`add-ci.sh`](../../scripts/add-ci.sh)
+  write the licence files and the base CI into a folder, and never overwrite a file. These three
+  take `--check`, which runs every check and changes nothing.
+  [`setup-repo.sh --org <org> <repo>`](../../scripts/setup-repo.sh) applies the setup below to
+  an existing repo. It is safe to run twice and fixes drift, such as an extra ruleset rule.
+  `create-repo.sh` and `setup-repo.sh` need the same token as `new-repo.sh`.
+- **The base CI is pre-commit.** `add-ci.sh` writes `.pre-commit-config.yaml` from pinned pieces,
+  and `.github/workflows/lint.yml`, which runs the hooks on every file and gitleaks over the
+  history. `gitleaks` always runs. The config's `ci` list, or `--ci`, adds pieces: `reuse`,
+  `markdown`, `shell`, `actions` and `yaml` ([the pieces](../../scripts/templates/ci/README.md)).
+  The convention: `lint.yml` has the required job `lint`, and `ci.yml`, the repo's own tests, has
+  the required job `test`. `setup-repo.sh` requires the check of each of these workflows that the
+  repo has.
 - **Agents never create repos or change their settings.** They reach GitHub only as
   `ouroboric-pr-bot`, through [`scripts/as-bot.sh`](../../scripts/as-bot.sh), which can't; run the
   checks with `scripts/as-bot.sh --read all scripts/check-repos.sh`.
 - **Agents scaffold a new Yggdrasil component** with
   [`scripts/scaffold-component.sh <repo> "<job>" <clone>`](../../scripts/scaffold-component.sh), in
-  a clone of a repo `create-repo.sh` made. It writes the files from `scripts/templates/go-component/`
-  and leaves the architecture doc's responsibilities for a person to write. The result goes through
-  a PR.
+  a clone of a new repo, on top of the first commit that `new-repo.sh` made. It adds the files
+  from `scripts/templates/go-component/`, appends its sections to the README that commit holds,
+  keeps the pre-commit config as it is, and leaves the architecture doc's responsibilities for a
+  person to write. The result goes through a PR.
 - **Reusable tooling lives here until it has a better home.** Any script that could run again goes
   in `scripts/`, with a test in `scripts/tests/`. When it should move, the Yggdrasil v0 plan's
   "Carried beyond v0" table says where and when. The repo scripts move into Yggdrasil's `github`

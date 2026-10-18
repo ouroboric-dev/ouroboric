@@ -35,10 +35,17 @@ check_ruleset() {
   local id rules
   id="$(gh_api "repos/$ORG/$1/rulesets" -q '.[]|select(.name=="protect-main" and .enforcement=="active")|.id' | head -1)"
   [ -n "$id" ] || { bad "$1" ruleset "no active protect-main ruleset"; return; }
-  rules="$(gh_api "repos/$ORG/$1/rulesets/$id" -q '[.rules[]|.type+(if .type=="pull_request" then ":"+(.parameters.allowed_merge_methods|join("+"))+":"+(.parameters.required_approving_review_count|tostring)+(if .parameters.dismiss_stale_reviews_on_push then ":stale-dismissed" else "" end)+(if .parameters.require_last_push_approval then ":last-push-approved" else "" end) elif .type=="required_status_checks" then ":"+([.parameters.required_status_checks[]|.context+"@"+(.integration_id|tostring)]|join("+"))+(if .parameters.strict_required_status_checks_policy then ":strict" else "" end) else "" end)]|sort|join(",")')"
+  rules="$(gh_api "repos/$ORG/$1/rulesets/$id" -q '[.rules[]|.type+(if .type=="pull_request" then ":"+(.parameters.allowed_merge_methods|join("+"))+":"+(.parameters.required_approving_review_count|tostring)+(if .parameters.dismiss_stale_reviews_on_push then ":stale-dismissed" else "" end)+(if .parameters.require_last_push_approval then ":last-push-approved" else "" end) elif .type=="required_status_checks" then ":"+([.parameters.required_status_checks[]|.context+"@"+(.integration_id|tostring)]|sort|join("+"))+(if .parameters.strict_required_status_checks_policy then ":strict" else "" end) else "" end)]|sort|join(",")')"
   local want="deletion,non_fast_forward,pull_request:squash:1:stale-dismissed:last-push-approved"
-  # A repo with CI must require its test job from GitHub Actions (app 15368), on an up-to-date branch.
-  gh_api "repos/$ORG/$1/contents/.github/workflows/ci.yml" --silent >/dev/null 2>&1 && want+=",required_status_checks:test@15368:strict"
+  # A repo with lint.yml or ci.yml must require its job (lint, test) from GitHub Actions (app 15368),
+  # on an up-to-date branch. Same map as setup-repo.sh.
+  local pair found=()
+  for pair in lint.yml:lint ci.yml:test; do
+    gh_api "repos/$ORG/$1/contents/.github/workflows/${pair%%:*}" --silent >/dev/null 2>&1 && found+=("${pair##*:}@15368")
+  done
+  if [ ${#found[@]} -gt 0 ]; then
+    want+=",required_status_checks:$(printf '%s\n' "${found[@]}" | sort | paste -sd+ -):strict"
+  fi
   [ "$rules" = "$want" ] && ok "$1" ruleset || bad "$1" ruleset "rules: $rules (run setup-repo.sh)"
 }
 check_reuse() {
