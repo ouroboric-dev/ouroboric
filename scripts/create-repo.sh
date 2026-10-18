@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Create new, empty repos in the org that a config names. Each repo has no commits and no settings
 # beyond the visibility, so nothing in it is protected yet. new-repo.sh is the normal way to run this
-# script: it adds the first commit and protects the repo. If any repo already exists, or a name
-# repeats, nothing is created. Stops at the first error.
+# script: it adds the first commit and protects the repo. If any repo already exists, a name repeats or
+# a description is bad, nothing is created. Stops at the first error. A description is one line, with
+# no control characters and no leading or trailing spaces: new-repo.sh makes it the first paragraph of
+# README.md.
 # Founder-run: GH_TOKEN must hold the short-lived admin token, with Administration read and write
 # (the pr-bot can't create repos).
 #   GH_TOKEN=... create-repo.sh (--org <name>|--config <path>) [--private] [--check] <repo> "<description>" [<repo> "<description>"]...
@@ -45,6 +47,10 @@ for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}"
   [[ "$r" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || die "bad repo name: $r"
   [ -n "${args[i + 1]}" ] || die "$r: the description is empty"
+  # The description becomes the first paragraph of README.md: one line, no control characters, no
+  # leading or trailing spaces.
+  ok="$(jq -rn --arg d "${args[i + 1]}" '$d | (test("\\p{Cc}") or test("\\A\\s|\\s\\z")) | not')"
+  [ "$ok" = true ] || die "$r: the description must be one line, with no control characters and no leading or trailing spaces"
   for ((j = 0; j < i; j += 2)); do [ "${args[j]}" != "$r" ] || die "$r is named twice"; done
 done
 for ((i = 0; i < ${#args[@]}; i += 2)); do

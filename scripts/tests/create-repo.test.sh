@@ -59,6 +59,15 @@ GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" delta "D." -epsilon "E." >/d
 check "a repo name that starts with - is refused before any request" \
   bash -c "[ $rc = 2 ] && [ '$before' = \$(wc -l < '$T/log') ]"
 
+for d in "$(printf 'Two\nlines.')" "$(printf 'A\ttab.')" "$(printf 'A bell\a.')" "$(printf 'A C1 \302\205control.')" \
+  " Leading space." "Trailing space. "; do
+  GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" delta "$d" >/dev/null 2>&1; rc=$?
+  check "the description $(printf '%q' "$d") is refused before any request" \
+    bash -c "[ $rc = 2 ] && [ '$before' = \$(wc -l < '$T/log') ]"
+done
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" --check delta 'Markdown *stays*, with é — and `code`.' >/dev/null 2>&1; rc=$?
+check "a description with Markdown and non-ASCII text passes the check" [ "$rc" = 0 ]
+
 GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" --private gamma "The gamma repo." > "$T/out" 2>&1; rc=$?
 check "--private: exit 0" [ "$rc" = 0 ]
 check "--private creates a private repo" \
