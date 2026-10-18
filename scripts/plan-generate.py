@@ -95,7 +95,7 @@ def main(argv):
         if kind == 'files':
             made = ', '.join(f'`{p}`' for s, p in ch if s == 'A')
             edited = ', '.join(f'`{p}`' for s, p in ch if s == 'M')
-            lines = [f'**Files (in `{repo}`):**']
+            lines = [f'**Files (in `{repo}`):**', '']
             if made:
                 lines.append(f'- Create: {made}')
             if edited:
