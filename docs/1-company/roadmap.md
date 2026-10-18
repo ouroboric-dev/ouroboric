@@ -18,7 +18,7 @@ This roadmap sets the order of work, not dates. Each product keeps its own detai
 2. **Asgard v0:** Yggdrasil's Asgard realm, used by hand: the kickstart journey, the company
    template, the readiness checklist (in use since the Ouroboric kickstart) and its check script,
    the kickstart skills and the scripts ([Yggdrasil roadmap](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/roadmap.md)).
-3. **Yggdrasil iteration 2 and self-hosting stage 1.**
-4. **Asgard automation:** the Ginnungagap graph on Odin.
+3. **Yggdrasil iteration 2 and self-hosting stage 1**, then Ginnungagap, the realm that creates realms.
+4. **Asgard automation:** the `kickstart` graph on Odin.
 5. **Later:** benchmark kit (Mimir), the games realm (Jotunheim), promotion (Bragi); new factories only
    after these.

@@ -54,9 +54,9 @@ stop at the matching approval point.
 
 ### 3.1 Tier 0: kickstarting a company or a product
 
-Every company and every product starts here, once, and Yggdrasil's Asgard realm runs it. (In the
-naming story, every realm begins in **Ginnungagap**, the void before creation; Ginnungagap is also
-the name of the Asgard realm's kickstart graph.)
+Every company and every product starts here, once, and Yggdrasil's Asgard realm runs it, through
+its `kickstart` graph once that graph exists. (In the naming story, every realm begins in
+**Ginnungagap**, the void before creation, and Ginnungagap is the realm that creates realms.)
 
 - A **company kickstart** produces the company umbrella in nine steps (below): what the business is,
   its charter, name and brand, its basics, its roadmap, and a **readiness assessment** against the

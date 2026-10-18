@@ -9,7 +9,7 @@ and in time research and art. This repository is the company umbrella. Start wit
 <!-- diagram: assets/diagrams/ouroboric-map.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/rendered/ouroboric-map.dark.svg">
-  <img alt="Ouroboric map: the founder approves direction in the Asgard realm (readiness checklist, Ginnungagap kickstart graph); Yggdrasil, the agentic factory, contains Odin, Jormungandr, Gleipnir, Havamal, the realms (Midgard and Helheim in v0, Jotunheim and Muspelheim later) and the Asgard realm, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; the Asgard realm kickstarts and the other realms build companies and products, whose lessons and benchmarks feed back into Ouroboric" src="assets/diagrams/rendered/ouroboric-map.svg">
+  <img alt="Ouroboric map: the founder approves direction in the Asgard realm (readiness checklist, kickstart graph later); Yggdrasil, the agentic factory, contains Odin, Jormungandr, Gleipnir, Havamal, Voluspa (the graph library, which gives Odin its graphs), the realms (Midgard and Helheim in v0, Jotunheim and Muspelheim later), the Asgard realm, and Ginnungagap (later), which creates realms, all honouring the Gungnir contract, with Ratatoskr, Norns, Mimir and Bragi later; the Asgard realm kickstarts and the other realms build companies and products, whose lessons and benchmarks feed back into Ouroboric" src="assets/diagrams/rendered/ouroboric-map.svg">
 </picture>
 
 The names come from Norse myth; the [naming and mythology record](7-branding/story/naming-and-mythology.md) tells the story behind each one, and its
