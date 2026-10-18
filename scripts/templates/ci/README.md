@@ -29,7 +29,7 @@ A piece is one file in `pieces/`. `add-ci.sh` enforces these rules and names the
 
 - The file is `<name>.yaml`, and the name matches `^[a-z0-9-]+$`.
 - It has exactly one line matching `^  - repo: https://`.
-- It has exactly one line matching `^    rev: `, whose value matches
+- It has exactly one line matching `^    rev:` followed by one space, whose value matches
   `^v?[0-9]+(\.[0-9]+)+([.-][0-9A-Za-z]+)*$` (a release tag, never a branch).
 - It has a line matching `^    hooks:`.
 - It has no tabs.
