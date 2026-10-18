@@ -74,7 +74,7 @@ prepare() {
   echo "ci" > "$w/ci.txt"
   git -C "$w" add ci.txt && git -C "$w" commit -q -m "Base CI"
 }
-for r in alpha beta epsilon zeta eta; do prepare "$r"; done
+for r in alpha beta epsilon zeta eta .github; do prepare "$r"; done
 prepare gamma none
 local_sha() { git -C "$ROLLOUT_ROOT/$1" rev-parse base-ci; }
 remote_sha() { git -C "$B/$1.git" rev-parse -q --verify refs/heads/base-ci; }
@@ -108,6 +108,11 @@ check "push again with nothing changed: exit 0" [ "$rc" = 0 ]
 check "push again with nothing changed: it prints up to date and the open PR's URL" \
   [ "$(cat "$T/out")" = "$(printf 'rollout-ci: alpha: up to date\n%s\nrollout-ci: beta: up to date\n%s' "$(url alpha)" "$(url beta)")" ]
 check "push again with nothing changed: no second PR" [ "$(creates)" = 2 ]
+
+# push .github: a repo name may start with a dot
+GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev push .github > "$T/out" 2> "$T/err"; rc=$?
+check "push .github: exit 0, base-ci is on the remote, and its PR URL is printed" \
+  bash -c "[ $rc = 0 ] && [ '$(remote_sha .github)' = '$(local_sha .github)' ] && [ '$(cat "$T/out")' = '$(url .github)' ]"
 
 # push after a local rebase: the remote is updated, and the open PR is reused
 git -C "$ROLLOUT_ROOT/alpha" commit -q --amend -m "Base CI, rebased"
@@ -195,7 +200,7 @@ check "a repo without a base-ci branch: the bot is never called for it" \
 check "a repo without a base-ci branch: the other repos still run" [ "$(cat "$T/out")" = "$(printf 'rollout-ci: beta: up to date\n%s' "$(url beta)")" ]
 
 # usage
-for args in "" "push" "pull alpha" "push -x" "push ../alpha"; do
+for args in "" "push" "pull alpha" "push -x" "push ../alpha" "push .." "push ." "protect .."; do
   # shellcheck disable=SC2086  # the words are the arguments
   GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev $args > "$T/out" 2> "$T/err"; rc=$?
   check "usage '$args': exit 2 and no output" bash -c "[ $rc = 2 ] && [ ! -s '$T/out' ]"
@@ -228,6 +233,13 @@ check "protect a repo that doesn't exist: setup never runs for it, the next repo
 : > "$T/setup.log"; : > "$T/check.log"
 GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev protect alpha beta > "$T/out" 2> "$T/err"; rc=$?
 check "protect 200 and 404 only: exit 0" [ "$rc" = 0 ]
+
+: > "$T/setup.log"; : > "$T/check.log"
+echo '{}' > "$FAKE_GH_DIR/GET/repos_ouroboric-dev_.github.json"
+echo '{"name":"lint.yml"}' > "$FAKE_GH_DIR/GET/$(lint ouroboric-dev .github).json"
+GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev protect .github > "$T/out" 2> "$T/err"; rc=$?
+check "protect .github: exit 0, setup and the ruleset check run for it" \
+  bash -c "[ $rc = 0 ] && [ \"\$(cat '$T/setup.log')\" = '--config $CONFIG .github stdin=0' ] && [ \"\$(cat '$T/check.log')\" = '--check ruleset .github stdin=0' ]"
 
 : > "$T/setup.log"; : > "$T/check.log"
 GH_TOKEN=$TOKEN CHECK_FAILS=1 "$RC" --org ouroboric-dev protect alpha beta > "$T/out" 2> "$T/err"; rc=$?

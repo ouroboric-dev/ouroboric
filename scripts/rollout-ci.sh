@@ -46,7 +46,8 @@ mode="$1"
 shift
 case "$mode" in push | protect) ;; *) die "unknown mode: $mode; $USAGE" ;; esac
 for r in "$@"; do
-  [[ "$r" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "bad repo name: $r"
+  # GitHub names: .github is one; . and .. are paths, and a leading - would read as an option.
+  [[ "$r" =~ ^[A-Za-z0-9._-]+$ && "$r" != -* && "$r" != . && "$r" != .. ]] || die "bad repo name: $r"
 done
 
 # The helper reads GH_TOKEN when git asks, so the token never appears in a command line.
