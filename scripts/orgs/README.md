@@ -14,5 +14,5 @@ exit code 2.
 | `copyright` | yes | The copyright holder. Non-empty, with no `"`, `\` or newline. Non-ASCII letters are fine. |
 | `licence_dir` | no | Folder with the licence texts. A relative path counts from the config file's folder. |
 | `issues_on` | no | Repos that keep GitHub issues on. All other repos have issues off. |
-| `ci` | no | Pieces of the base CI: `reuse`, `markdown`, `actions`. If absent, all three. |
+| `ci` | no | Pieces of the base CI: `reuse`, `markdown`, `actions`. If absent or empty, only gitleaks runs. |
 | `after_create` | no | Messages for the founder after a repo is created: `public` and `private`. `{repo}` becomes the repo name. |

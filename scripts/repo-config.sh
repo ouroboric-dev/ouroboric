@@ -67,7 +67,8 @@ repo_config_args() {
 
 repo_config_load() {
   local problem dir
-  jq -e . "$RC_FILE" >/dev/null 2>&1 || rc_die "$RC_FILE: not valid JSON"
+  jq -e -s 'length == 1 and (.[0] | type == "object")' "$RC_FILE" >/dev/null 2>&1 \
+    || rc_die "$RC_FILE: must hold exactly one JSON object"
   problem="$(jq -r "$RC_CHECK" "$RC_FILE")" || rc_die "$RC_FILE: cannot be checked"
   [ -z "$problem" ] || rc_die "$RC_FILE: $problem"
   RC_ORG="$(jq -r .org "$RC_FILE")"
@@ -79,7 +80,7 @@ repo_config_load() {
   RC_COPYRIGHT="$(jq -r .copyright "$RC_FILE")"
   RC_DOCS_PATHS="$(jq -r '[(.docs_paths // [])[] | tojson] | join(", ")' "$RC_FILE")"
   RC_ISSUES_ON="$(jq -r '(.issues_on // []) | if length == 0 then "" else " " + join(" ") + " " end' "$RC_FILE")"
-  RC_CI="$(jq -r '(.ci // ["reuse","markdown","actions"]) | join(",")' "$RC_FILE")"
+  RC_CI="$(jq -r '(.ci // []) | join(",")' "$RC_FILE")"
   RC_LICENCE_DIR=''
   dir="$(jq -r '.licence_dir // ""' "$RC_FILE")"
   if [ -n "$dir" ]; then

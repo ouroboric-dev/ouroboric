@@ -53,7 +53,7 @@ check "RC_REST and RC_FROM are set" bash -c "
   [ \"\${RC_REST[*]}\" = 'a b' ] && [ \"\${RC_FROM[*]}\" = \"--config $T/min.json\" ] && [ \"\$RC_FILE\" = '$T/min.json' ]"
 check "a minimal config loads with empty defaults" bash -c "
   . '$HERE/../repo-config.sh'; repo_config_args --config '$T/min.json'; repo_config_load
-  [ -z \"\$RC_DOCS_LICENCE\$RC_LICENCE_DIR\$RC_ISSUES_ON\" ] && [ \"\$RC_CI\" = reuse,markdown,actions ]"
+  [ -z \"\$RC_DOCS_LICENCE\$RC_LICENCE_DIR\$RC_ISSUES_ON\" ] && [ -z \"\$RC_CI\" ]"
 
 check "no --org or --config is refused" refused
 cfg m '{"org": "acme", "licence": "MIT"}'
@@ -86,6 +86,10 @@ cfg m "{$base, \"after_create\": {\"other\": \"x\"}}"
 check "an unknown after_create key is refused" refused --config "$T/m.json"
 echo '{not json' > "$T/m.json"
 check "invalid JSON is refused" refused --config "$T/m.json"
+printf '%s\n%s\n' "{$base}" "{$base}" > "$T/m.json"
+check "two JSON documents in one file are refused" refused --config "$T/m.json"
+echo '[1]' > "$T/m.json"
+check "a JSON array is refused" refused --config "$T/m.json"
 check "a missing file is refused" refused --config "$T/nope.json"
 cfg other '{"org": "other", "licence": "MIT", "copyright": "Acme"}'
 mkdir -p "$T/orgs"; cp "$T/other.json" "$T/orgs/acme.json"
