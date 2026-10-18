@@ -77,12 +77,14 @@ check_gitleaks() {
 }
 check_shared() { # a realm's copy of each shared file must match helheim-go's; a missing file or clone fails
   [[ "$REALMS" == *" $1 "* ]] || { ok "$1" shared "not a realm"; return; }
-  local f src dst
+  local f src dst hs hd
   for f in "${SHARED[@]}"; do
     src="$(local_path helheim-go)/$f"; dst="$(local_path "$1")/$f"
     [ -f "$src" ] || { bad "$1" shared "$src is missing"; return; }
     [ -f "$dst" ] || { bad "$1" shared "$dst is missing"; return; }
-    [ "$(sha256sum < "$src")" = "$(sha256sum < "$dst")" ] || { bad "$1" shared "$f differs from helheim-go's"; return; }
+    hs="$(sha256sum < "$src")" && [ -n "$hs" ] || { bad "$1" shared "can't read $src"; return; }
+    hd="$(sha256sum < "$dst")" && [ -n "$hd" ] || { bad "$1" shared "can't read $dst"; return; }
+    [ "$hs" = "$hd" ] || { bad "$1" shared "$f differs from helheim-go's"; return; }
   done
   ok "$1" shared
 }

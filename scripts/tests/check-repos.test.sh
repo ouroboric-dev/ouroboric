@@ -70,4 +70,8 @@ check "shared, not a realm: PASS" [ "$(shared "$r" gungnir)" = "PASS gungnir sha
 r="$(shared_root - same)"
 check "shared, helheim-go's source missing: FAIL for midgard-react" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/helheim-go/$F is missing" ]
 check "shared, helheim-go's source missing: FAIL for helheim-go" [ "$(shared "$r" helheim-go)" = "FAIL helheim-go shared: $r/yggdrasil/helheim-go/$F is missing" ]
+# A hash that can't be computed must fail closed, not compare equal as two empty strings.
+mkdir -p "$T/nohash" && printf '#!/bin/sh\nexit 1\n' > "$T/nohash/sha256sum" && chmod +x "$T/nohash/sha256sum"
+r="$(shared_root same same)"
+check "shared, sha256sum fails: FAIL naming the file" [ "$(PATH="$T/nohash:$PATH" shared "$r" midgard-react)" = "FAIL midgard-react shared: can't read $r/yggdrasil/helheim-go/$F" ]
 exit $fail
