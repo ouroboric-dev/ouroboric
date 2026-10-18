@@ -3,7 +3,8 @@
 #   md-same-text.sh <base-ref> <head-ref>      run inside a git repo; it reads only, and needs no token
 # For each .md file changed between the refs it prints `same <file>` or `DIFFERS <file>: <why>`:
 #   text   the rendered text differs (whitespace and markup are ignored)
-#   code   a fenced code block differs by any byte, even a tab or a trailing space
+#   code   a code block (fenced or indented) differs by any byte, even a tab or a trailing space
+#   links  a link or image target differs (including href= and src= in raw HTML)
 #   added / deleted   the file exists in only one ref
 # Exit 0 if every file is the same or no .md file changed, 1 if any differs, 2 on bad input.
 # The renderer is md-same-text.py, with markdown-it-py pinned, run by uvx as `python3 -I`.
