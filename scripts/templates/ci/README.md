@@ -51,8 +51,9 @@ The rollout to an existing repo, one `base-ci` branch per repo:
 
 1. An agent clones the repo fresh into `rollout/<repo>`, beside the `ouroboric` checkout, and cuts `base-ci`
    from `origin/main`. It runs `add-ci.sh --upgrade`, then fixes what the hooks flag, formatting only, until
-   `pre-commit run --all-files` passes. `md-same-text.sh origin/main HEAD` proves each Markdown fix keeps the
-   text, the code blocks and the links.
+   both `pre-commit run --all-files` and `pre-commit run --hook-stage manual gitleaks-history --all-files` (the
+   whole history) pass. `md-same-text.sh origin/main HEAD` proves each Markdown fix keeps the text, the code
+   blocks and the links, and turns no rule off with a `markdownlint-disable` comment.
 2. The founder runs `GH_TOKEN=... rollout-ci.sh --org <org> push <repo>...`. It pushes `base-ci`, because the
    pr-bot can't push `.github/workflows/`, and opens the PR as the pr-bot, or prints the one already open. It
    records each push in the clone's `refs/rollout-ci/base-ci`. After a rebase, the same command updates the
