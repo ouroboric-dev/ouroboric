@@ -28,7 +28,7 @@ level 1.
 Of 21 items, 21 are met, 0 are partial and 0 are missing (re-run on 2026-10-14).
 
 | Status | Count | Items |
-|---|---|---|
+| --- | --- | --- |
 | met | 21 | RB-01 to RB-21 |
 | partial | 0 | — |
 | missing | 0 | — |
@@ -47,7 +47,7 @@ Review in this order to close the most items fastest. This assessment doubles as
 ## Items
 
 | ID | Question | Status | Evidence | To close |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | RB-01 | Company charter accepted? | met | [Ouroboric charter](../charter.md), accepted on 2026-10-12 with the founder's vision and mission | — |
 | RB-02 | Product charter accepted and conforming? | met | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/charter.md) and [Asgard](https://github.com/ouroboric-dev/asgard/blob/main/docs/1-product/charter.md) product charters, accepted on 2026-10-12; both missions carry the ouroboric property and their principles inherit from the company charter | — |
 | RB-03 | Milestone 1 design doc accepted? | met | [v0 design doc](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-11-yggdrasil-v0-design.md), accepted on 2026-10-12, with a measured self-improvement as success criterion 7 | — |

@@ -43,7 +43,7 @@ cost-conscious, with hard caps everywhere.
   §7.4). A run that hits a cap stops with everything resumable.
 
 | Cap | Turns | Tokens | API spend |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | per run | 400 | 8M | $5 |
 | per day | 1,000 | 20M | $10 |
 

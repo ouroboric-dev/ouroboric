@@ -26,7 +26,7 @@ OpenSpec, BMAD, Superpowers or native prompts are interchangeable ways to produc
 ## 2. The layers
 
 | Layer | Question it answers | Typical author | Approval |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Charter** (once per product) | *Where* are we going and by which rules? Vision, mission, principles, users and problems, north-star measures, boundaries | the operator, brainstorming with an agent | **a human, in every mode by default** (override: `gates: { charter: auto }`) |
 | **Design doc** (like a PRD) | *What* are we building, for *whom*, and *why*? Scope, success criteria, non-goals | the product role: a human brainstorming with an agent | **a human, in every mode by default.** It decides what gets built. Overriding this needs an explicit `gates: { design: auto }` |
 | **Spec** (like an RFC) | *How* will engineering deliver the design? Architecture, contracts, data model, acceptance criteria per feature, decisions | an engineering agent | **automatic if it conforms to the design doc.** A design-conformance reviewer checks it; a deviation stops the run. You can set key-points mode to always stop (`spec: stop`) |
@@ -43,7 +43,7 @@ amendment rather than quietly building something else.
 ## 3. Tiers
 
 | Tier | Example | Artifacts | Human approval |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **0: kickstart** | a new company or product | company: the nine steps in §3.1; product: charter, shape, roadmap, then milestone 1's design doc | company: `charter`, `brand`, readiness; product: `charter`, then `design` |
 | **1: fix or chore** | a bug, a dependency bump, a docs fix | one task: acceptance criterion and a **failing test that reproduces it** | none beyond approving the issue itself (it is the direction) |
 | **2: small change** | a new gallery setting | a **change proposal** (acts as a mini design doc, §5) and 1–3 tasks | `design` |
@@ -70,7 +70,7 @@ Company kickstart: each step feeds the next. The business comes before the brand
 once the business is understood.
 
 | Step | Produces | Approval |
-|---|---|---|
+| --- | --- | --- |
 | 1. Intent | intent notes in `docs/5-research/`; the umbrella scaffolded to the [docs standard](docs-standard.md) under a placeholder name | — |
 | 2. Customers and offer | who the customers are, what is sold and roughly for how much; a competitor brief | — |
 | 3. Charter | `docs/1-company/charter.md` (vision, mission, principles, values and culture, portfolio, north star, boundaries); `AGENTS.md` invariants derived from the principles | `charter` |
@@ -84,7 +84,7 @@ once the business is understood.
 Product kickstart:
 
 | Step | Produces | Approval |
-|---|---|---|
+| --- | --- | --- |
 | 1. Intent and research | brainstorm notes; research briefs in `docs/5-research/` | — |
 | 2. Charter | `docs/1-product/charter.md` | `charter` (human) |
 | 3. Shape | realm(s), the repo tree (umbrella and leaves), org, visibility and hosting target, recorded in the charter's boundaries; the umbrella scaffolded to the [docs standard](docs-standard.md), with `AGENTS.md` invariants derived from the principles | — |
@@ -102,7 +102,7 @@ runs stay comparable.
   <img alt="Spec-driven development: charter and design doc need human approval; the spec is approved automatically unless it deviates; plan, build, merge gate, living spec and journal follow automatically" src="../assets/diagrams/rendered/sdd-flow.svg">
 </picture>
 
-```
+```text
 (tier 0 once, company: intent ─► offer ─► charter ─► [charter] ─► name ─► brand ─► [brand] ─► basics, roadmap ─► readiness)
 intent ─► design doc ─► charter-conformance check ─► [design] ─► spec ─► conformance review ─► [spec] ─► plan + reuse review
        ─► tasks + DoR check ─► [plan] ─► implement (TDD, fresh session per task)
@@ -111,7 +111,7 @@ intent ─► design doc ─► charter-conformance check ─► [design] ─►
 ```
 
 | Approval point | step-by-step | key-points (default) | unattended |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `charter` | stop | stop | stop (default; explicit override only) |
 | `brand` | stop | stop | stop (default; explicit override only) |
 | `design` | stop | stop | stop (default; explicit override only) |
@@ -153,7 +153,7 @@ decisions; deviations from the design doc (must be empty for automatic approval)
 `plan.md` (order, dependencies, risks) and `tasks.md`. Every task has:
 
 | Field | Rule |
-|---|---|
+| --- | --- |
 | `id` | stable, feature-scoped (`<plan>-T001`) |
 | acceptance criteria | testable checkboxes |
 | named test | file and test name that will prove it |
@@ -206,7 +206,7 @@ These controls prevent it:
 ## 8. Strategies: where tools plug in
 
 | Strategy | Stage | Options | Status |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **planning** | design doc → spec → plan → tasks | native (v0); Spec Kit; OpenSpec; BMAD | v0 native; others benchmarked later |
 | **reuse review** | plan | Ponytail (`ponytail-review` on the plan): flags new dependencies or abstractions where the standard library or existing code already does the job | v0 |
 | **simplicity reviewer** | check ladder | Ponytail (`ponytail-review`) | v0 |
@@ -245,7 +245,7 @@ product's.
 Yggdrasil builds itself in stages:
 
 | Stage | Who builds Yggdrasil | Needs |
-|---|---|---|
+| --- | --- | --- |
 | 0 | a human with an interactive agent | this process, followed by hand |
 | 1 | Yggdrasil builds one of its own features | the change graph, a Go flavor of Helheim (`helheim-go`), `guardrail-change` |
 | 2 | Yggdrasil improves itself from benchmark results | the benchmark kit (Mimir) and a release regression gate |

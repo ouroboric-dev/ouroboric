@@ -28,7 +28,7 @@ defines how to handle each block (for example, `spec` puts requirement sentences
 Fourteen styles:
 
 | Style id | Readers | Skills (vendored) | House rules |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `direction` | decision-makers | `business-writing`, `plain-language` | bottom line first; one decision per paragraph; the charter's vision and mission lines follow `7-branding/voice/` once it exists |
 | `spec` | engineers and agents | `google-dev-docs`, `asd-ste100` | prose follows Google developer style; **requirements and acceptance criteria follow ASD-STE100** (one meaning per sentence, approved vocabulary, at most 20 words); normative words follow RFC 2119 (MUST, SHOULD, MAY) |
 | `guide` | operators and developers | `google-dev-docs` | structured by Diátaxis (tutorial, how-to, explanation); second person; tasks start with a verb |
@@ -53,7 +53,7 @@ or `agent-facing` text, where it would trade precision for natural-sounding pros
 ## 3. Section defaults
 
 | Path | Default style |
-|---|---|
+| --- | --- |
 | `README.md` (repo and docs landing) | `guide` |
 | `1-company/charter.md`, `roadmap.md`, `readiness/` | `direction` |
 | `1-company/legal/` | `legal` |
@@ -107,7 +107,7 @@ whatever happens to be installed on a machine and never fetched live.
   configuration. `run.json` records them, so benchmark results state which skills the run used.
 
 | Skill | Upstream | Licence | Used by styles |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `asd-ste100`, `business-writing`, `google-dev-docs`, `gov-uk-style`, `journalism-ap`, `orwells-rules`, `plain-language`, `scott-adams` | writing-skills (Surendran B), v0.6.0 | MIT | see §2 |
 | humanizer | to be confirmed when vendored | to be checked when vendored | `marketing` pass |
 | Ponytail (`ponytail-review`, `ponytail-audit`) | DietrichGebert/ponytail | MIT | reviewers ([spec-driven development §8](spec-driven-development.md#8-strategies-where-tools-plug-in)) |

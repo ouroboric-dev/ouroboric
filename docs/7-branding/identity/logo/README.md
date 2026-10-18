@@ -19,7 +19,7 @@ tail is International Orange, and it carries a gate. The wordmark is `OUROBORIC.
 ## Files
 
 | File | Use |
-|---|---|
+| --- | --- |
 | `ouroboric-logo-horizontal.svg`, `-dark.svg` | the full logo: icon and wordmark side by side |
 | `ouroboric-icon.svg`, `-dark.svg` | the icon alone, from 48 px up |
 | `ouroboric-wordmark.svg`, `-dark.svg` | the wordmark alone |

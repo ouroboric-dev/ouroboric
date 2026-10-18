@@ -86,7 +86,7 @@ SaaS is a Midgard leaf and a Helheim leaf, and a project may use several flavors
 Legacy and migration are kinds of work a realm may offer, not realms.
 
 | Realm | Domain | Why the myth fits | Flavors (examples) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Asgard** | kickstart: charters, brands, legal basics, roadmaps | where the gods decide direction | (one leaf: `asgard`) |
 | **Midgard** | web frontends | the human world, the part people live in and see | `react`, `vue`, `next` |
 | **Helheim** | backend: services, APIs, workers | below the world, behind the bridge Gjallarbru, where the guard Modgud asks every traveller their name and errand: the part no user sees, where every request is checked and every record is kept | `go` |
@@ -113,7 +113,7 @@ what every realm shares. Its leaf is `ginnungagap`. Graphs have descriptive name
 Naming the threats makes them easier to discuss in designs, docs and incident notes.
 
 | Name | Myth | What it means here |
-|---|---|---|
+| --- | --- | --- |
 | **Nidhogg** | the dragon gnawing at Yggdrasil's roots | entropy: AI slop, drift, technical debt. Cleanup and garbage-collection work fights Nidhogg |
 | **Loki** | the trickster and shapeshifter who deceives the gods | prompt injection and deception: poisoned READMEs, malicious issues, hostile dependencies |
 | **Ragnarok** | the end of the world, where everything falls together | the cascade: one bad change certified at every level, a leaked key reaching every repo, a bulk operation hitting every record |
@@ -130,7 +130,7 @@ means illustrative.
 </picture>
 
 | Name | Role | Status |
-|---|---|---|
+| --- | --- | --- |
 | **Ouroboric** | the company: builds open, self-improving factories. The Ouroboros is its symbol | company |
 | **Yggdrasil** (`ygg`) | the agentic factory, and its product umbrella repo. The CLI is `ygg` | v0 |
 | **Asgard** | Yggdrasil's kickstart realm (tier 0): charters, brands, legal basics, roadmaps and readiness for companies and products. A company factory until 2026-10-17 | designed; v0 after Yggdrasil v0 |
@@ -153,6 +153,7 @@ means illustrative.
 | **Bragi** | content: turns the sagas into blog posts and series | later |
 
 Names not yet used, kept for later:
+
 - **Huginn and Muninn:** Odin's ravens, thought and memory, who fly over the worlds and report back. Fit scout or research agents, or planner and memory roles.
 - **Urd's well:** a persistent knowledge or state store.
 - **Einherjar:** warriors who fall each day and rise each evening. Fits a retry/escalation sub-component of Jormungandr.

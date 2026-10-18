@@ -17,7 +17,7 @@ a concept, and the same trademark rules apply.
 Three proposals from the founder, traced to vectors and recoloured to the palette.
 
 | Concept | Idea | Outcome |
-|---|---|---|
+| --- | --- | --- |
 | `concept-1-carved-knot` | angular scales that interlock like carved Nordic knotwork | **chosen**: the most Nordic and the most distinctive |
 | `concept-2-smooth-scales` | a solid ring of rounded scales | the cleanest silhouette, but the least Nordic |
 | `concept-3-ring-of-blocks` | the snake through a ring of rounded blocks, like steps on a loop | the closest to the first concept and the factory story; it breaks up at small sizes and can read as a gear |
@@ -29,7 +29,7 @@ Each has a light file and a `-dark` file.
 In order. Each step answered a problem with the one before it.
 
 | File | What it tried | Why it moved on |
-|---|---|---|
+| --- | --- | --- |
 | `favicon-1-ring` | a plain ring with an orange arc | read as a loading spinner |
 | `favicon-2-segments` | the ring cut into scales, a round head | head and tail too round for the carved logo |
 | `favicon-3-nodes` | a thin ring with blocks | too busy at 16 px |
