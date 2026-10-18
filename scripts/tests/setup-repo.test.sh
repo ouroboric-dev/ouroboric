@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Tests for setup-repo.sh's ruleset against a fake gh.   scripts/tests/setup-repo.test.sh
+# shellcheck disable=SC2329  # the helper functions are exported and called inside check's bash -c
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T="$(mktemp -d)"

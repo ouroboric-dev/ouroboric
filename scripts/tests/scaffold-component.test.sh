@@ -24,6 +24,7 @@ newrepo() { # newrepo DIR [DESCRIPTION [REPO]]: the files new-repo.sh's first co
   git -C "$1" add LICENSE LICENSES REUSE.toml .pre-commit-config.yaml README.md
   git -C "$1" -c user.name=Test -c user.email=test@example.invalid commit -qm Licences
 }
+# shellcheck disable=SC2016  # literal backticks: Markdown code, not a command
 JOB='The alpha job: reads `x.yaml` & writes a/b, with 100% of {{JOB}} kept.'
 
 newrepo "$T/alpha" "$JOB"
@@ -35,6 +36,7 @@ check "the gitleaks hook is pinned to v8.30.1, as check-repos.sh's gitleaks chec
   bash -c "grep -q 'repo: https://github.com/gitleaks/gitleaks' '$T/alpha/.pre-commit-config.yaml' && grep -q 'rev: v8.30.1' '$T/alpha/.pre-commit-config.yaml'"
 check "the README keeps its stub as its first three lines, then holds the template's sections" \
   bash -c "[ \"\$(head -3 '$T/alpha/README.md')\" = \"\$(printf '# alpha\n\n%s' \"\$1\")\" ] && grep -qx '## Build and test' '$T/alpha/README.md'" _ "$JOB"
+# shellcheck disable=SC2016  # literal backticks: Markdown code, not a command
 check "the README says to install the hook" grep -qF 'Run `uvx pre-commit install` once after cloning' "$T/alpha/README.md"
 check "go.mod names the module and Go 1.26" \
   [ "$(cat "$T/alpha/go.mod")" = "$(printf 'module github.com/ouroboric-dev/alpha\n\ngo 1.26')" ]
