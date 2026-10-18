@@ -10,7 +10,7 @@ Every hook revision is pinned to a release tag.
 | --- | --- | --- |
 | `gitleaks` | gitleaks, plus `gitleaks-history` (manual stage, the whole history) | |
 | `reuse` | reuse-tool, `reuse lint` | |
-| `markdown` | markdownlint-cli2 (the config lets front matter `title:` and an H1 coexist) | `.markdownlint.yaml` |
+| `markdown` | markdownlint-cli2. The config bends four rules: MD025 lets front matter `title:` and an H1 coexist; MD010 ignores code blocks, because gofmt requires tabs and the plan tools copy plan code verbatim; MD033 allows `<picture>`, `<source>` and `<img>`, because the docs standard prescribes `<picture>` for themed images and the org profile opens with `<img>`; MD041 is off, because journal entries, PR templates, Claude skill files and the org profile banner open without an H1 on purpose, and the docs standard's front matter rule already checks every other doc's title | `.markdownlint.yaml` |
 | `shell` | shellcheck-py | |
 | `actions` | actionlint | |
 | `yaml` | yamllint | `.yamllint.yaml` |
