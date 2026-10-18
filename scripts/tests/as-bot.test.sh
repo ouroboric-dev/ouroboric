@@ -20,8 +20,10 @@ printf '[credential]\n\thelper = "!f() { echo password=WRONG; }; f"\n' > "$T/hom
 printf '[url "git@github.com:"]\n\tinsteadOf = https://github.com/\n[url "ssh://git@github.com/"]\n\tinsteadOf = https://github.com/\n' >> "$T/home/.gitconfig"
 FAKE_PEM="$T/bot/key.pem" python3 -I "$HERE/fake-github.py" "$T/log" "$T/port" &
 for _ in $(seq 50); do [ -s "$T/port" ] && break; sleep 0.1; done
-export HOME="$T/home" PR_BOT_DIR="$T/bot" PR_BOT_API="http://127.0.0.1:$(cat "$T/port")" GITHUB_TOKEN=must-be-removed
+PR_BOT_API="http://127.0.0.1:$(cat "$T/port")"
+export HOME="$T/home" PR_BOT_DIR="$T/bot" PR_BOT_API GITHUB_TOKEN=must-be-removed
 
+# shellcheck disable=SC2016  # the single quotes are on purpose: the inner sh expands $GH_TOKEN
 out="$("$BOT" yggdrasil sh -c 'printf "%s|%s" "$GH_TOKEN" "${GITHUB_TOKEN-unset}"')"
 check "the command gets the token as GH_TOKEN, and GITHUB_TOKEN is removed" [ "$out" = "ghs_FAKE|unset" ]
 check "the token is limited to the repo, with write permissions and no administration" \
@@ -32,6 +34,7 @@ check "the JWT header says RS256" [ "$(b64d <<<"$h" | jq -r .alg)" = RS256 ]
 check "the JWT is issued by the client id and lives 10 minutes at most" \
   [ "$(b64d <<<"$p" | jq -r '"\(.iss) \(.exp - .iat)"')" = "Iv1.test 600" ]
 b64d <<<"$s" > "$T/sig"
+# shellcheck disable=SC2329  # verify runs through check
 verify() { openssl dgst -sha256 -verify "$T/pub.pem" -signature "$T/sig" <(printf '%s.%s' "$h" "$p") >/dev/null; }
 check "the JWT signature verifies with the bot's public key" verify
 

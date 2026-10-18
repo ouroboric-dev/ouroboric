@@ -10,7 +10,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ $# -eq 1 ] || { echo "usage: plan-red.sh REFERENCE" >&2; exit 2; }
-# shellcheck source=plan-lib.sh
+# shellcheck source-path=SCRIPTDIR source=plan-lib.sh
 . "$HERE/plan-lib.sh"
 ref="$(cd "$1" && pwd -P)"
 pattern="${PLAN_TEST_FILES:-_test\.go\$|\.(test|spec)\.tsx?\$|/[a-z]*test/|^testdata/}"
