@@ -20,7 +20,9 @@
 # skipped or failed, 2 for usage. It never prompts.
 # Founder-run: GH_TOKEN must hold the same short-lived admin token as new-repo.sh (Contents and
 # Workflows write for push, Administration for protect). Git gets it only through the credential
-# helper; it is never printed. The pr-bot's key must be in place for as-bot.sh.
+# helper; it is never printed. The pr-bot's key must be in place for as-bot.sh. as-bot.sh serves
+# ouroboric-dev only: push in another org exits 2, before any repo is touched, unless ROLLOUT_BOT names
+# a script that runs a command as that org's bot (as-bot.sh's arguments: <repo> <command>...).
 #   GH_TOKEN=... rollout-ci.sh (--org <name>|--config <path>) push|protect <repo>...
 set -euo pipefail
 exec </dev/null
@@ -49,6 +51,9 @@ for r in "$@"; do
   # GitHub names: .github is one; . and .. are paths, and a leading - would read as an option.
   [[ "$r" =~ ^[A-Za-z0-9._-]+$ && "$r" != -* && "$r" != . && "$r" != .. ]] || die "bad repo name: $r"
 done
+if [ "$mode" = push ] && [ "$RC_ORG" != ouroboric-dev ] && [ -z "${ROLLOUT_BOT:-}" ]; then
+  die "as-bot.sh serves ouroboric-dev only; set ROLLOUT_BOT for $RC_ORG"
+fi
 
 # The helper reads GH_TOKEN when git asks, so the token never appears in a command line. Git applies
 # the longest matching insteadOf, so the org's own rule beats a global one that sends

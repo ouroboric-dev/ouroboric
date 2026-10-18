@@ -264,8 +264,16 @@ check "protect when setup fails: exit 1, no check, the repo is named" \
 : > "$T/setup.log"; : > "$T/check.log"
 jq '.org = "acme" | del(.licence_dir)' "$CONFIG" > "$T/acme.json"
 echo '{"name":"lint.yml"}' > "$FAKE_GH_DIR/GET/$(lint acme alpha).json"
-GH_TOKEN=$TOKEN "$RC" --config "$T/acme.json" protect alpha > "$T/out" 2> "$T/err"; rc=$?
-check "protect in another org: setup runs, the ouroboric-dev ruleset check does not" \
+GH_TOKEN=$TOKEN env -u ROLLOUT_BOT "$RC" --config "$T/acme.json" protect alpha > "$T/out" 2> "$T/err"; rc=$?
+check "protect in another org, without ROLLOUT_BOT: setup runs, the ouroboric-dev ruleset check does not" \
   bash -c "[ $rc = 0 ] && [ \"\$(cat '$T/setup.log')\" = '--config $T/acme.json alpha stdin=0' ] && [ ! -s '$T/check.log' ]"
+
+# push in another org without ROLLOUT_BOT: as-bot.sh serves ouroboric-dev only, so nothing is touched
+: > "$T/git.log"; : > "$T/bot.log"
+GH_TOKEN=$TOKEN env -u ROLLOUT_BOT "$RC" --config "$T/acme.json" push alpha > "$T/out" 2> "$T/err"; rc=$?
+check "push in another org without ROLLOUT_BOT: exit 2, and stderr names the org" \
+  bash -c "[ $rc = 2 ] && [ ! -s '$T/out' ] && [ \"\$(cat '$T/err')\" = 'rollout-ci: as-bot.sh serves ouroboric-dev only; set ROLLOUT_BOT for acme' ]"
+check "push in another org without ROLLOUT_BOT: no git command and no bot call" \
+  bash -c "[ ! -s '$T/git.log' ] && [ ! -s '$T/bot.log' ]"
 
 exit $fail
