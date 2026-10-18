@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Create new repos in the org that a config names, each with a first commit and the required setup, so
 # agents only ever see a protected repo. Every check runs before the first repo is created: if any repo
 # already exists, a name repeats, a --ci piece is unknown or the config is bad, nothing is created.

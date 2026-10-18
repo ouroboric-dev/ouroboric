@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Create new, empty repos in the org that a config names. Each repo has no commits and no settings
 # beyond the visibility, so nothing in it is protected yet. new-repo.sh is the normal way to run this
 # script: it adds the first commit and protects the repo. If any repo already exists, a name repeats or

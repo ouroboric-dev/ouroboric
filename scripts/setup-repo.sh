@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Apply the required setup to a repo in the org that a config names, fixing drift. Safe to run twice.
 # Leaves Discussions alone: ouroboric uses them as its public channel.
 # Issues are on for the repos in the config's issues_on and off for every other repo.

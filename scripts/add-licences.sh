@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Write the licence files that an org config names into a folder: LICENSES/<licence>.txt,
 # LICENSES/<docs_licence>.txt (if the config has one), LICENSE (a copy of the code licence's text) and
 # REUSE.toml. The texts come from the config's licence_dir, or from "reuse download" if it has none.
 # If any target exists or any text is missing, it exits 2 and writes nothing.
-# Run by new-repo.sh; the founder or an agent can run it on any existing folder.
+# Run by new-repo.sh; the founder can also run it on any existing folder.
 #   add-licences.sh (--org <name>|--config <path>) [--year <yyyy>] (--check | <dir>)
 # --check finds each text (in licence_dir, or by the reuse command being on PATH) and writes nothing.
 # --year defaults to this year. ADD_LICENCES_REUSE replaces the reuse command (default: uvx, pinned).

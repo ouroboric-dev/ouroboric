@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # Write the base CI into a folder: .pre-commit-config.yaml (the pieces, in order), .github/workflows/lint.yml
 # and the files that some pieces ship (such as .markdownlint.yaml). The pieces come from --ci, or else from the
 # org config's "ci" list; gitleaks is always first. templates/ci/README.md has the piece format.
 # If any target exists, a folder it goes in is not a folder, or any piece breaks the format, it exits 2
 # and writes nothing. A piece without a final newline gets one.
-# Run by new-repo.sh; the founder or an agent can run it on any existing folder.
+# Run by new-repo.sh; the founder can also run it on any existing folder.
 #   add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] (--check | <dir>)
 # --check validates the pieces and writes nothing. ADD_CI_PIECES replaces the pieces folder.
 set -euo pipefail
