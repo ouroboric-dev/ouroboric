@@ -55,9 +55,12 @@ printf 'ignores: ["testdata/**"]\n' > "$T/mdx/.markdownlint-cli2.yaml"
 mkdir "$T/mdx/testdata" "$T/mdx/docs"
 printf '# Doc\n\n<div>broken</div>\n' > "$T/mdx/testdata/x.md"
 mdx() { # only docs/y.md is flagged, and by a rule from the shared file
-  ! lint mdx && grep -q '^docs/y.md:' "$T/mdx.log" && ! grep -q '^testdata/x.md:' "$T/mdx.log" && grep -q MD033 "$T/mdx.log"
+  ! lint mdx && grep -q '^docs/y.md:' "$T/mdx.log" && ! grep -q '^testdata/x.md:' "$T/mdx.log" && grep -q MD033 "$T/mdx.log" \
+    && ! grep -q '^docs/ok.md:' "$T/mdx.log"
 }
 printf '# Doc\n\n<div>broken</div>\n' > "$T/mdx/docs/y.md"
+# ok.md breaks markdownlint's built-in defaults (MD033 <picture>, MD013 line over 80) and passes only with the shared bends.
+printf '# Doc\n\n<picture>\n<img src="b.png" alt="b">\n</picture>\n\n%s\n' "$(printf 'word %.0s' $(seq 1 24))word" > "$T/mdx/docs/ok.md"
 check "markdownlint-cli2 ignores skip testdata and keep the shared rules" mdx
 
 # A .yamllint that extends the shared config skips testdata and keeps the shared rules.
@@ -67,8 +70,11 @@ mkdir "$T/yx/testdata"
 long="$(printf 'a%.0s' $(seq 1 130))"
 printf 'key: %s\n' "$long" > "$T/yx/testdata/x.yaml"
 printf 'key: %s\n' "$long" > "$T/yx/y.yaml"
+# ok.yaml has 100 characters and no "---": yamllint's built-in defaults reject it, the shared config accepts it.
+printf 'key: %s\n' "$(printf 'a%.0s' $(seq 1 95))" > "$T/yx/ok.yaml"
 yx() { # only y.yaml is flagged, on line-length from the shared file
-  ! lint yx && grep -q 'y.yaml' "$T/yx.log" && ! grep -q 'testdata/x.yaml' "$T/yx.log" && grep -q 'line-length' "$T/yx.log"
+  ! lint yx && grep -q 'y.yaml' "$T/yx.log" && ! grep -q 'testdata/x.yaml' "$T/yx.log" && grep -q 'line-length' "$T/yx.log" \
+    && ! grep -q 'ok.yaml' "$T/yx.log"
 }
 check "a .yamllint that extends the shared config skips testdata and keeps its rules" yx
 
