@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-# Compare two versions of one Markdown file: print "same", "text" or "code". Used by md-same-text.sh.
+# Compare two versions of one Markdown file: print "same", "lintoff", "code", "links" or "text". Used by
+# md-same-text.sh.
 #   md-same-text.py OLD NEW
 # Checked in this order, and the first that differs is printed:
+#   "lintoff": NEW has more markdownlint-disable (-next-line, -line) or markdownlint-configure-file
+#            comments than OLD. Turning a rule off is not a formatting fix.
 #   "code":  the contents of fenced and indented code blocks differ by even one byte.
 #   "links": the link and image targets differ (href of links, src of images, href= and src= in raw HTML).
 #            An autolink (<https://...>) is not counted: its target is its text.
@@ -41,10 +44,14 @@ def parts(path):
             links.append(t.attrGet('src'))
         elif t.type in ('html_block', 'html_inline'):
             links += re.findall(r'\b(?:href|src)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', t.content)
-    return ' '.join(text.split()), code, links
+    lintoff = len(re.findall(r'<!--\s*markdownlint-(?:disable|configure-file)', src))
+    return ' '.join(text.split()), code, links, lintoff
 
 
 if len(sys.argv) != 3:
     sys.exit('usage: md-same-text.py OLD NEW')
 old, new = parts(sys.argv[1]), parts(sys.argv[2])
-print(next((n for n, i in (('code', 1), ('links', 2), ('text', 0)) if old[i] != new[i]), 'same'))
+if new[3] > old[3]:
+    print('lintoff')
+else:
+    print(next((n for n, i in (('code', 1), ('links', 2), ('text', 0)) if old[i] != new[i]), 'same'))

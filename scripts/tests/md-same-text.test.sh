@@ -50,6 +50,7 @@ c_html() { mk html '<a href="x">t</a>\n' '<a href="y">t</a>\n'; runs html 1 'DIF
 c_autolink() { mk autolink 'see https://a.com/x now\n' 'see <https://a.com/x> now\n'; runs autolink 0 'same doc.md'; }
 c_placeholder() { mk placeholder 'Run it with <issue> set.\n' 'Run it with `<issue>` set.\n'; runs placeholder 0 'same doc.md'; }
 c_rawtext() { mk rawtext 'see <abbr title="one">X</abbr>\n' 'see <abbr title="two">X</abbr>\n'; runs rawtext 1 'DIFFERS doc.md: text'; }
+c_lintoff() { mk lintoff '# T\n\nA long line.\n' '# T\n\n<!-- markdownlint-disable-next-line MD013 -->\nA long line.\n'; runs lintoff 1 'DIFFERS doc.md: lintoff'; }
 c_indent() { mk indent 'para\n\n\tcode  x\n' 'para\n\n\tcode x\n'; runs indent 1 'DIFFERS doc.md: code'; }
 c_added() { mk added - 'new\n'; runs added 1 'DIFFERS doc.md: added'; }
 c_deleted() { mk deleted 'old\n' -; runs deleted 1 'DIFFERS doc.md: deleted'; }
@@ -73,6 +74,7 @@ check "a whitespace change in an indented code block differs" c_indent
 check "a bare URL wrapped as <URL> is the same" c_autolink
 check "a placeholder wrapped in backticks is the same" c_placeholder
 check "changed raw HTML text differs" c_rawtext
+check "an added markdownlint-disable comment differs" c_lintoff
 check "a file only in head reports added" c_added
 check "a file only in base reports deleted" c_deleted
 check "no .md change exits 0" c_nomd
