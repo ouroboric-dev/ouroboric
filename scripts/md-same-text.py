@@ -5,7 +5,8 @@
 # Checked in this order, and the first that differs is printed:
 #   "lintoff": NEW has more markdownlint-disable (-next-line, -line) or markdownlint-configure-file
 #            comments than OLD. Turning a rule off is not a formatting fix.
-#   "code":  the contents of fenced and indented code blocks differ by even one byte.
+#   "code":  the contents of fenced and indented code blocks differ by even one byte, or the blocks the plan
+#            tools find (plan-blocks.py's regex, which CommonMark can read differently) differ.
 #   "links": the link and image targets differ (href of links, src of images, href= and src= in raw HTML).
 #            An autolink (<https://...>) is not counted: its target is its text.
 #   "text":  the rendered text differs (tags stripped, entities decoded, whitespace collapsed). Raw HTML
@@ -17,6 +18,12 @@ import re
 import sys
 
 from markdown_it import MarkdownIt
+
+
+# Copied from plan-blocks.py (its `block`): the plan tools extract code with this, not with CommonMark. They
+# differ, for example, on a diff context line of one space and three backticks, which CommonMark takes as a
+# closing fence. Compared as (info, body) pairs; see plan_same.
+PLAN_BLOCK = re.compile(r'^(`{3,4})(\w*)\n(.*?)\n\1$', re.M | re.S)
 
 
 def walk(tokens):
@@ -35,6 +42,7 @@ def parts(path):
     text = html.unescape(re.sub(r'<[^>]*>', '', md.render(src)))
     toks = list(walk(md.parse(src)))
     code = [t.content for t in toks if t.type in ('fence', 'code_block')]
+    plan = [(m.group(2), m.group(3)) for m in PLAN_BLOCK.finditer(src)]
     links = []
     for t in toks:
         # An autolink (<https://...>) shows its target as its text, which the text check compares.
@@ -45,13 +53,22 @@ def parts(path):
         elif t.type in ('html_block', 'html_inline'):
             links += re.findall(r'\b(?:href|src)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', t.content)
     lintoff = len(re.findall(r'<!--\s*markdownlint-(?:disable|configure-file)', src))
-    return ' '.join(text.split()), code, links, lintoff
+    return ' '.join(text.split()), code, links, lintoff, plan
 
 
 if len(sys.argv) != 3:
     sys.exit('usage: md-same-text.py OLD NEW')
 old, new = parts(sys.argv[1]), parts(sys.argv[2])
+
+
+def plan_same(a, b):
+    # The (info, body) pairs match byte for byte; the one allowed change is empty -> `text` (markdownlint MD040).
+    # Other infos matter to the plan tools: bash and output blocks are never applied.
+    return len(a) == len(b) and all(x[1] == y[1] and (x[0] == y[0] or (x[0], y[0]) == ('', 'text')) for x, y in zip(a, b))
+
+
 if new[3] > old[3]:
     print('lintoff')
 else:
-    print(next((n for n, i in (('code', 1), ('links', 2), ('text', 0)) if old[i] != new[i]), 'same'))
+    diff = {'code': old[1] != new[1] or not plan_same(old[4], new[4]), 'links': old[2] != new[2], 'text': old[0] != new[0]}
+    print(next((n for n, d in diff.items() if d), 'same'))

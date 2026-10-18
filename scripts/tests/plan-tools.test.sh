@@ -124,7 +124,7 @@ Size: @@size fx-T001@@
 PART
 run python3 -I "$S/plan-generate.py" "$REF" "$T/plan2.md" "$T/part2.md"
 check "generate expands files, size and steps from the task commits" \
-  bash -c "[ $rc = 0 ] && grep -q '^\*\*Files (in \`app\`):\*\*' '$T/plan2.md' && grep -q '^- Create: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && grep -q '^- Modify: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && grep -q '^Size: S (' '$T/plan2.md'"
+  bash -c "[ $rc = 0 ] && grep -q '^\*\*Files (in \`app\`):\*\*' '$T/plan2.md' && grep -q '^- Create: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && [ -z \"\$(grep -A1 '^\*\*Files (in \`app\`):\*\*' '$T/plan2.md' | sed -n 2p)\" ] && grep -q '^- Modify: \`greet.go\`, \`greet_test.go\`' '$T/plan2.md' && grep -q '^Size: S (' '$T/plan2.md'"
 check "steps write the tests first, show the first failure, then write the code" \
   bash -c "sed -n '/^### Task fx-T002/,\$p' '$T/plan2.md' > '$T/t2.md'; a=\$(grep -n 'Step 1:\*\* write the tests' '$T/t2.md' | head -1 | cut -d: -f1); b=\$(grep -n 'expected failure line' '$T/t2.md' | head -1 | cut -d: -f1); c=\$(grep -n 'Step 3:\*\* write the code' '$T/t2.md' | head -1 | cut -d: -f1); [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ -n \"\$c\" ] && [ \"\$a\" -lt \"\$b\" ] && [ \"\$b\" -lt \"\$c\" ]"
 check "steps show a changed file as a patch and a new file whole" \

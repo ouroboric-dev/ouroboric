@@ -52,6 +52,8 @@ c_placeholder() { mk placeholder 'Run it with <issue> set.\n' 'Run it with `<iss
 c_rawtext() { mk rawtext 'see <abbr title="one">X</abbr>\n' 'see <abbr title="two">X</abbr>\n'; runs rawtext 1 'DIFFERS doc.md: text'; }
 c_lintoff() { mk lintoff '# T\n\nA long line.\n' '# T\n\n<!-- markdownlint-disable-next-line MD013 -->\nA long line.\n'; runs lintoff 1 'DIFFERS doc.md: lintoff'; }
 c_indent() { mk indent 'para\n\n\tcode  x\n' 'para\n\n\tcode x\n'; runs indent 1 'DIFFERS doc.md: code'; }
+c_planfence() { mk planfence '```diff\n+a\n ```\n-  item\n+x  \n```\n' '```diff\n+a\n ```\n- item\n+x\n```\n'; runs planfence 1 'DIFFERS doc.md: code'; }
+c_planbash() { mk planbash '```\nfoo\n```\n' '```bash\nfoo\n```\n'; runs planbash 1 'DIFFERS doc.md: code'; }
 c_added() { mk added - 'new\n'; runs added 1 'DIFFERS doc.md: added'; }
 c_deleted() { mk deleted 'old\n' -; runs deleted 1 'DIFFERS doc.md: deleted'; }
 c_nomd() { mk nomd - -; runs nomd 0 ''; }
@@ -75,6 +77,8 @@ check "a bare URL wrapped as <URL> is the same" c_autolink
 check "a placeholder wrapped in backticks is the same" c_placeholder
 check "changed raw HTML text differs" c_rawtext
 check "an added markdownlint-disable comment differs" c_lintoff
+check "a fix inside a plan-style diff block that CommonMark closes early differs" c_planfence
+check "a bare plan fence given a bash info string differs" c_planbash
 check "a file only in head reports added" c_added
 check "a file only in base reports deleted" c_deleted
 check "no .md change exits 0" c_nomd
