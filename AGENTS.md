@@ -43,8 +43,10 @@ folder.
 | Scan git history for secrets | `scripts/scan-history.sh` |
 | Create a repo with its first commit (`README.md`, licences, base CI) and its protection | `scripts/new-repo.sh --org <org> <repo> "<description>"`. Founder only |
 | Write the licence files or the base CI into a folder | `scripts/add-licences.sh`, `scripts/add-ci.sh`. Founder only |
+| Push the prepared `base-ci` branches of existing repos and open their PRs, then require `lint` after the merge | `scripts/rollout-ci.sh --org <org> push\|protect <repo>...`. Founder only |
+| Prove that a Markdown change is formatting only, such as `markdownlint-cli2 --fix` output | `scripts/md-same-text.sh <base-ref> <head-ref>` |
 | Scaffold a new Go component | `scripts/scaffold-component.sh` |
 | Render and check diagrams | `scripts/diagrams.sh` |
 
 Only the founder runs `scripts/new-repo.sh`, `scripts/create-repo.sh`, `scripts/add-licences.sh`, `scripts/add-ci.sh`,
-`scripts/setup-repo.sh` and `scripts/create-pr-bot.sh`.
+`scripts/setup-repo.sh`, `scripts/rollout-ci.sh` and `scripts/create-pr-bot.sh`.

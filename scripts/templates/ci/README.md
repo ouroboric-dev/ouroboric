@@ -47,6 +47,30 @@ Realms will ship their own pieces in this format later (the repo-bootstrap propo
 (`upgrade/gitleaks-only.yaml`). It replaces that file, and adds `lint.yml` and the piece files. If the config
 differs by even one byte, it exits 2 and writes nothing; every other target must still not exist.
 
+The rollout to an existing repo, one `base-ci` branch per repo:
+
+1. An agent clones the repo fresh into `rollout/<repo>`, beside the `ouroboric` checkout, and cuts `base-ci`
+   from `origin/main`. It runs `add-ci.sh --upgrade`, then fixes what the hooks flag, formatting only, until
+   `pre-commit run --all-files` passes. `md-same-text.sh origin/main HEAD` proves each Markdown fix keeps the
+   text, the code blocks and the links.
+2. The founder runs `GH_TOKEN=... rollout-ci.sh --org <org> push <repo>...`. It pushes `base-ci`, because the
+   pr-bot can't push `.github/workflows/`, and opens the PR as the pr-bot, or prints the one already open. After
+   a rebase, the same command updates the branch with `--force-with-lease`, so it never overwrites a branch
+   someone else moved.
+3. After the merge, the founder runs `rollout-ci.sh --org <org> protect <repo>...`. It runs `setup-repo.sh`, so
+   `lint` becomes required, only on a repo whose `main` holds `lint.yml`, and names the others.
+
+A repo that needs an exclusion keeps it in its own file, never in the shared copies, with a comment that gives
+the reason. Only files that aren't docs or config people read are excluded, such as test inputs read by code,
+or the pieces, which are fragments rather than YAML documents. Nothing is excluded from gitleaks or reuse.
+
+- markdownlint: `.markdownlint-cli2.yaml` holding only `ignores:`. The rules still come from
+  `.markdownlint.yaml`.
+- yamllint: `.yamllint`, holding `extends: .yamllint.yaml` and `ignore:`. yamllint reads it before
+  `.yamllint.yaml`.
+
+`scripts/tests/lint-config.test.sh` proves that both keep the shared rules.
+
 ## Bumping a pin
 
 Change the `rev` in a reviewed pull request. The release must be at least two weeks old. For `lint.yml`, the
