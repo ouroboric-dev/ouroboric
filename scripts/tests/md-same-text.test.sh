@@ -47,6 +47,7 @@ c_link() { mk link '[t](http://a.com)\n' '[t](http://evil.com)\n'; runs link 1 '
 c_img() { mk img '![alt](a.png)\n' '![alt](b.png)\n'; runs img 1 'DIFFERS doc.md: links'; }
 c_ref() { mk ref '[t][1]\n\n[1]: http://a.com\n' '[t][1]\n\n[1]: http://evil.com\n'; runs ref 1 'DIFFERS doc.md: links'; }
 c_html() { mk html '<a href="x">t</a>\n' '<a href="y">t</a>\n'; runs html 1 'DIFFERS doc.md: links'; }
+c_autolink() { mk autolink 'see https://a.com/x now\n' 'see <https://a.com/x> now\n'; runs autolink 0 'same doc.md'; }
 c_indent() { mk indent 'para\n\n\tcode  x\n' 'para\n\n\tcode x\n'; runs indent 1 'DIFFERS doc.md: code'; }
 c_added() { mk added - 'new\n'; runs added 1 'DIFFERS doc.md: added'; }
 c_deleted() { mk deleted 'old\n' -; runs deleted 1 'DIFFERS doc.md: deleted'; }
@@ -67,6 +68,7 @@ check "a changed image src differs" c_img
 check "a changed reference definition differs" c_ref
 check "a changed raw HTML href differs" c_html
 check "a whitespace change in an indented code block differs" c_indent
+check "a bare URL wrapped as <URL> is the same" c_autolink
 check "a file only in head reports added" c_added
 check "a file only in base reports deleted" c_deleted
 check "no .md change exits 0" c_nomd

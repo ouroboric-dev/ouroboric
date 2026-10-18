@@ -4,6 +4,7 @@
 # Checked in this order, and the first that differs is printed:
 #   "code":  the contents of fenced and indented code blocks differ by even one byte.
 #   "links": the link and image targets differ (href of links, src of images, href= and src= in raw HTML).
+#            An autolink (<https://...>) is not counted: its target is its text.
 #   "text":  the rendered text differs (tags stripped, entities decoded, whitespace collapsed).
 # Run it as `python3 -I`, so nothing is imported from the current folder; md-same-text.sh does that
 # through `uvx --with markdown-it-py==3.0.0`. It only reads the two paths.
@@ -29,7 +30,8 @@ def parts(path):
     code = [t.content for t in toks if t.type in ('fence', 'code_block')]
     links = []
     for t in toks:
-        if t.type == 'link_open':
+        # An autolink (<https://...>) shows its target as its text, which the text check compares.
+        if t.type == 'link_open' and t.markup != 'autolink':
             links.append(t.attrGet('href'))
         elif t.type == 'image':
             links.append(t.attrGet('src'))
