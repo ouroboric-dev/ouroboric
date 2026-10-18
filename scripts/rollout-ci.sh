@@ -5,14 +5,17 @@
 # ouroboric checkout), with add-ci.sh --upgrade and the formatting fixes.
 #   push:    pushes each local base-ci branch to GitHub, then opens its pull request as the pr-bot
 #            (as-bot.sh), or prints the one already open. The founder pushes because the pr-bot can't
-#            push .github/workflows/. It reads the remote branch with git ls-remote and pushes only when
-#            it differs, with --force-with-lease on that SHA, so a second run after a rebase updates the
-#            branch, and a branch someone else moved in between is never overwritten. A repo without a
-#            local base-ci branch is skipped and named.
+#            push .github/workflows/. Each push is recorded in the clone's refs/rollout-ci/base-ci. A
+#            second run after a rebase updates the branch, with --force-with-lease on that record. If
+#            base-ci moved on GitHub since the last push (a person's commit, "Update branch"), push
+#            refuses that repo and prints both SHAs: fold the move into the local branch, then
+#            acknowledge it with git update-ref refs/rollout-ci/base-ci <GitHub's SHA>, and run push
+#            again. A repo whose main already holds lint.yml (the PR merged) is left alone. A repo
+#            without a local base-ci branch is skipped and named.
 #   protect: after the merge, runs setup-repo.sh on each repo whose main holds
 #            .github/workflows/lint.yml, so lint becomes required, then (for ouroboric-dev)
 #            check-repos.sh --check ruleset. A repo whose main has no lint.yml yet is named and left
-#            alone, so lint is never required early.
+#            alone, so lint is never required early. A repo that doesn't exist fails.
 # Both are safe to run twice. Exit 0 when every repo succeeded or is not ready yet, 1 when any repo was
 # skipped or failed, 2 for usage. It never prompts.
 # Founder-run: GH_TOKEN must hold the same short-lived admin token as new-repo.sh (Contents and
@@ -54,23 +57,52 @@ cred_git() {
     "$@"
 }
 
+# lookup PATH: GETs PATH with the founder's token. Returns 0 if it exists, 1 on a 404, and 2 on any
+# other failure, with the error in $err.
+err=''
+lookup() {
+  err="$(env -u GITHUB_TOKEN gh api "$1" --silent 2>&1 >/dev/null)" && return 0
+  [[ "$err" == *"HTTP 404"* ]] && return 1
+  return 2
+}
+
+# Only push writes refs/rollout-ci/base-ci: the SHA it last pushed, or no ref before the first push.
+# It is the lease, so a move on GitHub since then is refused, not overwritten. (refs/remotes/ won't do:
+# git fetch moves those.)
+LAST=refs/rollout-ci/base-ci
+
 push_one() {
-  local r="$1" w="$ROOT/$1" remote="$GIT/$RC_ORG/$1.git" have want url
+  local r="$1" w="$ROOT/$1" remote="$GIT/$RC_ORG/$1.git" have want last fix url s=0
   if [ ! -e "$w/.git" ] || ! have="$(git -C "$w" rev-parse -q --verify refs/heads/base-ci)"; then
     echo "rollout-ci: $r: no base-ci branch in $w; skipped" >&2
     return 1
   fi
+  # After the merge, base-ci is deleted on GitHub; pushing it again would open a second PR.
+  lookup "repos/$RC_ORG/$r/contents/.github/workflows/lint.yml" || s=$?
+  case "$s" in
+    0) echo "rollout-ci: $r: lint.yml is already on main; run protect"; return 0 ;;
+    2) echo "rollout-ci: $r: can't tell whether main holds lint.yml, so nothing is pushed: $err" >&2; return 1 ;;
+  esac
   if ! want="$(cred_git -C "$w" ls-remote "$remote" refs/heads/base-ci)"; then
     echo "rollout-ci: $r: can't read base-ci from $remote" >&2
     return 1
   fi
   want="${want%%[[:space:]]*}"
+  last="$(git -C "$w" rev-parse -q --verify "$LAST")" || last=''
   if [ "$want" = "$have" ]; then
+    git -C "$w" update-ref "$LAST" "$have" || { echo "rollout-ci: $r: recording the last push failed" >&2; return 1; }
     echo "rollout-ci: $r: up to date"
-  # An empty SHA in the lease means the remote branch must not exist yet.
-  elif ! cred_git -C "$w" push -q --force-with-lease="refs/heads/base-ci:$want" "$remote" \
+  elif [ "$want" != "$last" ]; then
+    if [ -n "$want" ]; then fix="git update-ref $LAST $want"; else fix="git update-ref -d $LAST"; fi
+    echo "rollout-ci: $r: the remote base-ci moved: GitHub has ${want:-none}, the last push was ${last:-none}; fold it in, then $fix" >&2
+    return 1
+  # The lease is the last push, so a move racing this run is refused too. Empty means "must not exist".
+  elif ! cred_git -C "$w" push -q --force-with-lease="refs/heads/base-ci:$last" "$remote" \
     refs/heads/base-ci:refs/heads/base-ci >&2; then
-    echo "rollout-ci: $r: the push failed; if someone else moved base-ci on GitHub, find out why before you push again" >&2
+    echo "rollout-ci: $r: the push failed; if someone else moved base-ci on GitHub, fold it in and run push again" >&2
+    return 1
+  elif ! git -C "$w" update-ref "$LAST" "$have"; then
+    echo "rollout-ci: $r: base-ci is pushed, but recording it failed; run git update-ref $LAST $have" >&2
     return 1
   fi
   if ! url="$("$BOT" "$r" gh pr list --repo "$RC_ORG/$r" --head base-ci --state open --json url -q '.[0].url')"; then
@@ -89,15 +121,22 @@ push_one() {
 }
 
 protect_one() {
-  local r="$1" err
-  if err="$(env -u GITHUB_TOKEN gh api "repos/$RC_ORG/$r/contents/.github/workflows/lint.yml" --silent 2>&1 >/dev/null)"; then
+  local r="$1" s=0
+  lookup "repos/$RC_ORG/$r" || s=$?
+  case "$s" in
+    1) echo "rollout-ci: $r: no such repo in $RC_ORG" >&2; return 1 ;;
+    2) echo "rollout-ci: $r: can't read the repo, so it is not protected: $err" >&2; return 1 ;;
+  esac
+  s=0
+  lookup "repos/$RC_ORG/$r/contents/.github/workflows/lint.yml" || s=$?
+  if [ "$s" = 0 ]; then
     if ! "$SETUP" "${RC_FROM[@]}" "$r"; then
       echo "rollout-ci: $r: setup-repo.sh failed" >&2
       return 1
     fi
     [ "$RC_ORG" = ouroboric-dev ] || return 0
     "$CHECK" --check ruleset "$r"
-  elif [[ "$err" == *"HTTP 404"* ]]; then
+  elif [ "$s" = 1 ]; then
     echo "rollout-ci: $r: lint.yml is not on main yet; not protected"
   else
     echo "rollout-ci: $r: can't tell whether main holds lint.yml, so it is not protected: $err" >&2

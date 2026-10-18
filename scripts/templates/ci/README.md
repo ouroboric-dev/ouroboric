@@ -54,9 +54,13 @@ The rollout to an existing repo, one `base-ci` branch per repo:
    `pre-commit run --all-files` passes. `md-same-text.sh origin/main HEAD` proves each Markdown fix keeps the
    text, the code blocks and the links.
 2. The founder runs `GH_TOKEN=... rollout-ci.sh --org <org> push <repo>...`. It pushes `base-ci`, because the
-   pr-bot can't push `.github/workflows/`, and opens the PR as the pr-bot, or prints the one already open. After
-   a rebase, the same command updates the branch with `--force-with-lease`, so it never overwrites a branch
-   someone else moved.
+   pr-bot can't push `.github/workflows/`, and opens the PR as the pr-bot, or prints the one already open. It
+   records each push in the clone's `refs/rollout-ci/base-ci`. After a rebase, the same command updates the
+   branch, with `--force-with-lease` on that record. If `base-ci` moved on GitHub since the last push (a
+   person's commit, a review suggestion, "Update branch"), push refuses that repo and prints both SHAs. The
+   agent folds the move into the local branch and acknowledges it with
+   `git update-ref refs/rollout-ci/base-ci <GitHub's SHA>`; then the founder runs push again. Once `main` holds
+   `lint.yml`, push leaves the repo alone and says to run protect.
 3. After the merge, the founder runs `rollout-ci.sh --org <org> protect <repo>...`. It runs `setup-repo.sh`, so
    `lint` becomes required, only on a repo whose `main` holds `lint.yml`, and names the others.
 

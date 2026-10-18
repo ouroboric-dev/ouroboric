@@ -217,10 +217,14 @@ Run one check with `--check <name>`, or name repos to check only those.
   [`scripts/md-same-text.sh`](../../scripts/md-same-text.sh) proves each Markdown fix changes no
   text. Then the founder runs
   [`scripts/rollout-ci.sh --org <org> push <repo>…`](../../scripts/rollout-ci.sh). It pushes the
-  branch, because the pr-bot can't push workflows, and opens the PR as the pr-bot. After the merge,
-  the founder runs `rollout-ci.sh --org <org> protect <repo>…`, which runs `setup-repo.sh`, so
-  `lint` becomes required. It skips and names any repo whose `main` doesn't hold `lint.yml` yet.
-  Both modes are safe to run twice and need the same token as `new-repo.sh`.
+  branch, because the pr-bot can't push workflows, and opens the PR as the pr-bot. Running it again
+  after a rebase updates the branch and reuses the PR. If `base-ci` moved on GitHub since the last
+  push, it refuses that repo and prints both SHAs: the agent folds the move in and acknowledges it
+  with `git update-ref refs/rollout-ci/base-ci <GitHub's SHA>`, then the founder runs push again.
+  After the merge, push does nothing, and the founder runs
+  `rollout-ci.sh --org <org> protect <repo>…`, which runs `setup-repo.sh`, so `lint` becomes
+  required. It skips and names any repo whose `main` doesn't hold `lint.yml` yet. Both modes are
+  safe to run twice and need the same token as `new-repo.sh`.
 - **A lint config bends only for a reason.** When a linter and the house style disagree, ask
   whether the house style gets real value from its own way. If yes, the linter bends: the shared
   config gets a setting, or a repo excludes files that aren't docs or config, such as test inputs,
