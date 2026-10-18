@@ -213,8 +213,8 @@ Run one check with `--check <name>`, or name repos to check only those.
   checks with `scripts/as-bot.sh --read all scripts/check-repos.sh`.
 - **Agents scaffold a new Yggdrasil component** with
   [`scripts/scaffold-component.sh <repo> "<job>" <clone>`](../../scripts/scaffold-component.sh), in
-  a clone of a new repo, on top of the first commit that `new-repo.sh` made. It writes the files
-  from `scripts/templates/go-component/` and leaves the architecture doc's responsibilities for a person to write. The result goes through
+  a clone of a new repo, on top of the first commit that `new-repo.sh` made. It adds the files
+  from `scripts/templates/go-component/`, appends its sections to the README that commit holds, keeps the pre-commit config as it is, and leaves the architecture doc's responsibilities for a person to write. The result goes through
   a PR.
 - **Reusable tooling lives here until it has a better home.** Any script that could run again goes
   in `scripts/`, with a test in `scripts/tests/`. When it should move, the Yggdrasil v0 plan's

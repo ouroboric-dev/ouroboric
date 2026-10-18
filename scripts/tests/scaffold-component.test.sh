@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for scaffold-component.sh on a local repo laid out like create-repo.sh's first commit.
+# Tests for scaffold-component.sh on a local repo laid out like new-repo.sh's first commit.
 #   scripts/tests/scaffold-component.test.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,7 +10,7 @@ T="$(mktemp -d)"
 trap 'rm -rf -- "$T"' EXIT
 fail=0
 check() { local d="$1"; shift; if "$@"; then echo "ok   $d"; else echo "FAIL $d"; fail=1; fi; }
-newrepo() { # newrepo DIR: the files create-repo.sh's first commit holds
+newrepo() { # newrepo DIR [DESCRIPTION [REPO]]: the files new-repo.sh's first commit holds
   mkdir -p "$1/LICENSES" && git init -q "$1"
   cp "$LICENSES/AGPL-3.0-only.txt" "$LICENSES/CC-BY-4.0.txt" "$1/LICENSES/"
   cp "$LICENSES/AGPL-3.0-only.txt" "$1/LICENSE"
@@ -18,18 +18,22 @@ newrepo() { # newrepo DIR: the files create-repo.sh's first commit holds
     'SPDX-FileCopyrightText = "2026 Bruno Guilhermo de Barros Valério"' 'SPDX-License-Identifier = "AGPL-3.0-only"' '' \
     '[[annotations]]' 'path = ["docs/**", "README.md", "AGENTS.md"]' 'precedence = "closest"' \
     'SPDX-FileCopyrightText = "2026 Bruno Guilhermo de Barros Valério"' 'SPDX-License-Identifier = "CC-BY-4.0"' > "$1/REUSE.toml"
-  git -C "$1" add LICENSE LICENSES REUSE.toml
+  printf '%s\n' 'repos:' | cat - "$HERE/../templates/ci/pieces/gitleaks.yaml" > "$1/.pre-commit-config.yaml"
+  printf '# %s\n\n%s\n' "${3:-$(basename "$1")}" "${2:-A stub description.}" > "$1/README.md"
+  git -C "$1" add LICENSE LICENSES REUSE.toml .pre-commit-config.yaml README.md
   git -C "$1" -c user.name=Test -c user.email=test@example.invalid commit -qm Licences
 }
 JOB='The alpha job: reads `x.yaml` & writes a/b, with 100% of {{JOB}} kept.'
 
-newrepo "$T/alpha"
+newrepo "$T/alpha" "$JOB"
 "$SCAFFOLD" alpha "$JOB" "$T/alpha" > "$T/out" 2>&1; rc=$?
 check "exit 0" [ "$rc" = 0 ]
 check "it writes the scaffold files" \
-  [ "$(cd "$T/alpha" && git status --short --untracked-files=all | sort | tr '\n' ' ')" = "?? .devcontainer/devcontainer.json ?? .gitignore ?? .pre-commit-config.yaml ?? AGENTS.md ?? README.md ?? docs/architecture.md ?? go.mod " ]
+  [ "$(cd "$T/alpha" && git status --short --untracked-files=all | sort | tr '\n' ' ')" = " M README.md ?? .devcontainer/devcontainer.json ?? .gitignore ?? AGENTS.md ?? docs/architecture.md ?? go.mod " ]
 check "the gitleaks hook is pinned to v8.30.1, as check-repos.sh's gitleaks check wants" \
   bash -c "grep -q 'repo: https://github.com/gitleaks/gitleaks' '$T/alpha/.pre-commit-config.yaml' && grep -q 'rev: v8.30.1' '$T/alpha/.pre-commit-config.yaml'"
+check "the README keeps its stub as its first three lines, then holds the template's sections" \
+  bash -c "[ \"\$(head -3 '$T/alpha/README.md')\" = \"\$(printf '# alpha\n\n%s' \"\$1\")\" ] && grep -qx '## Build and test' '$T/alpha/README.md'" _ "$JOB"
 check "the README says to install the hook" grep -qF 'Run `uvx pre-commit install` once after cloning' "$T/alpha/README.md"
 check "go.mod names the module and Go 1.26" \
   [ "$(cat "$T/alpha/go.mod")" = "$(printf 'module github.com/ouroboric-dev/alpha\n\ngo 1.26')" ]
@@ -56,7 +60,11 @@ cp "$T/alpha/AGENTS.md" "$T/agents.before"
 "$SCAFFOLD" alpha "Another job." "$T/alpha" 2>/dev/null; rc=$?
 check "an existing scaffold file is never overwritten" bash -c "[ $rc = 2 ] && cmp -s '$T/agents.before' '$T/alpha/AGENTS.md'"
 
-newrepo "$T/web"
+cp "$T/alpha/.pre-commit-config.yaml" "$T/pc.before"
+check "the pre-commit config stays as new-repo.sh made it" \
+  bash -c "cmp -s '$T/pc.before' '$T/alpha/.pre-commit-config.yaml' && git -C '$T/alpha' diff --quiet -- .pre-commit-config.yaml"
+
+newrepo "$T/web" "The Midgard realm's React flavor." midgard-react
 "$SCAFFOLD" --mit-templates midgard-react "The Midgard realm's React flavor." "$T/web" >/dev/null 2>&1; rc=$?
 check "--mit-templates: exit 0" [ "$rc" = 0 ]
 check "--mit-templates adds the MIT text and templates/README.md" \
@@ -69,7 +77,13 @@ check "--mit-templates: reuse lint passes" bash -c "cd '$T/web' && uvx -q --from
 
 mkdir "$T/plain"
 "$SCAFFOLD" beta "The beta job." "$T/plain" 2>/dev/null; rc=$?
-check "a folder without create-repo.sh's first commit is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/plain/go.mod' ]"
+check "a folder without new-repo.sh's first commit is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/plain/go.mod' ]"
+newrepo "$T/nopc"; git -C "$T/nopc" rm -qf .pre-commit-config.yaml
+"$SCAFFOLD" gamma "Gamma." "$T/nopc" 2>/dev/null; rc=$?
+check "a folder without .pre-commit-config.yaml is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/nopc/go.mod' ]"
+newrepo "$T/norm"; git -C "$T/norm" rm -qf README.md
+"$SCAFFOLD" delta "Delta." "$T/norm" 2>/dev/null; rc=$?
+check "a folder without README.md is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/norm/go.mod' ] && [ ! -e '$T/norm/README.md' ]"
 newrepo "$T/bad"
 "$SCAFFOLD" ../bad "Bad." "$T/bad" 2>/dev/null; rc=$?
 check "a bad repo name is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/bad/go.mod' ]"
