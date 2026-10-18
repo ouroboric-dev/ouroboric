@@ -74,7 +74,7 @@ prepare() {
   echo "ci" > "$w/ci.txt"
   git -C "$w" add ci.txt && git -C "$w" commit -q -m "Base CI"
 }
-for r in alpha beta epsilon zeta eta .github; do prepare "$r"; done
+for r in alpha beta epsilon zeta eta .github theta; do prepare "$r"; done
 prepare gamma none
 local_sha() { git -C "$ROLLOUT_ROOT/$1" rev-parse base-ci; }
 remote_sha() { git -C "$B/$1.git" rev-parse -q --verify refs/heads/base-ci; }
@@ -113,6 +113,16 @@ check "push again with nothing changed: no second PR" [ "$(creates)" = 2 ]
 GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev push .github > "$T/out" 2> "$T/err"; rc=$?
 check "push .github: exit 0, base-ci is on the remote, and its PR URL is printed" \
   bash -c "[ $rc = 0 ] && [ '$(remote_sha .github)' = '$(local_sha .github)' ] && [ '$(cat "$T/out")' = '$(url .github)' ]"
+
+# push with a global insteadOf that sends the org's URLs elsewhere (the founder's https-to-SSH rule):
+# rollout-ci.sh's own rule is longer, so it wins, and the push still goes to $T/git with the token.
+git init -q --bare -b main "$T/wrong/ouroboric-dev/theta.git"
+printf '[url "file://%s/wrong/"]\n\tinsteadOf = file://%s/git/\n' "$T" "$T" > "$T/insteadof.gitconfig"
+GIT_CONFIG_GLOBAL="$T/insteadof.gitconfig" GH_TOKEN=$TOKEN "$RC" --org ouroboric-dev push theta > "$T/out" 2> "$T/err"; rc=$?
+check "push with a global insteadOf for the org's URLs: exit 0, base-ci lands on the real remote" \
+  bash -c "[ $rc = 0 ] && [ '$(remote_sha theta)' = '$(local_sha theta)' ]"
+check "push with a global insteadOf for the org's URLs: nothing reaches the rewritten remote" \
+  bash -c "! git -C '$T/wrong/ouroboric-dev/theta.git' rev-parse -q --verify refs/heads/base-ci >/dev/null"
 
 # push after a local rebase: the remote is updated, and the open PR is reused
 git -C "$ROLLOUT_ROOT/alpha" commit -q --amend -m "Base CI, rebased"

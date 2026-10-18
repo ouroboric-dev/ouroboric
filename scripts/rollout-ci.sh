@@ -50,11 +50,14 @@ for r in "$@"; do
   [[ "$r" =~ ^[A-Za-z0-9._-]+$ && "$r" != -* && "$r" != . && "$r" != .. ]] || die "bad repo name: $r"
 done
 
-# The helper reads GH_TOKEN when git asks, so the token never appears in a command line.
+# The helper reads GH_TOKEN when git asks, so the token never appears in a command line. Git applies
+# the longest matching insteadOf, so the org's own rule beats a global one that sends
+# https://github.com/ to SSH, around the token (as in as-bot.sh).
 # shellcheck disable=SC2016  # $1 and $GH_TOKEN expand in the helper, not here
 cred_git() {
   git -c credential.helper= \
     -c 'credential.helper=!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f' \
+    -c "url.$GIT/$RC_ORG/.insteadOf=$GIT/$RC_ORG/" \
     "$@"
 }
 
