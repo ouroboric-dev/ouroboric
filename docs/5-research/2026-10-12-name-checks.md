@@ -24,7 +24,7 @@ website or certificate is set up yet, and `.dev` requires HTTPS.
 Each registry's public API, queried on 2026-10-12. "Taken" means the name exists there.
 
 | Name | npm | PyPI | crates.io | Docker Hub | Homebrew core | GitHub account |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | `ouroboric` | free | free | free | taken (see the note below) | free | taken (organisation "Ouroboric", created 2018, no public repos) |
 | `yggdrasil` | taken | taken | taken | taken | free | taken |
 | `asgard` | taken | taken | taken | redirect (unclear) | free | taken |

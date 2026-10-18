@@ -16,7 +16,7 @@ The Ouroboric design language. Dark mode comes first; light mode is equally supp
 accent.
 
 | Token | Dark (default) | Light | Use |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `bg` | `#0B0D12` | `#FFFFFF` | page background |
 | `surface` | `#14171F` | `#F4F5F7` | panels, code, sidebars |
 | `border` | `#2A303C` | `#D8DCE3` | dividers and outlines (decorative) |
@@ -50,7 +50,7 @@ All pairs in the table pass WCAG AA for their use, in both modes: text pairs at 
 accent as a shape at 3:1 or more.
 
 | Pair | Dark | Light |
-|---|---|---|
+| --- | --- | --- |
 | text on bg | 16.9:1 | 19.4:1 |
 | muted on bg | 7.6:1 | 7.2:1 |
 | accent-text on bg | 5.9:1 | 5.8:1 |
@@ -63,7 +63,7 @@ accent as a shape at 3:1 or more.
 single job. The rarer the job, the more character the face can carry.
 
 | Role | Face | Weights | Use |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Wordmark | **Cinzel** | 800 | the name as a logo: `OUROBORIC.DEV`, with `.DEV` in `accent` |
 | Display | **Fjalla One** | 400 | page titles, slide covers, social cards, posters |
 | Initial | **Cinzel** | 800 | the drop cap that opens an article |
@@ -83,7 +83,7 @@ The font stacks and the type scale are in [`tokens.css`](tokens.css) and [`token
 The body is 17 px. Serif text reads better slightly larger than a sans at the same size.
 
 | Token | Size | Line height | Face |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `display-xl` | 3.5rem (56 px) | 1.05 | Fjalla One: slide covers, hero titles |
 | `display` | 2.5rem (40 px) | 1.1 | Fjalla One: page titles (h1) |
 | `h2` | 1.75rem (28 px) | 1.2 | Literata 700 |

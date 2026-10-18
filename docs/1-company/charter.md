@@ -66,7 +66,7 @@ Ouroboric has one defined factory, Yggdrasil, with two kinds of realm. **Amended
 Asgard, defined until then as a second factory, became Yggdrasil's kickstart realm.
 
 | Factory and realm | Produces | Status |
-|---|---|---|
+| --- | --- | --- |
 | **Yggdrasil**, build realms (Midgard and Helheim first) | software | in build (v0) |
 | **Yggdrasil**, Asgard realm | companies and products: charters, brands, legal basics, roadmaps, readiness | designed; v0 after Yggdrasil v0 |
 

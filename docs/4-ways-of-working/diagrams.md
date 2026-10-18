@@ -17,7 +17,7 @@ build lands, it renders the same sources itself.
 ## 1. Which dialect
 
 | Picture | Dialect | File extension |
-|---|---|---|
+| --- | --- | --- |
 | flow, decision tree, pipeline, lifecycle, sequence, state, ER, gantt | Mermaid | `.mmd` |
 | layered or zoned architecture, module maps, trust boundaries | D2 | `.d2` |
 | people and systems (C4 context or container) | C4-PlantUML | `.puml` |
@@ -54,7 +54,7 @@ build lands, it renders the same sources itself.
 
 ## 3. Where files live
 
-```
+```text
 docs/assets/diagrams/
   <name>.mmd | .d2 | .puml | .dbml | .vl.json | .excalidraw    the source (edit this)
   rendered/<name>.svg, rendered/<name>.dark.svg               generated; never edit by hand

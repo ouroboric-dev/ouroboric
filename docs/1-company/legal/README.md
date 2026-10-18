@@ -13,7 +13,7 @@ The licence and contribution terms for Ouroboric's public repositories.
 ## Licences
 
 | What | Licence | Why |
-|---|---|---|
+| --- | --- | --- |
 | Factory code (Yggdrasil, Asgard, scripts) | AGPL-3.0 | open source; a changed version that is distributed or offered as a service must publish its source, so no closed copy can be sold |
 | Anything copied into what operators build (realm templates, Asgard templates, own skills, organisation templates) | MIT | operators' products must stay theirs |
 | Documentation | CC BY 4.0 | reuse with credit |

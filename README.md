@@ -18,7 +18,7 @@ The names come from Norse myth; the [naming and mythology record](docs/7-brandin
 ## Contents
 
 | Folder | What's there |
-|---|---|
+| --- | --- |
 | [`1-company/`](docs/1-company/charter.md) | charter, roadmap, legal, readiness |
 | [`4-ways-of-working/`](docs/4-ways-of-working/spec-driven-development.md) | the standards every Ouroboric product follows: [spec-driven development](docs/4-ways-of-working/spec-driven-development.md), [docs](docs/4-ways-of-working/docs-standard.md), [writing styles](docs/4-ways-of-working/writing-styles.md), [diagrams](docs/4-ways-of-working/diagrams.md) |
 | [`5-research/`](docs/5-research/README.md) | company-level research |
@@ -28,7 +28,7 @@ The names come from Norse myth; the [naming and mythology record](docs/7-brandin
 Repositories in the `ouroboric-dev` organisation:
 
 | Repository | Visibility | Role |
-|---|---|---|
+| --- | --- | --- |
 | `.github` | public | organisation profile and defaults (health files, issue forms, PR template); every change is organisation-wide |
 | `ouroboric` | public | this company umbrella |
 | `yggdrasil` | public | the product: the agentic factory |
@@ -40,7 +40,7 @@ factory versions, their own projects, hidden benchmarks and private notes. It ne
 Products, as submodules under [`products/`](products/) (clone with `--recurse-submodules`):
 
 | Product | What it is |
-|---|---|
+| --- | --- |
 | [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the agentic factory |
 | [Asgard](https://github.com/ouroboric-dev/asgard) | Yggdrasil's kickstart realm; moves under `yggdrasil` after Yggdrasil v0 |
 

@@ -19,7 +19,7 @@ the Asgard realm kickstarted), **product umbrellas** (for example, `yggdrasil`, 
 umbrellas use `1-company/` (charter, roadmap, legal, readiness) instead of `1-product/`, and hold the
 standards their products inherit. Every umbrella otherwise uses this layout:
 
-```
+```text
 docs/
   README.md                landing page: what this is, and a map of the folders
   1-product/               DIRECTION (human-approved)
@@ -58,7 +58,7 @@ tutorials teach, how-to guides solve a task, reference describes, explanation gi
 
 ## 2. Leaf template
 
-```
+```text
 README.md                  what the repo is, how to run it, where the docs are
 AGENTS.md                  about 100 lines: a map into docs/, never a manual
 docs/
@@ -72,7 +72,7 @@ Direction, journal and branding live in the umbrella above the leaf.
 ## 3. Required and optional sections
 
 | Section | Company umbrella | Product umbrella | Leaf |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `README.md` | required | required | required |
 | `1-company/charter.md`, `roadmap.md` | required | — | — |
 | `1-company/readiness/` | required (readiness assessments, from the Asgard realm's checklist) | — | — |
@@ -166,6 +166,7 @@ names or code, no client data, no raw transcripts or ledger excerpts from privat
 
 Every public `ouroboric-dev` repo must pass [`scripts/check-repos.sh`](../../scripts/check-repos.sh). It
 checks:
+
 - the repo settings: public, squash merges only, no wiki, and issues on for the factories
   (`yggdrasil`, `asgard`) and off for every other repo;
 - secret scanning with push protection, and private vulnerability reporting;

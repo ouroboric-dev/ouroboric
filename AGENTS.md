@@ -34,7 +34,7 @@ you run it. If you write a reusable script, it goes here with a test in `scripts
 folder.
 
 | Need | Script |
-|---|---|
+| --- | --- |
 | Push, open a pull request or read GitHub as `ouroboric-pr-bot` | `scripts/as-bot.sh <repo> <cmd>`; `--read all` to read. The only way an agent reaches GitHub |
 | Any real-engine run (Podman, devcontainer, the sandbox): the engine, registry config and checks | `scripts/ygg-engine.sh check\|env\|run --folder DIR`. Never set `CONTAINER_HOST` by hand: the root socket is the wrong one |
 | The realms smoke runs (v0-H13, v0-H15) and their evidence | `scripts/ygg-smoke-realms.sh`, `scripts/ygg-smoke-loop.sh`, `scripts/ygg-evidence.sh` |
