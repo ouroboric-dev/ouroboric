@@ -15,15 +15,18 @@ ouroboric: "Ouroboric: the company (the Ouroboros is its symbol)" {
       gleipnir: "Gleipnir\nharness"
       havamal: "Havamal\nskill library"
       gungnir: "Gungnir\ncontract"
+      voluspa: "Voluspa\ngraph library"
       odin -> jorm
       odin -> gleipnir
       gleipnir -> havamal: "loads"
+      voluspa -> odin: "graphs"
     }
     realms: "Realms (recipes for Odin)" {
       grid-columns: 3
       midgard: "Midgard\nweb frontends"
       helheim: "Helheim\nbackend"
-      asgard: "Asgard\nkickstart, Ginnungagap graph" {style.stroke-dash: 4}
+      asgard: "Asgard\nkickstart" {style.stroke-dash: 4}
+      ginnungagap: "Ginnungagap\nmakes realms" {style.stroke-dash: 4}
       jotunheim: "Jotunheim\ngames" {style.stroke-dash: 4}
       muspelheim: "Muspelheim\nmobile" {style.stroke-dash: 4}
       niflheim: "Niflheim\ninfrastructure" {

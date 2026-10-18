@@ -4,12 +4,14 @@ ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
   yggdrasil: "Yggdrasil: agentic factory" {
     asgard: "Asgard realm: kickstart" {
       readiness: "Readiness checklist"
-      ginnungagap: "Ginnungagap\nkickstart graph (later)"
+      kickstart: "kickstart graph (later)"
     }
     odin: "Odin\norchestrator, ygg CLI"
     jorm: "Jormungandr\nbuild, check, fix loop"
     gleipnir: "Gleipnir\nharness: agents, sandbox"
     havamal: "Havamal\nskill library"
+    voluspa: "Voluspa\ngraph library"
+    ginnungagap: "Ginnungagap\nmakes realms (later)" {style.stroke-dash: 4}
     realms: "Realms\nMidgard, Helheim (v0)\nJotunheim, Muspelheim (later)"
     gungnir: "Gungnir\ncontract for all modules" {style.stroke-dash: 4}
     later: "Later: Ratatoskr routing, Norns observability,\nMimir benchmarks, Bragi content" {style.stroke-dash: 4}
@@ -18,6 +20,8 @@ ouroboric: "Ouroboric: the company\ncharter, standards, journal, brand" {
     odin -> jorm
     odin -> gleipnir
     gleipnir -> havamal: "loads skills"
+    voluspa -> odin: "graphs"
+    ginnungagap -> realms: "creates" {style.stroke-dash: 4}
   }
 }
 products: "Companies and products it makes\ne.g. photografy, client gallery"

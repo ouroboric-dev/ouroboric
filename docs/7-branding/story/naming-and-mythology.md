@@ -23,8 +23,9 @@ more (see [the realms](#the-realms)).
 High in the tree sits **Asgard**, the realm of the gods, where direction and order are decided. Asgard
 is the factory's **kickstart realm**: it sets charters, brands, legal ground and roadmaps for new
 companies and products. Like the realm in the myth, it is one of the realms of Yggdrasil, and every
-other realm builds on the direction it sets. Every new company or product begins in **Ginnungagap**,
-the yawning void before creation, which is the name of Asgard's kickstart graph. The **repo tree** (umbrellas and leaves) is the tree's shape.
+other realm builds on the direction it sets. Every new realm begins in **Ginnungagap**, the yawning
+void before creation, where the worlds were shaped. Ginnungagap is the **realm that creates realms**,
+and it stands outside the nine. The **repo tree** (umbrellas and leaves) is the tree's shape.
 
 **Odin**, the All-Father, sits in his high seat and sees all nine worlds. He is the **orchestrator**:
 the graph engine that directs the work and sends his ravens (the agents) out across the realms to
@@ -65,7 +66,10 @@ trackers, hosting and production.
 
 Odin's wisdom is gathered in the **Havamal**, the Sayings of the High One: advice for living well,
 ending with the list of charms Odin knows. Havamal is the **skill library**, and each skill is one of
-Odin's charms: guidance an agent follows. A charm is only kept if it proves it works.
+Odin's charms: guidance an agent follows. A charm is only kept if it proves it works. Its sibling
+poem, the **Voluspa** (the seeress's prophecy), tells the whole course of the world from creation to
+the end. Voluspa is the **graph library**: the order that work follows. Havamal holds what agents
+know, and Voluspa holds the order they work in.
 
 A rule over all of it: **Gungnir**, Odin's spear. Oaths were sworn on its point, and it never
 misses. Gungnir is the **component contract**, the interfaces and schemas every component must honour
@@ -98,6 +102,12 @@ fit is the weakest of the nine. The flavor lists are examples: a flavor gets its
 created. The record of the decision is Yggdrasil's change proposal
 [realm leaf naming](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/changes/2026-10-17-realm-leaf-naming/proposal.md).
 
+**Decided 2026-10-18 (founder).** **Ginnungagap** is a realm outside the nine. Its domain is realms:
+it creates realm leaves through `ygg run`, holds the realm readiness checklist, and is the source of
+what every realm shares. Its leaf is `ginnungagap`. Graphs have descriptive names (`software`,
+`kickstart`), not myth names: myth names are for realms and components. The record is Yggdrasil's
+[Ginnungagap and Voluspa design doc](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/1-product/design/2026-10-18-ginnungagap-design.md).
+
 ## The adversaries
 
 Naming the threats makes them easier to discuss in designs, docs and incident notes.
@@ -116,7 +126,7 @@ means illustrative.
 <!-- diagram: assets/diagrams/ouroboric-long-term-map.d2 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../assets/diagrams/rendered/ouroboric-long-term-map.dark.svg">
-  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir), the nine realms (Midgard and Helheim now; the Asgard kickstart realm with its Ginnungagap graph, Jotunheim and Muspelheim later; Niflheim, Nidavellir, Alfheim and Vanaheim named, not committed), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); a future product factory is illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
+  <img alt="Ouroboric long-term map: inside the company, the journal (sagas) feeds Bragi; Yggdrasil has its v0 core (Odin, Jormungandr, Gleipnir, Havamal, Gungnir, and Voluspa the graph library), the realms (Midgard and Helheim now; the Asgard kickstart realm, Ginnungagap the realm that creates realms, Jotunheim and Muspelheim later; Niflheim, Nidavellir, Alfheim and Vanaheim named, not committed), later modules (Ratatoskr, Norns, Mimir) and optional names (Heimdall, Bifrost); a future product factory is illustrative; Fenrir, the models and agents, is bound by Gleipnir; the adversaries are Loki, Nidhogg and Ragnarok" src="../../assets/diagrams/rendered/ouroboric-long-term-map.svg">
 </picture>
 
 | Name | Role | Status |
@@ -124,14 +134,15 @@ means illustrative.
 | **Ouroboric** | the company: builds open, self-improving factories. The Ouroboros is its symbol | company |
 | **Yggdrasil** (`ygg`) | the agentic factory, and its product umbrella repo. The CLI is `ygg` | v0 |
 | **Asgard** | Yggdrasil's kickstart realm (tier 0): charters, brands, legal basics, roadmaps and readiness for companies and products. A company factory until 2026-10-17 | designed; v0 after Yggdrasil v0 |
-| **Ginnungagap** | the Asgard realm's kickstart graph for companies and products | later (v0 runs the journey by hand) |
+| **Ginnungagap** | the realm that creates realms, outside the nine: the realm contract and readiness checklist, the pieces every realm shares, realm leaves made by `ygg run`. Until 2026-10-18 the name of Asgard's kickstart graph, now `kickstart` | designed; after Yggdrasil v0 |
 | **Odin** | the orchestrator / graph engine: approval points, modes, checkpoints, tree topology, pointer propagation | v0 |
 | **Gungnir** | the component contract: Go interface types and schemas (ledger events, graph.yaml, pack.yaml) | v0 |
 | **Gleipnir** | harness layer: agent adapters, sandbox drivers, context assembly, policies, check runner | v0 |
 | **Jormungandr** | loop layer: build→check→fix semantics, attempts, backoff, budgets, feedback, escalation | v0 |
 | **Ouroboros** | the brand symbol and org (`ouroboric-dev`): self-improvement. Not a module | brand |
-| **realms** | the nine domains of Yggdrasil's work, each with its flavors as leaf repos (`<realm>-<flavor>`): the graph, prompts, stack layer, templates and checks Odin runs. See [the realms](#the-realms) | v0 (Midgard and Helheim: `midgard-react`, `helheim-go`) |
+| **realms** | the nine domains of Yggdrasil's work, each with its flavors as leaf repos (`<realm>-<flavor>`): the stack layer, implementer prompt, templates and checks of the loop Odin runs (the graph moves to Voluspa). See [the realms](#the-realms) | v0 (Midgard and Helheim: `midgard-react`, `helheim-go`) |
 | **Havamal** | the skill library: vendored and own skills, `skills.lock`, evals. Each skill is one of Odin's charms | v0 |
+| **Voluspa** | the graph library: one graph for all software (`software`), later Asgard's `kickstart`. Runs pin it like a realm | designed; before Yggdrasil v0 Phase 5c (name screening pending) |
 | **Ratatoskr** | routing: per-umbrella index bundles, hierarchical descent | later as a module (v0 ships it as a package) |
 | **Norns** | observability: ledger, metrics, reports, live status | later as a module |
 | **Mimir** | benchmarks: kit, frozen briefs, hidden suites, scoring | later (its own milestone) |
