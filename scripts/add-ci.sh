@@ -2,7 +2,8 @@
 # Write the base CI into a folder: .pre-commit-config.yaml (the pieces, in order), .github/workflows/lint.yml
 # and the files that some pieces ship (such as .markdownlint.yaml). The pieces come from --ci, or else from the
 # org config's "ci" list; gitleaks is always first. templates/ci/README.md has the piece format.
-# If any target exists or any piece breaks the format, it exits 2 and writes nothing.
+# If any target exists, a folder it goes in is not a folder, or any piece breaks the format, it exits 2
+# and writes nothing. A piece without a final newline gets one.
 # Run by new-repo.sh; the founder or an agent can run it on any existing folder.
 #   add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] (--check | <dir>)
 # --check validates the pieces and writes nothing. ADD_CI_PIECES replaces the pieces folder.
@@ -19,7 +20,7 @@ ci='' have_ci='' check='' dir=''
 set -- "${RC_REST[@]}"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ci) [ $# -ge 2 ] || die "--ci needs a value"; ci="$2"; have_ci=1; shift ;;
+    --ci) [ $# -ge 2 ] && [ -n "$2" ] || die "--ci needs a value"; ci="$2"; have_ci=1; shift ;;
     --check) check=1 ;;
     -*) die "$usage" ;;
     *) [ -z "$dir" ] || die "$usage"; dir="$1" ;;
@@ -73,20 +74,31 @@ for n in "${names[@]}"; do
     extra+=("$rel") src+=("$p")
   done < <(find "$pieces_dir/$n.files" -type f -print0 | LC_ALL=C sort -z)
 done
+lint="$HERE/templates/ci/lint.yml"
+[ -f "$lint" ] || die "$lint: no such template"
 [ -z "$check" ] || exit 0
 
-# Check every target before writing any.
+# Check every target, and every folder it goes in, before writing any.
 targets=(.pre-commit-config.yaml .github/workflows/lint.yml "${extra[@]+"${extra[@]}"}")
 for f in "${targets[@]}"; do
   [ ! -e "$dir/$f" ] && [ ! -L "$dir/$f" ] || die "$dir/$f exists; nothing was written"
+  p="$(dirname "$f")"
+  while [ "$p" != . ]; do
+    [ -d "$dir/$p" ] || { [ ! -e "$dir/$p" ] && [ ! -L "$dir/$p" ]; } || die "$dir/$p is not a folder; nothing was written"
+    p="$(dirname "$p")"
+  done
 done
 
+# A piece's last line may lack its newline; add one, so the next piece starts on its own line.
 {
   echo "repos:"
-  for n in "${names[@]}"; do cat -- "$pieces_dir/$n.yaml"; done
+  for n in "${names[@]}"; do
+    cat -- "$pieces_dir/$n.yaml"
+    [ -z "$(tail -c 1 -- "$pieces_dir/$n.yaml")" ] || echo
+  done
 } > "$dir/.pre-commit-config.yaml"
 mkdir -p "$dir/.github/workflows"
-cp -- "$HERE/templates/ci/lint.yml" "$dir/.github/workflows/lint.yml"
+cp -- "$lint" "$dir/.github/workflows/lint.yml"
 for i in "${!extra[@]}"; do
   mkdir -p "$(dirname "$dir/${extra[$i]}")"
   cp -- "${src[$i]}" "$dir/${extra[$i]}"

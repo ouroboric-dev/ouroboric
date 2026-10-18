@@ -58,6 +58,15 @@ echo mine > "$T/bad5/.markdownlint.yaml"
 "$S" --org ouroboric-dev "$T/bad5" 2>/dev/null; rc5=$?
 case5() { [ "$rc5" = 2 ] && [ "$(files "$T/bad5")" = "./.markdownlint.yaml " ]; }
 check "an existing piece file: exit 2, nothing else written" case5
+echo mine > "$T/bad6/.github"
+"$S" --org ouroboric-dev "$T/bad6" 2>/dev/null; rc6=$?
+case6() { [ "$rc6" = 2 ] && [ "$(files "$T/bad6")" = "./.github " ]; }
+check "a file named .github: exit 2, nothing else written" case6
+mkdir "$T/bad7"
+"$S" --org ouroboric-dev --ci "" "$T/bad7" 2>/dev/null; rc7=$?
+"$S" --org ouroboric-dev --ci "" --check 2>/dev/null; rc7c=$?
+case7() { [ "$rc7$rc7c" = 22 ] && empty "$T/bad7"; }
+check "--ci with an empty value: exit 2, nothing written" case7
 
 # Fixture pieces that break the contract.
 fx() { # fx <folder> <name> <text>: a fixture pieces folder with a good gitleaks and one piece
@@ -100,6 +109,13 @@ check "a piece with a non-https repo is refused, and named" rule http
 mkdir "$T/out-ok"
 ADD_CI_PIECES="$T/ok" "$S" --org ouroboric-dev --ci ok "$T/out-ok"
 check "a fixture piece that follows the contract is accepted" [ "$(repos "$T/out-ok")" = "gitleaks a " ]
+# A piece without a final newline still gives one well-formed repo: line per piece.
+fx nonl ok "$good"
+printf '  - repo: https://example.com/b\n    rev: v1.2.3\n    hooks:\n      - id: b' > "$T/nonl/nonl.yaml"
+mkdir "$T/out-nonl"
+ADD_CI_PIECES="$T/nonl" "$S" --org ouroboric-dev --ci nonl,ok "$T/out-nonl"
+check "a piece without a final newline: one repo: line per piece" [ "$(repos "$T/out-nonl")" = "gitleaks b a " ]
+check "a piece without a final newline: its last line stays whole" grep -qx '      - id: b' "$T/out-nonl/.pre-commit-config.yaml"
 
 # Two pieces whose files clash.
 mkdir -p "$T/clash/a.files" "$T/clash/b.files"
