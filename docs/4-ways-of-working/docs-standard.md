@@ -186,11 +186,11 @@ Run one check with `--check <name>`, or name repos to check only those.
   using one token: fine-grained, short-lived, owned by the org, repository access "All
   repositories", with Administration, Contents and Workflows read and write. It runs every check
   first: if any named repo already exists, or a piece or the config is wrong, nothing is created.
-  Each new repo gets a first commit with a `README.md`, the licence files and the base CI, then the
-  setup below, so agents only ever see a protected repo. If a step fails after a repo is created,
-  the script names the repo and says it is not protected. Then the founder adds each public repo to
-  the pr-bot's installation, as the script's output says. `--private` makes a hidden repo, which is
-  never added. Another org copies
+  Each new repo gets a first commit with a `README.md`, whose first paragraph is the description,
+  the licence files and the base CI, then the setup below, so agents only ever see a protected
+  repo. If a step fails after a repo is created, the script names the repo and says it is not
+  protected. Then the founder adds each public repo to the pr-bot's installation, as the script's
+  output says. `--private` makes a hidden repo, which is never added. Another org copies
   [`scripts/orgs/ouroboric-dev.json`](../../scripts/orgs/ouroboric-dev.json) to
   `scripts/orgs/<org>.json` and changes the values ([the keys](../../scripts/orgs/README.md)).
 - **Each step also runs alone**, with the same `--org`.
@@ -198,9 +198,9 @@ Run one check with `--check <name>`, or name repos to check only those.
   [`add-licences.sh`](../../scripts/add-licences.sh) and [`add-ci.sh`](../../scripts/add-ci.sh)
   write the licence files and the base CI into a folder, and never overwrite a file. These three
   take `--check`, which runs every check and changes nothing.
-  [`setup-repo.sh <repo>`](../../scripts/setup-repo.sh) applies the setup below to an existing
-  repo. It is safe to run twice and fixes drift, such as an extra ruleset rule. `create-repo.sh`
-  and `setup-repo.sh` need the same token as `new-repo.sh`.
+  [`setup-repo.sh --org <org> <repo>`](../../scripts/setup-repo.sh) applies the setup below to
+  an existing repo. It is safe to run twice and fixes drift, such as an extra ruleset rule.
+  `create-repo.sh` and `setup-repo.sh` need the same token as `new-repo.sh`.
 - **The base CI is pre-commit.** `add-ci.sh` writes `.pre-commit-config.yaml` from pinned pieces,
   and `.github/workflows/lint.yml`, which runs the hooks on every file and gitleaks over the
   history. `gitleaks` always runs. The config's `ci` list, or `--ci`, adds pieces: `reuse`,
@@ -214,8 +214,9 @@ Run one check with `--check <name>`, or name repos to check only those.
 - **Agents scaffold a new Yggdrasil component** with
   [`scripts/scaffold-component.sh <repo> "<job>" <clone>`](../../scripts/scaffold-component.sh), in
   a clone of a new repo, on top of the first commit that `new-repo.sh` made. It adds the files
-  from `scripts/templates/go-component/`, appends its sections to the README that commit holds, keeps the pre-commit config as it is, and leaves the architecture doc's responsibilities for a person to write. The result goes through
-  a PR.
+  from `scripts/templates/go-component/`, appends its sections to the README that commit holds,
+  keeps the pre-commit config as it is, and leaves the architecture doc's responsibilities for a
+  person to write. The result goes through a PR.
 - **Reusable tooling lives here until it has a better home.** Any script that could run again goes
   in `scripts/`, with a test in `scripts/tests/`. When it should move, the Yggdrasil v0 plan's
   "Carried beyond v0" table says where and when. The repo scripts move into Yggdrasil's `github`
