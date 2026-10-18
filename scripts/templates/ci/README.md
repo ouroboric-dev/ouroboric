@@ -10,8 +10,8 @@ Every hook revision is pinned to a release tag.
 | --- | --- | --- |
 | `gitleaks` | gitleaks, plus `gitleaks-history` (manual stage, the whole history) | |
 | `reuse` | reuse-tool, `reuse lint` | |
-| `markdown` | markdownlint-cli2 (the config lets front matter `title:` and an H1 coexist) | `.markdownlint.yaml` |
-| `shell` | shellcheck-py | |
+| `markdown` | markdownlint-cli2. The config bends four rules: MD025 lets front matter `title:` and an H1 coexist; MD010 ignores code blocks, because gofmt requires tabs and the plan tools copy plan code verbatim; MD033 allows `<picture>`, `<source>` and `<img>`, because the docs standard prescribes `<picture>` for themed images and the org profile opens with `<img>`; MD041 is off, because journal entries, PR templates, Claude skill files and the org profile banner open without an H1 on purpose, and the docs standard's front matter rule already checks every other doc's title | `.markdownlint.yaml` |
+| `shell` | shellcheck-py. The config sets `external-sources=true`, because the hook passes no `-x`: without it, SC1091 fires on every sourced file that isn't among the hook's inputs, even with `source-path` directives. It makes shellcheck follow and check sourced files, which is stricter | `.shellcheckrc` |
 | `actions` | actionlint | |
 | `yaml` | yamllint | `.yamllint.yaml` |
 
@@ -40,6 +40,41 @@ A piece may have a `<name>.files/` folder. Its files are copied into the repo at
 Two pieces must not ship the same path.
 
 Realms will ship their own pieces in this format later (the repo-bootstrap proposal, future work item 3).
+
+## Existing repos
+
+`add-ci.sh --upgrade` also works on a repo whose `.pre-commit-config.yaml` is the old gitleaks-only scaffold
+(`upgrade/gitleaks-only.yaml`). It replaces that file, and adds `lint.yml` and the piece files. If the config
+differs by even one byte, it exits 2 and writes nothing; every other target must still not exist.
+
+The rollout to an existing repo, one `base-ci` branch per repo:
+
+1. An agent clones the repo fresh into `rollout/<repo>`, beside the `ouroboric` checkout, and cuts `base-ci`
+   from `origin/main`. It runs `add-ci.sh --upgrade`, then fixes what the hooks flag, formatting only, until
+   both `pre-commit run --all-files` and `pre-commit run --hook-stage manual gitleaks-history --all-files` (the
+   whole history) pass. `md-same-text.sh origin/main HEAD` proves each Markdown fix keeps the text, the code
+   blocks and the links, and turns no rule off with a `markdownlint-disable` comment.
+2. The founder runs `GH_TOKEN=... rollout-ci.sh --org <org> push <repo>...`. It pushes `base-ci`, because the
+   pr-bot can't push `.github/workflows/`, and opens the PR as the pr-bot, or prints the one already open. It
+   records each push in the clone's `refs/rollout-ci/base-ci`. After a rebase, the same command updates the
+   branch, with `--force-with-lease` on that record. If `base-ci` moved on GitHub since the last push (a
+   person's commit, a review suggestion, "Update branch"), push refuses that repo and prints both SHAs. The
+   agent folds the move into the local branch and acknowledges it with
+   `git update-ref refs/rollout-ci/base-ci <GitHub's SHA>`; then the founder runs push again. Once `main` holds
+   `lint.yml`, push leaves the repo alone and says to run protect.
+3. After the merge, the founder runs `rollout-ci.sh --org <org> protect <repo>...`. It runs `setup-repo.sh`, so
+   `lint` becomes required, only on a repo whose `main` holds `lint.yml`, and names the others.
+
+A repo that needs an exclusion keeps it in its own file, never in the shared copies, with a comment that gives
+the reason. Only files that aren't docs or config people read are excluded, such as test inputs read by code,
+or the pieces, which are fragments rather than YAML documents. Nothing is excluded from gitleaks or reuse.
+
+- markdownlint: `.markdownlint-cli2.yaml` holding only `ignores:`. The rules still come from
+  `.markdownlint.yaml`.
+- yamllint: `.yamllint`, holding `extends: .yamllint.yaml` and `ignore:`. yamllint reads it before
+  `.yamllint.yaml`.
+
+`scripts/tests/lint-config.test.sh` proves that both keep the shared rules.
 
 ## Bumping a pin
 

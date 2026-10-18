@@ -211,6 +211,26 @@ Run one check with `--check <name>`, or name repos to check only those.
   repo has. The org's Actions allowlist must hold both of `lint.yml`'s actions, `actions/checkout`
   and `actions/setup-python`, at the SHAs it pins, or `lint` never starts; a pin bump updates the
   allowlist too.
+- **Existing repos get the same base CI.** An agent prepares each repo's `base-ci` branch in a fresh
+  clone under `rollout/`, beside the `ouroboric` checkout. `add-ci.sh --upgrade` replaces the old
+  gitleaks-only config, and formatting-only fixes make the hooks pass;
+  [`scripts/md-same-text.sh`](../../scripts/md-same-text.sh) proves each Markdown fix changes no
+  text. Then the founder runs
+  [`scripts/rollout-ci.sh --org <org> push <repo>…`](../../scripts/rollout-ci.sh). It pushes the
+  branch, because the pr-bot can't push workflows, and opens the PR as the pr-bot. Running it again
+  after a rebase updates the branch and reuses the PR. If `base-ci` moved on GitHub since the last
+  push, it refuses that repo and prints both SHAs: the agent folds the move in and acknowledges it
+  with `git update-ref refs/rollout-ci/base-ci <GitHub's SHA>`, then the founder runs push again.
+  After the merge, push does nothing, and the founder runs
+  `rollout-ci.sh --org <org> protect <repo>…`, which runs `setup-repo.sh`, so `lint` becomes
+  required. It skips and names any repo whose `main` doesn't hold `lint.yml` yet. Both modes are
+  safe to run twice and need the same token as `new-repo.sh`.
+- **A lint config bends only for a reason.** When a linter and the house style disagree, ask
+  whether the house style gets real value from its own way. If yes, the linter bends: the shared
+  config gets a setting, or a repo excludes files that aren't docs or config, such as test inputs,
+  in its own file, with a comment that gives the reason. If no, the files change to the linter's
+  default. Nothing is excluded from gitleaks or reuse.
+  [The bends and their reasons](../../scripts/templates/ci/README.md).
 - **Agents never create repos or change their settings.** They reach GitHub only as
   `ouroboric-pr-bot`, through [`scripts/as-bot.sh`](../../scripts/as-bot.sh), which can't; run the
   checks with `scripts/as-bot.sh --read all scripts/check-repos.sh`.

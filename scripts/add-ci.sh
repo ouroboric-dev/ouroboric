@@ -6,7 +6,9 @@
 # If any target exists, a folder it goes in is not a folder, or any piece breaks the format, it exits 2
 # and writes nothing. A piece without a final newline gets one.
 # Run by new-repo.sh; the founder can also run it on any existing folder.
-#   add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] (--check | <dir>)
+#   add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] [--upgrade] (--check | <dir>)
+# --upgrade lets an existing .pre-commit-config.yaml be replaced, but only if it is byte for byte the old
+# gitleaks-only scaffold (templates/ci/upgrade/gitleaks-only.yaml); any other target must still not exist.
 # --check validates the pieces and writes nothing. ADD_CI_PIECES replaces the pieces folder.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,15 +16,16 @@ die() { echo "add-ci: $*" >&2; exit 2; }
 # shellcheck source=repo-config.sh
 . "$HERE/repo-config.sh"
 
-usage='usage: add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] (--check | <dir>)'
+usage='usage: add-ci.sh (--org <name>|--config <path>) [--ci <piece>,...] [--upgrade] (--check | <dir>)'
 repo_config_args "$@"
 repo_config_load
-ci='' have_ci='' check='' dir=''
+ci='' have_ci='' check='' upgrade='' dir=''
 set -- "${RC_REST[@]}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --ci) [ $# -ge 2 ] && [ -n "$2" ] || die "--ci needs a value"; ci="$2"; have_ci=1; shift ;;
     --check) check=1 ;;
+    --upgrade) upgrade=1 ;;
     -*) die "$usage" ;;
     *) [ -z "$dir" ] || die "$usage"; dir="$1" ;;
   esac
@@ -81,7 +84,12 @@ lint="$HERE/templates/ci/lint.yml"
 
 # Check every target, and every folder it goes in, before writing any.
 targets=(.pre-commit-config.yaml .github/workflows/lint.yml "${extra[@]+"${extra[@]}"}")
+known="$HERE/templates/ci/upgrade/gitleaks-only.yaml"
 for f in "${targets[@]}"; do
+  if [ -n "$upgrade" ] && [ "$f" = .pre-commit-config.yaml ] && [ -f "$dir/$f" ] && [ ! -L "$dir/$f" ]; then
+    cmp -s -- "$known" "$dir/$f" || die "$dir/$f is not the known gitleaks-only file; nothing was written"
+    continue
+  fi
   [ ! -e "$dir/$f" ] && [ ! -L "$dir/$f" ] || die "$dir/$f exists; nothing was written"
   p="$(dirname "$f")"
   while [ "$p" != . ]; do

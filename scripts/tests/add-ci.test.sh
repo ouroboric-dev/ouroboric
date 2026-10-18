@@ -28,6 +28,9 @@ check ".markdownlint.yaml is the piece's file" cmp -s "$PIECES/markdown.files/.m
 mkdir "$T/sh"
 "$S" --org ouroboric-dev --ci shell "$T/sh"
 check "--ci shell: gitleaks then shellcheck-py" [ "$(repos "$T/sh")" = "gitleaks shellcheck-py " ]
+check "--ci shell: it writes the config, lint.yml and .shellcheckrc" \
+  [ "$(files "$T/sh")" = "./.github/workflows/lint.yml ./.pre-commit-config.yaml ./.shellcheckrc " ]
+check ".shellcheckrc is the piece's file" cmp -s "$PIECES/shell.files/.shellcheckrc" "$T/sh/.shellcheckrc"
 mkdir "$T/dup"
 "$S" --org ouroboric-dev --ci gitleaks,gitleaks "$T/dup"
 check "--ci gitleaks,gitleaks: one gitleaks" [ "$(repos "$T/dup")" = "gitleaks " ]
@@ -127,6 +130,43 @@ mkdir "$T/out-clash"
 ADD_CI_PIECES="$T/clash" "$S" --org ouroboric-dev --ci a,b "$T/out-clash" 2>/dev/null; rcc=$?
 caseclash() { [ "$rcc" = 2 ] && empty "$T/out-clash"; }
 check "two pieces with the same file are refused" caseclash
+
+# --upgrade: replace the known gitleaks-only config, and nothing else.
+KNOWN="$HERE/../templates/ci/upgrade/gitleaks-only.yaml"
+known_sha() { [ "$(sha256sum "$KNOWN" | cut -c1-16)" = 7119399c9a531c4a ]; }
+check "the known file is the old scaffold's" known_sha
+mkdir "$T/up1" "$T/up2" "$T/up3" "$T/up4" "$T/up5"
+for d in up1 up2 up3 up4 up5; do cp "$KNOWN" "$T/$d/.pre-commit-config.yaml"; done
+"$S" --org ouroboric-dev --ci reuse,markdown --upgrade "$T/up1"; rcu1=$?
+caseup1() {
+  [ "$rcu1" = 0 ] && [ "$(repos "$T/up1")" = "gitleaks reuse-tool markdownlint-cli2 " ] &&
+    cmp -s "$HERE/../templates/ci/lint.yml" "$T/up1/.github/workflows/lint.yml" &&
+    [ -f "$T/up1/.markdownlint.yaml" ] && [ "$(head -n1 "$T/up1/.pre-commit-config.yaml")" = "repos:" ]
+}
+check "--upgrade replaces the known gitleaks-only config" caseup1
+echo '      - id: extra' >> "$T/up2/.pre-commit-config.yaml"
+"$S" --org ouroboric-dev --upgrade "$T/up2" 2>"$T/up2.err"; rcu2=$?
+caseup2() {
+  [ "$rcu2" = 2 ] && [ "$(files "$T/up2")" = "./.pre-commit-config.yaml " ] &&
+    [ "$(tail -n1 "$T/up2/.pre-commit-config.yaml")" = '      - id: extra' ] &&
+    grep -qxF "add-ci: $T/up2/.pre-commit-config.yaml is not the known gitleaks-only file; nothing was written" "$T/up2.err"
+}
+check "--upgrade refuses a changed config" caseup2
+echo >> "$T/up3/.pre-commit-config.yaml"
+"$S" --org ouroboric-dev --upgrade "$T/up3" 2>/dev/null; rcu3=$?
+caseup3() { [ "$rcu3" = 2 ] && [ "$(files "$T/up3")" = "./.pre-commit-config.yaml " ] && ! cmp -s "$KNOWN" "$T/up3/.pre-commit-config.yaml"; }
+check "--upgrade refuses a trailing blank line" caseup3
+"$S" --org ouroboric-dev "$T/up4" 2>/dev/null; rcu4=$?
+caseup4() { [ "$rcu4" = 2 ] && [ "$(files "$T/up4")" = "./.pre-commit-config.yaml " ] && cmp -s "$KNOWN" "$T/up4/.pre-commit-config.yaml"; }
+check "without --upgrade the known config is refused" caseup4
+mkdir -p "$T/up5/.github/workflows"
+echo mine > "$T/up5/.github/workflows/lint.yml"
+"$S" --org ouroboric-dev --upgrade "$T/up5" 2>/dev/null; rcu5=$?
+caseup5() { [ "$rcu5" = 2 ] && [ "$(files "$T/up5")" = "./.github/workflows/lint.yml ./.pre-commit-config.yaml " ] && cmp -s "$KNOWN" "$T/up5/.pre-commit-config.yaml"; }
+check "--upgrade still refuses an existing lint.yml" caseup5
+"$S" --org ouroboric-dev --check --upgrade; cu=$?
+caseup6() { [ "$cu" = 0 ]; }
+check "--check --upgrade writes nothing and passes" caseup6
 
 # --check.
 mkdir "$T/chk"
