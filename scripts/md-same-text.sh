@@ -2,7 +2,7 @@
 # Prove that a Markdown change is formatting only. An agent runs it after `markdownlint-cli2 --fix`.
 #   md-same-text.sh <base-ref> <head-ref>      run inside a git repo; it reads only, and needs no token
 # For each .md file changed between the refs it prints `same <file>` or `DIFFERS <file>: <why>`:
-#   text   the rendered text differs (whitespace and markup are ignored)
+#   text   the rendered text differs (whitespace and Markdown markup are ignored; raw HTML counts as text)
 #   code   a code block (fenced or indented) differs by any byte, even a tab or a trailing space
 #   links  a link or image target differs (including href= and src= in raw HTML)
 #   added / deleted   the file exists in only one ref

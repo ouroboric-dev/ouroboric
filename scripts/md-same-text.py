@@ -5,7 +5,8 @@
 #   "code":  the contents of fenced and indented code blocks differ by even one byte.
 #   "links": the link and image targets differ (href of links, src of images, href= and src= in raw HTML).
 #            An autolink (<https://...>) is not counted: its target is its text.
-#   "text":  the rendered text differs (tags stripped, entities decoded, whitespace collapsed).
+#   "text":  the rendered text differs (tags stripped, entities decoded, whitespace collapsed). Raw HTML
+#            stays in the text as its source, so `<issue>` and <issue> are the same text.
 # Run it as `python3 -I`, so nothing is imported from the current folder; md-same-text.sh does that
 # through `uvx --with markdown-it-py==3.0.0`. It only reads the two paths.
 import html
@@ -25,6 +26,9 @@ def parts(path):
     with open(path, encoding='utf-8', newline='') as f:
         src = f.read()
     md = MarkdownIt('commonmark').enable('table')
+    # Raw HTML is rendered escaped, so stripping the tags keeps its source as text.
+    for rule in ('html_inline', 'html_block'):
+        md.add_render_rule(rule, lambda self, tokens, idx, options, env: html.escape(tokens[idx].content))
     text = html.unescape(re.sub(r'<[^>]*>', '', md.render(src)))
     toks = list(walk(md.parse(src)))
     code = [t.content for t in toks if t.type in ('fence', 'code_block')]
