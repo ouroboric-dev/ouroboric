@@ -8,7 +8,7 @@ considered, what we chose, and the measured result. In the naming story these en
 ## Entries
 
 | Date | Entry | Tags | Status | Post candidate |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 2026-10-10 | [autonomy modes and hard gates](2026-10-10-autonomy-modes-and-hard-gates.md) | graph, gates, safety, cost | open | yes |
 | 2026-10-10 | [go vs pekko](2026-10-10-go-vs-pekko.md) | stack, cloud, architecture | open | yes |
 | 2026-10-10 | [no lock in](2026-10-10-no-lock-in.md) | harness, adapters, models | open | yes |

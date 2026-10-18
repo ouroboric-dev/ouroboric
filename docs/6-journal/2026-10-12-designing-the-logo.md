@@ -6,15 +6,18 @@ post-candidate: yes
 evidence: [../7-branding/identity/logo/README.md, ../7-branding/identity/logo/concepts/README.md]
 ---
 ## Challenge
+
 Turn the founder's raster logo proposals into a vector logo, a wordmark and a favicon that work from a
 banner down to a 16 px browser tab, in both colour modes.
 
 ## Context
+
 The founder made three proposals as JPEGs, each with a light and a dark version, and later a favicon
 drawing. The typography was already decided: the wordmark had to be Cinzel. The dark versions had
 switched to a light snake, which settled the open question of a contour for dark mode.
 
 ## Options
+
 - **Logo:** carved knot, smooth scales, or a ring of blocks. All three were traced with potrace,
   recoloured to the palette and compared large, at favicon sizes and next to the wordmark.
 - **Favicon:** nine explorations. Geometric rings read as loading spinners. Carved versions came
@@ -22,16 +25,19 @@ switched to a light snake, which settled the open question of a contour for dark
   drawing tuned for 16 px.
 
 ## Decision
+
 The carved knot, for its Nordic character. A favicon that combines the measured head and body with
 the founder's tail, which carries a gate. The wordmark is Cinzel 800 converted to outlines. All three
 proposals and the favicon explorations stay in the repo as concepts.
 
 ## Result
+
 Icon, wordmark and horizontal logo in light and dark, `favicon.svg` that switches with the browser's
 colour scheme, `favicon.ico` with 16, 32 and 48 px layers, and 180, 192 and 512 px app icons. The logo
 files are under the trademark policy instead of CC BY. RB-21 is met.
 
 ## Lessons
+
 - Measure before simplifying. The founder pointed out that the favicon's head sat at 12 o'clock while
   the logo's sits to the right. Measuring the logo's polar profile gave the exact angles and sizes for
   the head, eye and tail.
