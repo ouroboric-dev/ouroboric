@@ -16,3 +16,6 @@ exit code 2.
 | `issues_on` | no | Repos that keep GitHub issues on. All other repos have issues off. |
 | `ci` | no | Pieces of the base CI: `reuse`, `markdown`, `actions`. If absent or empty, only gitleaks runs. |
 | `after_create` | no | Messages for the founder after a repo is created: `public` and `private`. `{repo}` becomes the repo name. |
+
+With a `docs_licence`, `docs_paths` should cover `README.md`. The first commit of `new-repo.sh` holds that
+README as its only docs file, and `reuse lint` fails on a licence text that no file uses.

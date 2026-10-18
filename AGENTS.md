@@ -41,7 +41,10 @@ folder.
 | Build a plan from reference commits, or execute one task by task | `scripts/plan-*` (`plan-generate.py`, `plan-replay.py`, `plan-states.sh`, `plan-red.sh`, `plan-defences.py`; `plan-blocks.py`, `plan-task-start.sh`, `plan-task-done.sh`, `plan-task-land.sh`) |
 | Check that the repos have the required setup | `scripts/as-bot.sh --read all scripts/check-repos.sh` |
 | Scan git history for secrets | `scripts/scan-history.sh` |
+| Create a repo with its first commit (`README.md`, licences, base CI) and its protection | `scripts/new-repo.sh --org <org> <repo> "<description>"`. Founder only |
+| Write the licence files or the base CI into a folder | `scripts/add-licences.sh`, `scripts/add-ci.sh`. Founder only |
 | Scaffold a new Go component | `scripts/scaffold-component.sh` |
 | Render and check diagrams | `scripts/diagrams.sh` |
 
-Only the founder runs `scripts/create-repo.sh`, `scripts/setup-repo.sh` and `scripts/create-pr-bot.sh`.
+Only the founder runs `scripts/new-repo.sh`, `scripts/create-repo.sh`, `scripts/add-licences.sh`, `scripts/add-ci.sh`,
+`scripts/setup-repo.sh` and `scripts/create-pr-bot.sh`.
