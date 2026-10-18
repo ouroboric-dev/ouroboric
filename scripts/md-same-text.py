@@ -62,9 +62,9 @@ old, new = parts(sys.argv[1]), parts(sys.argv[2])
 
 
 def plan_same(a, b):
-    # The (info, body) pairs match byte for byte; the one allowed change is an info string given to a block
-    # that had none (markdownlint MD040), which the CommonMark check above also lets through.
-    return len(a) == len(b) and all(x[1] == y[1] and (x[0] == y[0] or x[0] == '') for x, y in zip(a, b))
+    # The (info, body) pairs match byte for byte; the one allowed change is empty -> `text` (markdownlint MD040).
+    # Other infos matter to the plan tools: bash and output blocks are never applied.
+    return len(a) == len(b) and all(x[1] == y[1] and (x[0] == y[0] or (x[0], y[0]) == ('', 'text')) for x, y in zip(a, b))
 
 
 if new[3] > old[3]:
