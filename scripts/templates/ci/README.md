@@ -46,3 +46,7 @@ Realms will ship their own pieces in this format later (the repo-bootstrap propo
 Change the `rev` in a reviewed pull request. The release must be at least two weeks old. For `lint.yml`, the
 action SHAs and `pre-commit==...` follow the same rule. Run `bash scripts/tests/add-ci.test.sh` before the
 pull request, because it runs every hook for real.
+
+An org whose Actions policy allows only listed actions (ouroboric-dev's does) must list both of `lint.yml`'s
+actions, `actions/checkout` and `actions/setup-python`, at the exact SHAs it pins. Otherwise `lint` ends in
+`startup_failure` and never runs. So a bump of either action SHA also updates the org's allowlist.

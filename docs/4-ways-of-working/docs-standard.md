@@ -184,7 +184,8 @@ Run one check with `--check <name>`, or name repos to check only those.
 - **The founder creates repos** with
   [`scripts/new-repo.sh --org <org> [--private] [--ci <piece>,...] <repo> "<description>"…`](../../scripts/new-repo.sh),
   using one token: fine-grained, short-lived, owned by the org, repository access "All
-  repositories", with Administration, Contents and Workflows read and write. It runs every check
+  repositories", with Administration, Contents and Workflows read and write. A real run confirmed
+  this token on 2026-10-18; a token limited to selected repositories is untested. It runs every check
   first: if any named repo already exists, or a piece or the config is wrong, nothing is created.
   Each new repo gets a first commit with a `README.md`, whose first paragraph is the description,
   the licence files and the base CI, then the setup below, so agents only ever see a protected
@@ -207,7 +208,9 @@ Run one check with `--check <name>`, or name repos to check only those.
   `markdown`, `shell`, `actions` and `yaml` ([the pieces](../../scripts/templates/ci/README.md)).
   The convention: `lint.yml` has the required job `lint`, and `ci.yml`, the repo's own tests, has
   the required job `test`. `setup-repo.sh` requires the check of each of these workflows that the
-  repo has.
+  repo has. The org's Actions allowlist must hold both of `lint.yml`'s actions, `actions/checkout`
+  and `actions/setup-python`, at the SHAs it pins, or `lint` never starts; a pin bump updates the
+  allowlist too.
 - **Agents never create repos or change their settings.** They reach GitHub only as
   `ouroboric-pr-bot`, through [`scripts/as-bot.sh`](../../scripts/as-bot.sh), which can't; run the
   checks with `scripts/as-bot.sh --read all scripts/check-repos.sh`.

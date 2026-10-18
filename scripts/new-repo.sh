@@ -11,7 +11,8 @@
 # so. Stops at the first error: in a batch, the repos before it are complete. It never prompts.
 # Founder-run: GH_TOKEN must hold the admin token: fine-grained, short-lived, owned by the org,
 # repository access "All repositories", with Administration, Contents and Workflows read and write
-# (the pr-bot can't create repos).
+# (the pr-bot can't create repos). A real run confirmed this token on 2026-10-18; a token limited to
+# selected repositories is untested. The org's Actions allowlist must hold lint.yml's two actions.
 #   GH_TOKEN=... new-repo.sh (--org <name>|--config <path>) [--private] [--ci <piece>,...] <repo> "<description>" [<repo> "<description>"]...
 # --private makes private repos, such as huldra, the hidden benchmark suite. --ci replaces the
 # config's base CI pieces. After each repo, it prints the config's after-create message, such as how
