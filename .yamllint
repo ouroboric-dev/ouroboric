@@ -1,0 +1,4 @@
+extends: .yamllint.yaml
+
+# The pieces are fragments indented to sit under repos: (the piece contract), not YAML documents.
+ignore: scripts/templates/ci/pieces/
