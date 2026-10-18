@@ -227,7 +227,8 @@ Run one check with `--check <name>`, or name repos to check only those.
   required. It skips and names any repo whose `main` doesn't hold `lint.yml` yet. Both modes are
   safe to run twice and need the same token as `new-repo.sh`.
 - **A realm repo holds three more things.** Its own `ci.yml`, with the required job `test`, which
-  runs the realm's tests with the template tests set to fail, not skip. A `ci.yml` in each template
+  runs the realm's tests with the template tests set to fail, not skip (helheim-go has one
+  template test that still skips in CI, until its backlog item B-057 lands). A `ci.yml` in each template
   (job `test`), on the stack's pinned images. And a readiness assessment against the
   [realm readiness checklist](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/realm-readiness.md),
   filed in the Yggdrasil repo. The `shared` check of `check-repos.sh` fails when a realm's copy of a

@@ -26,10 +26,15 @@ fix the gaps in one pass.
 Write the checklist, 22 items (RR-01 to RR-22), then retrofit. The retrofit gave each build realm:
 
 - a root `ci.yml` with one required job, `test`, that runs the tests with `YGG_REQUIRE_TEMPLATES=1`,
-  so the template tests fail rather than skip;
+  so the template tests fail rather than skip (one template test in helheim-go still skips in CI, B-057);
 - a `ci.yml` in each template, kept matched to the stack by a realm test, `TestTemplateCI`;
 - a protected path: the ladder's rung 1 (and every web rung) refuses a task's change under
-  `.github/`, so a run can't weaken its own CI;
+  `.github/`, which covers the product's workflows. It does not yet cover everything a run could use to
+  weaken its own CI. Not refused yet: the tool configs the product's CI reads, and the files that
+  `lint.yml` runs from (`.pre-commit-config.yaml`, the gitleaks, markdownlint, yamllint and shellcheck
+  configs, `REUSE.toml`, `LICENSES/`), which wait on one founder decision
+  ([B-055](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/backlog.md)); and, in the web
+  ladder, `.devcontainer/` ([B-063](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/backlog.md));
 - one `docs.sh`, byte for byte the same in both realms, with a `shared` check in `check-repos.sh`
   that fails closed;
 - the org's base CI, `lint`, through the base CI rollout.
