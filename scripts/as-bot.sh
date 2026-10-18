@@ -53,6 +53,7 @@ token="$(call POST "/app/installations/$inst/access_tokens" "$req" | jq -r .toke
 # An empty helper drops every helper configured before it, so ours is the only one for github.com.
 # Git applies the longest matching insteadOf, so the ouroboric-dev rule beats any global rule that
 # sends https://github.com/ to SSH.
+# shellcheck disable=SC2016  # the credential helper is single-quoted on purpose: git runs it, so $1 and $GH_TOKEN expand there
 export GH_TOKEN="$token" GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=5 \
   GIT_CONFIG_KEY_0="credential.https://github.com.helper" GIT_CONFIG_VALUE_0="" \
   GIT_CONFIG_KEY_1="credential.https://github.com.helper" \

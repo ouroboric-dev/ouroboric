@@ -8,6 +8,7 @@ fail=0
 check() { local d="$1"; shift; if "$@" 2>/dev/null; then echo "ok   $d"; else echo "FAIL $d"; fail=1; fi; }
 
 # form_ok <file>: valid YAML with the top-level keys GitHub's issue-form schema requires
+# shellcheck disable=SC2329  # form_ok runs through check
 form_ok() {
   python3 -I - "$1" <<'PY'
 import sys
@@ -25,6 +26,7 @@ ok = isinstance(d, dict) and all(k in d for k in ("name", "description", "body")
 sys.exit(0 if ok else 1)
 PY
 }
+# shellcheck disable=SC2329  # mentions runs through check
 mentions() { grep -qi -- "$2" "$1"; }
 
 for repo in yggdrasil asgard; do

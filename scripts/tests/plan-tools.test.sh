@@ -14,6 +14,7 @@ check() {
 }
 # run CMD...: run it, keep its output in $T/out and its exit code in $rc.
 run() { "$@" >"$T/out" 2>&1; rc=$?; }
+# shellcheck disable=SC2329  # has runs through check
 has() { grep -q -- "$1" "$T/out"; }
 g() { git -C "$1" -c user.name=Test -c user.email=test@example.invalid "${@:2}"; }
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -183,10 +184,12 @@ check "replay applies each task's blocks to the repo the task names, bash blocks
   bash -c "[ $rc = 0 ] && grep -q 'fx-T001: 2 blocks applied to app' '$T/out' && grep -q 'fx-T002: 2 blocks applied to app' '$T/out'"
 check "replay leaves the code the task commits left" \
   bash -c "git -C '$REF/app' show $C2:greet.go | cmp -s - '$WORK/app/greet.go' && git -C '$REF/app' show $C2:greet_test.go | cmp -s - '$WORK/app/greet_test.go'"
+# shellcheck disable=SC2016  # the printf format holds literal backticks and $, not expansions
 printf '### Task zz-T001: elsewhere\n\n**Files (in `other`):**\n- Create: `x.go`\n' > "$T/other.md"
 run python3 -I "$S/plan-replay.py" "$T/other.md" "$WORK"
 check "replay skips a task whose repo is not in the work directory" bash -c "[ $rc = 0 ] && grep -q 'zz-T001: skipped' '$T/out'"
 # A heading-looking line inside a code block is the code's, not a new task (a test of a plan reader has them).
+# shellcheck disable=SC2016  # the printf format holds literal backticks and $, not expansions
 printf '### Task fx-T031: a task whose code holds a heading\n\n**Files (in `app`):**\n- Create: `inner.txt`\n\nWrite `inner.txt`:\n\n````text\nfirst\n### Task fx-T032: not a task\nlast\n````\n\n### Task fx-T033: the next task\n\n**Files (in `app`):**\n- Create: `next.txt`\n\nWrite `next.txt`:\n\n```text\nnext\n```\n' > "$T/fenced-heading.md"
 WORK3="$T/work3"; mkdir "$WORK3"
 git clone -q "$REF/app" "$WORK3/app" && git -C "$WORK3/app" checkout -q "$B0"
@@ -232,6 +235,7 @@ run python3 -I "$S/plan-blocks.py" "$WS3" fx-T032
 check "blocks does not take a heading inside a code block for a task" bash -c "[ $rc != 0 ] && grep -q 'no task fx-T032' '$T/out'"
 
 WS4="$U/.superpowers/sdd/tasks-exec"; mkdir -p "$WS4" "$U/docs/plans/x"
+# shellcheck disable=SC2016  # the printf format holds literal backticks and $, not expansions
 printf '### Task fx-T033: a script\n\n**Files (in `app`):**\n- Create: `run.sh`\n\nWrite `run.sh` (executable):\n\n```sh\n#!/bin/sh\n```\n\nWrite `plain.txt`:\n\n```text\nx\n```\n' > "$U/docs/plans/x/tasks.md"; printf 'docs/plans/x/tasks.md\n' > "$WS4/plan-path"
 run python3 -I "$S/plan-blocks.py" "$WS4" fx-T033 0 1
 check "blocks makes a file executable when the plan marks it, and no other" \
@@ -248,6 +252,7 @@ run "$S/plan-task-start.sh" "$WS" fx-T099 app
 check "task-start exits 3 for a task the plan lacks" bash -c "[ $rc = 3 ]"
 WS2="$U/.superpowers/sdd/tasks-fenced"; mkdir -p "$WS2" "$U/docs/plans/f"
 printf 'docs/plans/f/tasks.md\n' > "$WS2/plan-path"
+# shellcheck disable=SC2016  # the printf format holds literal backticks and $, not expansions
 printf '### Task fx-T001: one\n\n```text\n### Task fx-T002: a heading inside a fence\n```\n\nmore of one\n\n### Task fx-T002: two\n\nsecond\n' > "$U/docs/plans/f/tasks.md"
 run "$S/plan-task-start.sh" "$WS2" fx-T001 app
 check "a heading inside a code fence does not end the task" \

@@ -34,7 +34,7 @@ runs="$project/.factory/runs"
 run="${pos[1]:-}"
 if [ -z "$run" ]; then
   [ -d "$runs" ] || { echo "ygg-evidence: $runs does not exist: no run yet" >&2; exit 2; }
-  run="$(ls -1 "$runs" | sort | tail -n 1)"
+  for r in "$runs"/*; do [ -e "$r" ] && run="${r##*/}"; done   # the glob sorts, so the last one is the latest
   [ -n "$run" ] || { echo "ygg-evidence: $runs holds no run" >&2; exit 2; }
 fi
 ledger="$runs/$run/ledger.jsonl"

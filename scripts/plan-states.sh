@@ -9,7 +9,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ $# -eq 4 ] || { echo "usage: plan-states.sh REFERENCE REPO BASE HEAD" >&2; exit 2; }
-# shellcheck source=plan-lib.sh
+# shellcheck source-path=SCRIPTDIR source=plan-lib.sh
 . "$HERE/plan-lib.sh"
 ref="$(cd "$1" && pwd -P)" repo="$2" base="$3" head="$4"
 unset GOWORK

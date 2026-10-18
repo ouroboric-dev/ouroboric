@@ -6,7 +6,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ $# -ge 6 ] && [ "$5" = "--" ] || { echo "usage: plan-task-done.sh WORKSPACE TASK REPO BASE -- COMMAND..." >&2; exit 2; }
-# shellcheck source=plan-lib.sh
+# shellcheck source-path=SCRIPTDIR source=plan-lib.sh
 . "$HERE/plan-lib.sh"
 plan_load "$1" || exit 2
 id="$2" repo="$3" base="$4"

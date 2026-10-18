@@ -12,7 +12,9 @@ check() {
   if "$@"; then echo "ok   $d"; else echo "FAIL $d"; fail=1; [ -z "${VERBOSE:-}" ] || sed 's/^/     | /' "$T/out"; fi
 }
 run() { "$@" >"$T/out" 2>&1; rc=$?; }
+# shellcheck disable=SC2329  # has and hasnt run through check
 has() { grep -q -F -- "$1" "$T/out"; }
+# shellcheck disable=SC2329  # has and hasnt run through check
 hasnt() { ! grep -q -F -- "$1" "$T/out"; }
 export HOME="$T/home"; mkdir -p "$HOME"
 export YGG_ENGINE_CHECK=0 # the engine environment has its own test (ygg-engine.test.sh)
@@ -41,6 +43,7 @@ case "$1" in
     exit "${FAKE_RUN_RC:-0}" ;;
 esac
 EOF
+# shellcheck disable=SC2016  # the printf format holds a literal ${...}, not an expansion
 printf '#!/usr/bin/env bash\necho "${FAKE_CLI_VERSION:-0.89.0}"\n' > "$T/bin/devcontainer"
 chmod +x "$T/bin/ygg" "$T/bin/devcontainer"
 export PATH="$T/bin:$PATH"
@@ -137,13 +140,15 @@ YGG_BIND="$T/missing" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "a missing bind mount is refused (realms)" test "$rc" -eq 2
 FAKE_RUN_RC=5 run "$S/ygg-smoke-realms.sh" --build "${rargs[@]}"
 check "the exit code of the run is the script's (realms)" test "$rc" -eq 5
-check "a project is made, with no leaf" test -f "$(ls -d "$R"/smoke-realms-*/ | head -n 1)umbrella.yaml"
+projects=("$R"/smoke-realms-*/)
+check "a project is made, with no leaf" test -f "${projects[0]}umbrella.yaml"
 check "the images of every realm are built on request" has "built"
 check "the report is printed (realms)" has "# ygg evidence: run 20261017-000000-000001"
 check "the credential is not in the saved realms report" test -z "$(grep -F -- "$SECRET" "$R/h13-report.txt")"
 sleep 1
 FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
-check "each run gets a project of its own" test "$(ls -d "$R"/smoke-realms-*/ | wc -l)" -eq 2
+projects=("$R"/smoke-realms-*/)
+check "each run gets a project of its own" test "${#projects[@]}" -eq 2
 
 # The same script runs the content smoke run: another lead realm, a brief, and a tag for its files.
 printf 'a brief\n' > "$T/brief.md"

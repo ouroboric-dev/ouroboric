@@ -3,6 +3,7 @@
 #   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot]... [repo...]
 # The bot check also checks that the pr-bot can't reach any hidden repo. Run it under
 # as-bot.sh --read all, because it reads the pr-bot's own list of repos.
+# shellcheck disable=SC2015,SC2329  # `cond && ok || bad` reports only (ok and bad just print); checks run by name as check_$c
 set -uo pipefail
 ROOT="${CHECK_REPOS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"   # holds the side-by-side clones
 ORG="ouroboric-dev"

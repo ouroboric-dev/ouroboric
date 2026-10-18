@@ -219,6 +219,7 @@ cmd_check() {
       fi
     done < <(sources "$repo")
     # every marker must name an existing source and be followed by its rendered SVG
+    # shellcheck disable=SC2016  # the awk program is single-quoted on purpose; the shell must not expand it
     while IFS=: read -r file _ marker; do
       local srcrel; srcrel="$(sed -E 's/.*<!-- diagram: ([^ ]+) -->.*/\1/' <<<"$marker")"
       [ -f "$repo/docs/$srcrel" ] || { echo "BROKEN MARKER $file -> $srcrel"; bad=1; }

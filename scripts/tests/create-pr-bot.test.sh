@@ -19,7 +19,8 @@ start() { # start DIR: runs create-pr-bot.sh in the background and waits for its
 openssl genrsa -out "$T/fake.pem" 2048 2>/dev/null
 FAKE_PEM="$T/fake.pem" python3 -I "$HERE/fake-github.py" "$T/log" "$T/port" &
 for _ in $(seq 50); do [ -s "$T/port" ] && break; sleep 0.1; done
-export PR_BOT_API="http://127.0.0.1:$(cat "$T/port")" PR_BOT_WEB="http://example.invalid"
+PR_BOT_API="http://127.0.0.1:$(cat "$T/port")"
+export PR_BOT_API PR_BOT_WEB="http://example.invalid"
 
 start "$T/cfg/pr-bot"
 state="$(grep -o 'state=[0-9a-f]*' "$T/page" | head -1 | cut -d= -f2)"
