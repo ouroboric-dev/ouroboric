@@ -28,6 +28,9 @@ check ".markdownlint.yaml is the piece's file" cmp -s "$PIECES/markdown.files/.m
 mkdir "$T/sh"
 "$S" --org ouroboric-dev --ci shell "$T/sh"
 check "--ci shell: gitleaks then shellcheck-py" [ "$(repos "$T/sh")" = "gitleaks shellcheck-py " ]
+check "--ci shell: it writes the config, lint.yml and .shellcheckrc" \
+  [ "$(files "$T/sh")" = "./.github/workflows/lint.yml ./.pre-commit-config.yaml ./.shellcheckrc " ]
+check ".shellcheckrc is the piece's file" cmp -s "$PIECES/shell.files/.shellcheckrc" "$T/sh/.shellcheckrc"
 mkdir "$T/dup"
 "$S" --org ouroboric-dev --ci gitleaks,gitleaks "$T/dup"
 check "--ci gitleaks,gitleaks: one gitleaks" [ "$(repos "$T/dup")" = "gitleaks " ]

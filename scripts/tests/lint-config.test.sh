@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests for the shared lint config (the markdown and yaml pieces).   scripts/tests/lint-config.test.sh
-# Every case is a real run: add-ci.sh --ci markdown,yaml in a temp git repo, then pre-commit run --all-files.
+# Tests for the shared lint config (the markdown, yaml and shell pieces).   scripts/tests/lint-config.test.sh
+# Every case is a real run: add-ci.sh --ci markdown,yaml (or shell) in a temp git repo, then pre-commit run --all-files.
 # They need the network the first time, as add-ci.test.sh does.
 # shellcheck disable=SC2329,SC2016  # the case functions are called by check; the printf texts hold literal backticks
 set -uo pipefail
@@ -12,11 +12,11 @@ fail=0
 check() { local d="$1"; shift; if "$@"; then echo "ok   $d"; else echo "FAIL $d"; fail=1; fi; }
 pc() { uvx -q --from 'pre-commit==4.6.2' pre-commit "$@"; }
 
-# mk <name>: a git repo with the markdown and yaml pieces. The caller adds files, then runs lint.
+# mk <name> [pieces]: a git repo with the pieces (default markdown,yaml). The caller adds files, then runs lint.
 mk() {
   mkdir -p "$T/$1"
   git -C "$T/$1" init -q -b main
-  "$S" --org ouroboric-dev --ci markdown,yaml "$T/$1"
+  "$S" --org ouroboric-dev --ci "${2:-markdown,yaml}" "$T/$1"
 }
 # lint <name>: stage everything and run the hooks. Output goes to $T/<name>.log; the exit code is returned.
 lint() {
@@ -77,5 +77,16 @@ yx() { # only y.yaml is flagged, on line-length from the shared file
     && ! grep -q 'ok.yaml' "$T/yx.log"
 }
 check "a .yamllint that extends the shared config skips testdata and keeps its rules" yx
+
+# shellcheck-py passes no -x, so shellcheck follows a sourced file only when that file is among its
+# inputs, or through the piece's .shellcheckrc. A commit that changes only main.sh passes only main.sh.
+mk src shell
+printf '#!/usr/bin/env bash\n# shellcheck source-path=SCRIPTDIR\nset -euo pipefail\nHERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n# shellcheck source=lib.sh\n. "$HERE/lib.sh"\ngreet\n' > "$T/src/main.sh"
+printf '#!/usr/bin/env bash\ngreet() { echo hi; }\n' > "$T/src/lib.sh"
+src() {
+  git -C "$T/src" add -- .
+  (cd "$T/src" && pc run --files main.sh >"$T/src.log" 2>&1) || { cat "$T/src.log"; return 1; }
+}
+check "a script that sources a sibling with source-path=SCRIPTDIR passes shellcheck on its own" src
 
 exit $fail
