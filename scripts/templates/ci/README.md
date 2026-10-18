@@ -10,7 +10,7 @@ Every hook revision is pinned to a release tag.
 | --- | --- | --- |
 | `gitleaks` | gitleaks, plus `gitleaks-history` (manual stage, the whole history) | |
 | `reuse` | reuse-tool, `reuse lint` | |
-| `markdown` | markdownlint-cli2 | `.markdownlint.yaml` |
+| `markdown` | markdownlint-cli2 (the config lets front matter `title:` and an H1 coexist) | `.markdownlint.yaml` |
 | `shell` | shellcheck-py | |
 | `actions` | actionlint | |
 | `yaml` | yamllint | `.yamllint.yaml` |

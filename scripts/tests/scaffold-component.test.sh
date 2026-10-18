@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests for scaffold-component.sh on a local repo laid out like new-repo.sh's first commit.
 #   scripts/tests/scaffold-component.test.sh
+# shellcheck disable=SC2329,SC2015  # realrun is called by check; the &&-chain then "show the log" is meant
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCAFFOLD="$HERE/../scaffold-component.sh"
@@ -87,5 +88,22 @@ check "a folder without README.md is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T
 newrepo "$T/bad"
 "$SCAFFOLD" ../bad "Bad." "$T/bad" 2>/dev/null; rc=$?
 check "a bad repo name is refused" bash -c "[ $rc = 2 ] && [ ! -e '$T/bad/go.mod' ]"
+
+# The real run: a first commit as new-repo.sh makes it, then the scaffold, must pass the base CI.
+pc() { uvx -q --from 'pre-commit==4.6.2' pre-commit "$@"; }
+realrun() { # realrun DIR REPO [SCAFFOLD OPTION]
+  local R="$1"
+  mkdir "$R" && git -C "$R" init -q -b main &&
+    "$HERE/../add-licences.sh" --org ouroboric-dev --year 2026 "$R" &&
+    "$HERE/../add-ci.sh" --org ouroboric-dev "$R" &&
+    printf '# %s\n\nA stub.\n' "$2" > "$R/README.md" &&
+    git -C "$R" add -- . &&
+    git -C "$R" -c user.name=t -c user.email=t@example.com commit -q -m first &&
+    "$SCAFFOLD" ${3:+"$3"} "$2" "The $2 job." "$R" >/dev/null &&
+    git -C "$R" add -- . &&
+    (cd "$R" && pc run --all-files >"$R.log" 2>&1) || { cat "$R.log" 2>/dev/null; return 1; }
+}
+check "the scaffold passes the base CI" realrun "$T/real" gamma
+check "the scaffold with --mit-templates passes the base CI" realrun "$T/realmit" midgard-react --mit-templates
 
 exit $fail
