@@ -78,7 +78,7 @@ yx() { # only y.yaml is flagged, on line-length from the shared file
 }
 check "a .yamllint that extends the shared config skips testdata and keeps its rules" yx
 
-# shellcheck-py passes no -x, so shellcheck follows a sourced file only when that file is among its
+# The shellcheck-py hook passes no -x, so shellcheck follows a sourced file only when that file is among its
 # inputs, or through the piece's .shellcheckrc. A commit that changes only main.sh passes only main.sh.
 mk src shell
 printf '#!/usr/bin/env bash\n# shellcheck source-path=SCRIPTDIR\nset -euo pipefail\nHERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n# shellcheck source=lib.sh\n. "$HERE/lib.sh"\ngreet\n' > "$T/src/main.sh"
