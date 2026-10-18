@@ -11,7 +11,6 @@
 # Needs podman, curl, unzip, python3 and uv (uv runs the pinned fonttools that embeds Inter in Mermaid SVGs).
 set -euo pipefail
 
-KROKI_URL="${KROKI_URL:-http://localhost:8000}"
 KROKI_TAG="0.32.1"
 POD="ouroboric-kroki"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,11 +26,11 @@ FONTTOOLS="fonttools[woff]==4.60.1"
 D2_FONTS=(-e D2_FONT_REGULAR=/tmp/fonts/Inter-Regular.ttf -e D2_FONT_ITALIC=/tmp/fonts/Inter-Italic.ttf
           -e D2_FONT_SEMIBOLD=/tmp/fonts/Inter-SemiBold.ttf -e D2_FONT_BOLD=/tmp/fonts/Inter-Bold.ttf)
 
-# Diagram sources describe architecture and security controls; never send them to a third party.
-case "$KROKI_URL" in
-  http://localhost:*|http://127.0.0.1:*) ;;
-  *) [ "${DIAGRAMS_ALLOW_REMOTE:-}" = "1" ] || { echo "refusing non-local KROKI_URL ($KROKI_URL); set DIAGRAMS_ALLOW_REMOTE=1 to override" >&2; exit 2; } ;;
-esac
+# Kroki is reached only from inside its pod, on the pod's loopback; the pod publishes no host port.
+# Diagram sources describe architecture and security controls, so they never leave the machine; and no
+# host port means no port-forwarding rules, which a crashed container can leave behind to shadow the port.
+# kroki <dialect>: POST stdin to Kroki, print the SVG.
+kroki() { podman exec -i "$POD-core" curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @- "http://127.0.0.1:8000/$1/svg"; }
 
 dialect() {
   case "$1" in
@@ -95,9 +94,8 @@ fetch_fonts() {
   rm -r -- "${tmp:?}"
 }
 wait_ready() {
-
   for _ in $(seq 60); do
-    printf 'flowchart LR\n  a --> b\n' | curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @- "$KROKI_URL/mermaid/svg" -o /dev/null && return
+    printf 'flowchart LR\n  a --> b\n' | kroki mermaid >/dev/null 2>&1 && return
     sleep 1
   done
   echo "Kroki did not become ready" >&2; exit 1
@@ -125,13 +123,13 @@ cmd_up() {
     local auth; auth="$(mktemp -d)"; echo '{}' > "$auth/auth.json"
     export REGISTRY_AUTH_FILE="$auth/auth.json" DOCKER_CONFIG="$auth"
     podman pull -q --authfile "$auth/auth.json" "docker.io/yuzutech/kroki-mermaid:$KROKI_TAG" "docker.io/yuzutech/kroki:$KROKI_TAG" >/dev/null
-    podman pod create --name "$POD" -p 127.0.0.1:8000:8000 >/dev/null
+    podman pod create --name "$POD" >/dev/null
     podman run -d --pod "$POD" --name "$POD-mermaid" "docker.io/yuzutech/kroki-mermaid:$KROKI_TAG" >/dev/null
     podman run -d --pod "$POD" --name "$POD-core" -e KROKI_MERMAID_HOST=127.0.0.1 "docker.io/yuzutech/kroki:$KROKI_TAG" >/dev/null
     wait_ready
   fi
   install_fonts
-  echo "kroki on $KROKI_URL, with Inter"
+  echo "kroki in pod $POD, with Inter"
 }
 cmd_down() { podman pod rm -f "$POD" >/dev/null && echo "removed $POD"; }
 
@@ -171,7 +169,7 @@ render_one() {
   case "$d" in
     mermaid)
       { theme "$mode" mermaid-init; cat "$src"; echo; theme "$mode" mermaid-classes; } \
-        | curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @- "$KROKI_URL/mermaid/svg" -o "$svg" || return 1
+        | kroki mermaid > "$svg" || return 1
       finish_mermaid "$svg" "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["bg"])' "$TOKENS" "$mode")" || return 1 ;;
     d2)
       # D2 runs in the local pod rather than through Kroki's HTTP API: only the CLI accepts custom fonts.
@@ -181,7 +179,7 @@ render_one() {
       fi
       rm -f -- "${err:?}" ;;
     *)
-      curl -sf -X POST -H 'Content-Type: text/plain' --data-binary @"$src" "$KROKI_URL/$d/svg" -o "$svg" ;;
+      kroki "$d" < "$src" > "$svg" ;;
   esac
 }
 
