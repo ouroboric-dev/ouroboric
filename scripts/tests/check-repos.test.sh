@@ -43,4 +43,35 @@ check "settings, factory repo with issues on: PASS" [ "$(settings_result yggdras
 check "settings, factory repo with issues off: FAIL" [ "$(settings_result asgard false)" = FAIL ]
 check "settings, other repo with issues off: PASS" [ "$(settings_result gungnir false)" = PASS ]
 check "settings, other repo with issues on: FAIL" [ "$(settings_result ouroboric true)" = FAIL ]
+# shared: the realms carry one copy of each shared script, and helheim-go's is the source.
+# A fixture umbrella: <helheim-go file content|-> <midgard-react file content|-|nodir>
+F=devcontainer/checks/docs.sh
+shared_root() {
+  local d; d="$(mktemp -d -p "$T")"
+  mkdir -p "$d/yggdrasil/helheim-go/devcontainer/checks"
+  [ "$1" = - ] || printf '%s\n' "$1" > "$d/yggdrasil/helheim-go/$F"
+  if [ "$2" != nodir ]; then
+    mkdir -p "$d/yggdrasil/midgard-react/devcontainer/checks"
+    [ "$2" = - ] || printf '%s\n' "$2" > "$d/yggdrasil/midgard-react/$F"
+  fi
+  echo "$d"
+}
+shared() { CHECK_REPOS_ROOT="$1" "$HERE/../check-repos.sh" --check shared "$2"; }
+r="$(shared_root same same)"
+check "shared, same file in both realms: PASS" [ "$(shared "$r" midgard-react)" = "PASS midgard-react shared" ]
+check "shared, helheim-go against itself: PASS" [ "$(shared "$r" helheim-go)" = "PASS helheim-go shared" ]
+r="$(shared_root same other)"
+check "shared, one byte different: FAIL naming docs.sh" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $F differs from helheim-go's" ]
+r="$(shared_root same -)"
+check "shared, file missing in midgard-react: FAIL naming the path" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/midgard-react/$F is missing" ]
+r="$(shared_root same nodir)"
+check "shared, midgard-react not checked out: FAIL naming the path" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/midgard-react/$F is missing" ]
+check "shared, not a realm: PASS" [ "$(shared "$r" gungnir)" = "PASS gungnir shared: not a realm" ]
+r="$(shared_root - same)"
+check "shared, helheim-go's source missing: FAIL for midgard-react" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/helheim-go/$F is missing" ]
+check "shared, helheim-go's source missing: FAIL for helheim-go" [ "$(shared "$r" helheim-go)" = "FAIL helheim-go shared: $r/yggdrasil/helheim-go/$F is missing" ]
+# A hash that can't be computed must fail closed, not compare equal as two empty strings.
+mkdir -p "$T/nohash" && printf '#!/bin/sh\nexit 1\n' > "$T/nohash/sha256sum" && chmod +x "$T/nohash/sha256sum"
+r="$(shared_root same same)"
+check "shared, sha256sum fails: FAIL naming the file" [ "$(PATH="$T/nohash:$PATH" shared "$r" midgard-react)" = "FAIL midgard-react shared: can't read $r/yggdrasil/helheim-go/$F" ]
 exit $fail
