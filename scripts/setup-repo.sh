@@ -17,6 +17,7 @@ repo_config_args "$@"
 repo_config_load
 [ ${#RC_REST[@]} -eq 1 ] || die "usage: setup-repo.sh (--org <name>|--config <path>) <repo>"
 repo="${RC_REST[0]}"
+case "$repo" in -*) die "unknown option: $repo" ;; esac
 R="repos/$RC_ORG/$repo"
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
 if [[ "${RC_ISSUES_ON:-}" == *" $repo "* ]]; then ISSUES=true; else ISSUES=false; fi

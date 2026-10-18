@@ -76,6 +76,9 @@ GH_TOKEN=$TOKEN "$NEW" --config "$T/bad.json" delta "D." >> "$T/out" 2>> "$T/err
 check "a bad config: exit non-zero, nothing is created" bash -c "[ $rc != 0 ] && [ '$before' = $(posts) ]"
 env -u GH_TOKEN "$NEW" --org ouroboric-dev delta "D." >> "$T/out" 2>> "$T/err"; rc=$?
 check "no GH_TOKEN: exit 2, nothing is created" bash -c "[ $rc = 2 ] && [ '$before' = $(posts) ]"
+GH_TOKEN=$TOKEN "$NEW" --org ouroboric-dev --cl reuse widget "A widget." >> "$T/out" 2> "$T/err1"; rc=$?
+check "an unknown option: exit 2, nothing is created" bash -c "[ $rc = 2 ] && [ '$before' = $(posts) ]"
+check "an unknown option is named" grep -q 'unknown option: --cl' "$T/err1"
 check "a refused run prints no progress" [ ! -s "$T/out" ]
 check "a refused run never prints the token" bash -c "! grep -q '$TOKEN' '$T/out' '$T/err'"
 

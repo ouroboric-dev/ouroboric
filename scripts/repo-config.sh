@@ -5,7 +5,7 @@
 # (see scripts/orgs/README.md).
 #
 # Use:  . repo-config.sh; repo_config_args "$@"; repo_config_load
-#   repo_config_args ARGS...      reads a leading --org <name> or --config <path>. Sets RC_FILE (absolute),
+#   repo_config_args ARGS...      reads a leading --org <name> or --config <path>, given once. Sets RC_FILE (absolute),
 #                                 RC_REST (the other arguments) and RC_FROM (--config "$RC_FILE", to pass on).
 #   repo_config_load              checks RC_FILE and sets RC_ORG, RC_LICENCE, RC_DOCS_LICENCE, RC_DOCS_PATHS,
 #                                 RC_COPYRIGHT, RC_LICENCE_DIR, RC_ISSUES_ON and RC_CI.
@@ -59,6 +59,7 @@ repo_config_args() {
       ;;
     *) rc_die "name an org: --org <name> or --config <path>" ;;
   esac
+  case "${1:-}" in --org | --config) rc_die "give --org or --config once, not $1 as well" ;; esac
   [ -f "$RC_FILE" ] || rc_die "$RC_FILE: no such file"
   RC_FILE="$(cd "$(dirname "$RC_FILE")" && pwd)/$(basename "$RC_FILE")"
   RC_REST=("$@")

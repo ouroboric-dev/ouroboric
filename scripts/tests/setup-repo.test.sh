@@ -87,4 +87,7 @@ check "--config acme: nothing is written outside acme" bash -c "! jq -e 'select(
 check "--config acme: issues off" bash -c "jq -e 'select(.method==\"PATCH\" and (.fields|any(.==\"has_issues=false\")))' '$FAKE_GH_DIR/log' >/dev/null"
 check "no repo argument: exit 2" bash -c "GH_TOKEN=fake '$HERE/../setup-repo.sh' --org ouroboric-dev >/dev/null 2>&1; [ \$? = 2 ]"
 check "two repo arguments: exit 2" bash -c "GH_TOKEN=fake '$HERE/../setup-repo.sh' --org ouroboric-dev a b >/dev/null 2>&1; [ \$? = 2 ]"
+export FAKE_GH_DIR="$T/option"; mkdir -p "$FAKE_GH_DIR/GET"
+check "an unknown option: exit 2, and gh is never called" \
+  bash -c "GH_TOKEN=fake '$HERE/../setup-repo.sh' --org ouroboric-dev --cl >/dev/null 2>&1; [ \$? = 2 ] && [ ! -s '$FAKE_GH_DIR/log' ]"
 exit $fail

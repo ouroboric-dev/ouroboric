@@ -31,6 +31,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --private) visibility=private; private=(--private) ;;
     --ci) [ $# -ge 2 ] || die "--ci needs a value"; ci=(--ci "$2"); shift ;;
+    -*) die "unknown option: $1" ;;
     *) break ;;
   esac
   shift

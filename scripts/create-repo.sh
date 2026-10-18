@@ -24,6 +24,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --private) visibility=private ;;
     --check) check=1 ;;
+    -*) die "unknown option: $1" ;;
     *) break ;;
   esac
   shift
@@ -42,7 +43,7 @@ message() { jq -r '.message? // empty' "$T/reply" 2>/dev/null; }
 
 for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}"
-  [[ "$r" =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*$ ]] || die "bad repo name: $r"
+  [[ "$r" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || die "bad repo name: $r"
   [ -n "${args[i + 1]}" ] || die "$r: the description is empty"
   for ((j = 0; j < i; j += 2)); do [ "${args[j]}" != "$r" ] || die "$r is named twice"; done
 done

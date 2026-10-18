@@ -96,6 +96,10 @@ mkdir -p "$T/orgs"; cp "$T/other.json" "$T/orgs/acme.json"
 REPO_ORGS_DIR="$T/orgs" check "an org that differs from --org is refused" refused --org acme
 check "a bad --org name is refused" refused --org '../x'
 check "--org with a missing file is refused" refused --org nonesuch
+check "--org plus --config is refused" refused --org ouroboric-dev --config "$T/min.json"
+check "--config plus --org is refused" refused --config "$T/min.json" --org ouroboric-dev
+check "--org twice is refused" refused --org ouroboric-dev --org ouroboric-dev
+check "--config twice is refused" refused --config "$T/min.json" --config "$T/min.json"
 cfg m "{$base, \"licence_dir\": \"nowhere\"}"
 check "a licence_dir that does not exist is refused" refused --config "$T/m.json"
 

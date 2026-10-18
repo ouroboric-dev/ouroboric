@@ -52,6 +52,12 @@ check "a repo named twice is refused before any request" [ "$rc" = 2 ]
 check "a repo named twice makes no request" [ "$before" = "$(logn)" ]
 GH_TOKEN=ghp_FAKE "$CREATE" delta "D." 2>/dev/null; rc=$?
 check "no --org or --config is refused" [ "$rc" = 2 ]
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" --cl reuse delta "D." >/dev/null 2> "$T/err"; rc=$?
+check "an unknown option is refused before any request, and named" \
+  bash -c "[ $rc = 2 ] && [ '$before' = \$(wc -l < '$T/log') ] && grep -q 'unknown option: --cl' '$T/err'"
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" delta "D." -epsilon "E." >/dev/null 2>&1; rc=$?
+check "a repo name that starts with - is refused before any request" \
+  bash -c "[ $rc = 2 ] && [ '$before' = \$(wc -l < '$T/log') ]"
 
 GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/acme.json" --private gamma "The gamma repo." > "$T/out" 2>&1; rc=$?
 check "--private: exit 0" [ "$rc" = 0 ]
