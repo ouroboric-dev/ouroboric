@@ -226,6 +226,12 @@ Run one check with `--check <name>`, or name repos to check only those.
   `rollout-ci.sh --org <org> protect <repo>…`, which runs `setup-repo.sh`, so `lint` becomes
   required. It skips and names any repo whose `main` doesn't hold `lint.yml` yet. Both modes are
   safe to run twice and need the same token as `new-repo.sh`.
+- **A realm repo holds three more things.** Its own `ci.yml`, with the required job `test`, which
+  runs the realm's tests with the template tests set to fail, not skip. A `ci.yml` in each template
+  (job `test`), on the stack's pinned images. And a readiness assessment against the
+  [realm readiness checklist](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/realm-readiness.md),
+  filed in the Yggdrasil repo. The `shared` check of `check-repos.sh` fails when a realm's copy of a
+  shared file, such as `devcontainer/checks/docs.sh`, differs from `helheim-go`'s.
 - **A lint config bends only for a reason.** When a linter and the house style disagree, ask
   whether the house style gets real value from its own way. If yes, the linter bends: the shared
   config gets a setting, or a repo excludes files that aren't docs or config, such as test inputs,

@@ -39,7 +39,7 @@ folder.
 | Any real-engine run (Podman, devcontainer, the sandbox): the engine, registry config and checks | `scripts/ygg-engine.sh check\|env\|run --folder DIR`. Never set `CONTAINER_HOST` by hand: the root socket is the wrong one |
 | The realms smoke runs (v0-H13, v0-H15) and their evidence | `scripts/ygg-smoke-realms.sh`, `scripts/ygg-smoke-loop.sh`, `scripts/ygg-evidence.sh` |
 | Build a plan from reference commits, or execute one task by task | `scripts/plan-*` (`plan-generate.py`, `plan-replay.py`, `plan-states.sh`, `plan-red.sh`, `plan-defences.py`; `plan-blocks.py`, `plan-task-start.sh`, `plan-task-done.sh`, `plan-task-land.sh`) |
-| Check that the repos have the required setup | `scripts/as-bot.sh --read all scripts/check-repos.sh` |
+| Check that the repos have the required setup, and that the realms' shared files match | `scripts/as-bot.sh --read all scripts/check-repos.sh`; `--check shared` runs the realms check alone |
 | Scan git history for secrets | `scripts/scan-history.sh` |
 | Create a repo with its first commit (`README.md`, licences, base CI) and its protection | `scripts/new-repo.sh --org <org> <repo> "<description>"`. Founder only |
 | Write the licence files or the base CI into a folder | `scripts/add-licences.sh`, `scripts/add-ci.sh`. Founder only |

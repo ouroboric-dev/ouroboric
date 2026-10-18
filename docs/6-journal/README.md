@@ -39,6 +39,7 @@ considered, what we chose, and the measured result. In the naming story these en
 | 2026-10-11 | [choosing the typography](2026-10-11-choosing-the-typography.md) | brand, design, typography, accessibility | resolved | yes |
 | 2026-10-11 | [diagrams in the design language](2026-10-11-diagrams-in-the-design-language.md) | brand, diagrams, accessibility, tooling | resolved | yes |
 | 2026-10-12 | [designing the logo](2026-10-12-designing-the-logo.md) | brand, design, logo, accessibility | resolved | yes |
+| 2026-10-19 | [a definition of done for realms](2026-10-19-a-definition-of-done-for-realms.md) | realms, readiness, ci, process | resolved | yes |
 
 ## When to write an entry
 
