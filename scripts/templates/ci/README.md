@@ -41,6 +41,12 @@ Two pieces must not ship the same path.
 
 Realms will ship their own pieces in this format later (the repo-bootstrap proposal, future work item 3).
 
+## Existing repos
+
+`add-ci.sh --upgrade` also works on a repo whose `.pre-commit-config.yaml` is the old gitleaks-only scaffold
+(`upgrade/gitleaks-only.yaml`). It replaces that file, and adds `lint.yml` and the piece files. If the config
+differs by even one byte, it exits 2 and writes nothing; every other target must still not exist.
+
 ## Bumping a pin
 
 Change the `rev` in a reviewed pull request. The release must be at least two weeks old. For `lint.yml`, the
