@@ -11,20 +11,27 @@ export PATH="$T/bin:$PATH" FAKE_GH_DIR="$T"
 STD='{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"],"required_approving_review_count":1,"dismiss_stale_reviews_on_push":true,"require_last_push_approval":true}}'
 CHECK='{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"test","integration_id":15368}]}}'
 OTHER='{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"test","integration_id":999}]}}'
-# repo <name> <has ci: yes|no> <rules json>
+LINT='{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"lint","integration_id":15368}]}}'
+BOTH='{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"test","integration_id":15368},{"context":"lint","integration_id":15368}]}}'
+# repo <name> <workflows: none|lint|ci|both> <rules json>
 repo() {
   echo '[{"id":1,"name":"protect-main","enforcement":"active"}]' > "$T/GET/repos_ouroboric-dev_$1_rulesets.json"
   echo "{\"rules\":[$3]}" > "$T/GET/repos_ouroboric-dev_$1_rulesets_1.json"
-  [ "$2" = yes ] && echo '{"name":"ci.yml"}' > "$T/GET/repos_ouroboric-dev_$1_contents_.github_workflows_ci.yml.json"
+  case "$2" in lint|both) echo '{"name":"lint.yml"}' > "$T/GET/repos_ouroboric-dev_$1_contents_.github_workflows_lint.yml.json" ;; esac
+  case "$2" in ci|both) echo '{"name":"ci.yml"}' > "$T/GET/repos_ouroboric-dev_$1_contents_.github_workflows_ci.yml.json" ;; esac
   return 0
 }
 result() { "$HERE/../check-repos.sh" --check ruleset "$1" | cut -d' ' -f1; }
 
-repo plain no "$STD";              check "no CI, standard rules: PASS" [ "$(result plain)" = PASS ]
-repo unrequired yes "$STD";        check "CI, but its check isn't required: FAIL" [ "$(result unrequired)" = FAIL ]
-repo required yes "$STD,$CHECK";   check "CI, and test from GitHub Actions is required: PASS" [ "$(result required)" = PASS ]
-repo spoofable yes "$STD,$OTHER";  check "CI, but another app can satisfy the check: FAIL" [ "$(result spoofable)" = FAIL ]
-repo stray no "$STD,$CHECK";       check "a required check with no CI to pass it: FAIL" [ "$(result stray)" = FAIL ]
+repo plain none "$STD";              check "no CI, standard rules: PASS" [ "$(result plain)" = PASS ]
+repo unrequired ci "$STD";        check "CI, but its check isn't required: FAIL" [ "$(result unrequired)" = FAIL ]
+repo required ci "$STD,$CHECK";   check "CI, and test from GitHub Actions is required: PASS" [ "$(result required)" = PASS ]
+repo spoofable ci "$STD,$OTHER";  check "CI, but another app can satisfy the check: FAIL" [ "$(result spoofable)" = FAIL ]
+repo stray none "$STD,$CHECK";       check "a required check with no CI to pass it: FAIL" [ "$(result stray)" = FAIL ]
+repo lintreq lint "$STD,$LINT";    check "lint.yml, and lint is required: PASS" [ "$(result lintreq)" = PASS ]
+repo bothreq both "$STD,$BOTH";    check "both workflows, lint and test required (any order): PASS" [ "$(result bothreq)" = PASS ]
+repo lintmiss lint "$STD";         check "lint.yml, but lint is not required: FAIL" [ "$(result lintmiss)" = FAIL ]
+repo lintstray none "$STD,$LINT";  check "lint required with no lint.yml: FAIL" [ "$(result lintstray)" = FAIL ]
 # settings: a factory repo passes only with issues on, any other repo only with issues off.
 # The fake answers the GraphQL query with one canned reply per FAKE_GH_DIR.
 settings_result() { # <repo> <hasIssuesEnabled>
