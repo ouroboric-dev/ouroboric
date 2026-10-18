@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Check that ouroboric-dev repos have the required setup. See docs/4-ways-of-working/docs-standard.md.
-#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|bot]... [repo...]
+#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot]... [repo...]
 # The bot check also checks that the pr-bot can't reach any hidden repo. Run it under
 # as-bot.sh --read all, because it reads the pr-bot's own list of repos.
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # holds the side-by-side clones
+ROOT="${CHECK_REPOS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"   # holds the side-by-side clones
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
 FACTORIES=" yggdrasil asgard "   # the only repos with issues on
 LEAVES=" gungnir odin gleipnir jormungandr midgard-react helheim-go havamal "
 LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
+REALMS=" midgard-react helheim-go "   # build realms; they share scripts, and helheim-go's copy is the source
+SHARED=(devcontainer/checks/docs.sh)
 HIDDEN=" huldra "   # private repos that agents must never see
 unset BOT_REPOS     # set only by bot_repos below, never from the environment
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
@@ -73,6 +75,17 @@ check_gitleaks() {
   grep -q 'repo: https://github.com/gitleaks/gitleaks' "$f" 2>/dev/null && grep -q 'rev: v8.30.1' "$f" \
     && ok "$1" gitleaks || bad "$1" gitleaks "no pinned gitleaks pre-commit hook"
 }
+check_shared() { # a realm's copy of each shared file must match helheim-go's; a missing file or clone fails
+  [[ "$REALMS" == *" $1 "* ]] || { ok "$1" shared "not a realm"; return; }
+  local f src dst
+  for f in "${SHARED[@]}"; do
+    src="$(local_path helheim-go)/$f"; dst="$(local_path "$1")/$f"
+    [ -f "$src" ] || { bad "$1" shared "$src is missing"; return; }
+    [ -f "$dst" ] || { bad "$1" shared "$dst is missing"; return; }
+    [ "$(sha256sum < "$src")" = "$(sha256sum < "$dst")" ] || { bad "$1" shared "$f differs from helheim-go's"; return; }
+  done
+  ok "$1" shared
+}
 
 bot_repos() { # the pr-bot's installation repos, once; ERROR if they can't be listed
   [ -n "${BOT_REPOS+x}" ] && return
@@ -95,7 +108,7 @@ check_hidden() { # fails closed: a repo agents must never see
 
 checks=(); repos=()
 while [ $# -gt 0 ]; do case "$1" in --check) checks+=("${2:?--check needs a name}"); shift 2 ;; *) repos+=("$1"); shift ;; esac; done
-[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks bot)
+[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks shared bot)
 for c in "${checks[@]}"; do declare -F "check_$c" >/dev/null || { echo "unknown check: $c"; exit 1; }; done
 if [ ${#repos[@]} -eq 0 ]; then
   repos=(.github ouroboric yggdrasil asgard ouroboric-packages)
