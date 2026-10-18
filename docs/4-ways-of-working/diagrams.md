@@ -80,7 +80,7 @@ render that matches the reader's GitHub theme. The `alt` text is the same for bo
 The script is `scripts/diagrams.sh` in the `ouroboric` repository.
 
 1. Start Kroki: `scripts/diagrams.sh up` (Kroki core and its Mermaid companion, pinned to
-   0.32.1, in a Podman pod bound to `127.0.0.1:8000`). The first run downloads Inter 4.1 from its
+   0.32.1, in a Podman pod that publishes no port). The first run downloads Inter 4.1 from its
    official release, checks it against a pinned SHA-256, caches it in `~/.cache/ouroboric/fonts/` and
    copies it into the pod.
 2. Render a repository's diagrams: `scripts/diagrams.sh render ../yggdrasil`.
@@ -97,9 +97,17 @@ through `uv`). The script needs `podman`, `curl`, `unzip`, `python3` and `uv`.
 **Freshness covers the theme.** The manifest records each source's hash and a hash of the render
 setup (the script and `tokens.json`). Changing the palette or the script marks every diagram stale.
 
-**Kroki stays local.** The script refuses any non-local Kroki URL unless you set
-`DIAGRAMS_ALLOW_REMOTE=1`. Diagram sources describe architecture and security controls; sending a
-private product's diagrams to a public rendering service would publish them.
+**Kroki stays local.** The script reaches Kroki only from inside its pod, with `podman exec`, so
+diagram sources never leave the machine. Diagram sources describe architecture and security controls;
+sending a private product's diagrams to a public rendering service would publish them. Publishing no
+port also keeps renders working after a crash: a container that dies uncleanly can leave its
+port-forwarding rule behind, and that rule then shadows the same port on the next pod.
+
+**When a render fails.** `diagrams.sh render` stops at the first failing source and names it. Ask
+Kroki directly to see its error:
+`podman exec -i ouroboric-kroki-core curl -s -X POST --data-binary @- http://127.0.0.1:8000/mermaid/svg < source.mmd`.
+If the pod is gone, for example after the Podman machine restarted, run `scripts/diagrams.sh down`
+and then `scripts/diagrams.sh up`.
 
 ## 5. When the docs build lands
 
