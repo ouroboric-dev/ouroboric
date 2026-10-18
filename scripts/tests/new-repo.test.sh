@@ -91,6 +91,18 @@ check "a failed push: stderr names the repo and says it is not protected" grep -
 check "a failed push: only the create is reported" [ "$(cat "$T/out")" = 'new-repo: epsilon: created' ]
 check "a failed push never prints the token" bash -c "! grep -q '$TOKEN' '$T/out' '$T/err'"
 
+printf '{"org":"ouroboric-dev","licence":"Apache-2.0","copyright":"Acme"}\n' > "$T/nolic.json"
+printf '#!/bin/sh\nexit 1\n' > "$T/reuse-fails"
+chmod +x "$T/reuse-fails"
+before="$(posts)"
+GH_TOKEN=$TOKEN ADD_LICENCES_REUSE="$T/reuse-fails" "$NEW" --config "$T/nolic.json" eta "The eta repo." \
+  </dev/null > "$T/out" 2> "$T/err"; rc=$?
+check "a failed licence download: exit non-zero" [ "$rc" != 0 ]
+check "a failed licence download: nothing is created" [ "$before" = "$(posts)" ]
+check "a failed licence download: stderr names the repo and the step" grep -q 'new-repo: eta: add-licences.sh failed' "$T/err"
+check "a failed licence download: it never says was created" bash -c "! grep -q 'was created' '$T/err'"
+check "a failed licence download: no progress" [ ! -s "$T/out" ]
+
 printf '#!/bin/sh\nexit 7\n' > "$T/setup-fails"
 chmod +x "$T/setup-fails"
 GH_TOKEN=$TOKEN NEW_REPO_SETUP="$T/setup-fails" "$NEW" --org ouroboric-dev zeta "The zeta repo." \

@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Create new repos in the org that a config names, each with a first commit and the required setup, so
-# agents only ever see a protected repo. For each repo, in order: create-repo.sh creates it; a first
-# commit holds README.md (the name and description), the licence files (add-licences.sh) and the base
-# CI (add-ci.sh); the commit is pushed to main; setup-repo.sh protects it. Every check runs before the
-# first repo is created: if any repo already exists, a name repeats, a --ci piece is unknown or the
-# config is bad, nothing is created. Stops at the first error. It never prompts.
+# agents only ever see a protected repo. Every check runs before the first repo is created: if any repo
+# already exists, a name repeats, a --ci piece is unknown or the config is bad, nothing is created.
+# Then, for each repo in turn: it builds the first commit in a temporary folder, with README.md (the
+# name as the title, the description as the first paragraph), the licence files (add-licences.sh) and
+# the base CI (add-ci.sh); create-repo.sh creates the repo; the commit is pushed to main; setup-repo.sh
+# protects it. If building the commit fails, such as a failed licence download, that repo is not
+# created. If the push or the setup fails, the repo exists but is not protected, and the script says
+# so. Stops at the first error: in a batch, the repos before it are complete. It never prompts.
 # Founder-run: GH_TOKEN must hold the admin token: fine-grained, short-lived, owned by the org,
 # repository access "All repositories", with Administration, Contents and Workflows read and write
 # (the pr-bot can't create repos).
@@ -46,6 +49,16 @@ args=("$@")
 T="$(mktemp -d)"
 trap 'rm -rf -- "${T:?}"' EXIT
 
+# build NAME CMD...: runs CMD, its output on stderr. If it fails, says that repo $r is not on GitHub
+# and exits with CMD's code.
+build() {
+  local name="$1" rc=0
+  shift
+  "$@" >&2 || rc=$?
+  [ "$rc" = 0 ] && return
+  echo "new-repo: $r: $name failed before the repo was made, so it is not on GitHub. Fix the cause and run new-repo.sh again for $r." >&2
+  exit "$rc"
+}
 # step NAME CMD...: runs CMD, its output on stderr. If it fails, says that repo $r is not protected
 # and exits with CMD's code.
 step() {
@@ -61,15 +74,15 @@ commit() { git -C "$1" add -A && git -C "$1" commit -q -m "Licences and base CI"
 
 for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}" d="${args[i + 1]}"
+  w="$T/$r"
+  build "git init" git init -q -b main "$w"
+  build "writing the README" readme "$w" "$r" "$d"
+  build "add-licences.sh" "$HERE/add-licences.sh" "${RC_FROM[@]}" "$w"
+  build "add-ci.sh" "$HERE/add-ci.sh" "${RC_FROM[@]}" ${ci[@]+"${ci[@]}"} "$w"
+  build "the first commit" commit "$w"
+
   "$HERE/create-repo.sh" "${RC_FROM[@]}" ${private[@]+"${private[@]}"} "$r" "$d" >/dev/null
   echo "new-repo: $r: created"
-
-  w="$T/$r"
-  step "git init" git init -q -b main "$w"
-  step "writing the README" readme "$w" "$r" "$d"
-  step "add-licences.sh" "$HERE/add-licences.sh" "${RC_FROM[@]}" "$w"
-  step "add-ci.sh" "$HERE/add-ci.sh" "${RC_FROM[@]}" ${ci[@]+"${ci[@]}"} "$w"
-  step "the first commit" commit "$w"
   # The helper reads GH_TOKEN when git asks, so the token never appears in a command line.
   # shellcheck disable=SC2016  # $1 and $GH_TOKEN expand in the helper, not here
   step "the push" git -C "$w" -c credential.helper= \
