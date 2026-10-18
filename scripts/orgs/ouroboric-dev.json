@@ -1,0 +1,14 @@
+{
+  "org": "ouroboric-dev",
+  "licence": "AGPL-3.0-only",
+  "docs_licence": "CC-BY-4.0",
+  "docs_paths": ["docs/**", "README.md", "AGENTS.md"],
+  "copyright": "Bruno Guilhermo de Barros Valério",
+  "licence_dir": "../../LICENSES",
+  "issues_on": ["yggdrasil", "asgard"],
+  "ci": ["reuse", "markdown", "actions"],
+  "after_create": {
+    "public": "Add {repo} to the pr-bot: https://github.com/organizations/ouroboric-dev/settings/installations, ouroboric-pr-bot, Configure, Repository access.",
+    "private": "Never add {repo} to the pr-bot: agents must not see this repo."
+  }
+}
