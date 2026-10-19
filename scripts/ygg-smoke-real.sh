@@ -113,7 +113,7 @@ echo "smoke-real: the caps in $work/factory.yaml:"
 echo "smoke-real: ygg doctor on that config"
 if ! eval "$ygg doctor --project '$project' --config '$work/factory.yaml'"; then fail "ygg doctor refused the config; nothing was spent"; fi
 
-run="$ygg run --project '$project' --config '$work/factory.yaml' --realm '$realm' --brief '$tasks/$task/instruction.md'"
+run="$ygg run --project '$project' --config '$work/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'"
 if [ "$dry" -eq 1 ]; then
   [ "$build" -eq 0 ] || echo "smoke-real: would run: $ygg sandbox build --config '$work/factory.yaml' --realm '$realm'"
   echo "smoke-real: would run: timeout --signal=INT --kill-after=2m $wall $run"

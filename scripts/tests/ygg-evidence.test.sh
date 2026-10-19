@@ -45,7 +45,12 @@ esac
 EOF
 # shellcheck disable=SC2016  # the printf format holds a literal ${...}, not an expansion
 printf '#!/usr/bin/env bash\necho "${FAKE_CLI_VERSION:-0.89.0}"\n' > "$T/bin/devcontainer"
-chmod +x "$T/bin/ygg" "$T/bin/devcontainer"
+# mountpoint -q DIR succeeds only for a folder that holds a .fake-mounted file (nothing is really mounted here).
+cat > "$T/bin/mountpoint" <<'EOF'
+#!/usr/bin/env bash
+[ -e "${2:?}/.fake-mounted" ]
+EOF
+chmod +x "$T/bin/ygg" "$T/bin/devcontainer" "$T/bin/mountpoint"
 export PATH="$T/bin:$PATH"
 
 # --- ygg-evidence.sh on a project with a ledger.
@@ -91,9 +96,10 @@ unset SOME_API_KEY
 # --- ygg-smoke-loop.sh.
 D="$T/ygg-it"; mkdir -p "$D"
 printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$SECRET" > "$T/factory.env"
-mkdir -p "$T/bind"
+mkdir -p "$T/bind" "$T/plain"
+touch "$T/bind/.fake-mounted"
 export YGG_BIND="$T/bind" YGG_ODIN="$T/odin" YGG_CMD="$T/bin/ygg"
-args=(--folder "$D" --env "$T/factory.env" --realm "$T/realm")
+args=(--folder "$D" --env "$T/factory.env" --graph "$T/realm")
 run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "a missing factory.yaml is refused" test "$rc" -eq 2
 touch "$D/factory.yaml"
@@ -101,6 +107,8 @@ FAKE_CLI_VERSION=0.88.0 run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "a wrong devcontainer version is refused" test "$rc" -eq 2
 YGG_BIND="$T/missing" run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "a missing bind mount is refused" test "$rc" -eq 2
+YGG_BIND="$T/plain" run "$S/ygg-smoke-loop.sh" "${args[@]}"
+check "a bind folder with nothing mounted on it is refused (loop)" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 FAKE_RUN_RC=4 run "$S/ygg-smoke-loop.sh" --build "${args[@]}"
 check "the exit code of the run is the script's" test "$rc" -eq 4
 check "the project is made" test -f "$D/smoke-loop/umbrella.yaml"
@@ -133,11 +141,13 @@ printf 'mode: unattended\n' > "$R/factory.yaml"
 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "a config with no realms section is refused" test "$rc" -eq 2
 check "and the refusal says why" has "no realms section"
-printf 'mode: unattended\nrealms:\n  dir: /somewhere\n' > "$R/factory.yaml"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\ngraphs:\n  dir: /somewhere\n' > "$R/factory.yaml"
 FAKE_CLI_VERSION=0.88.0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "a wrong devcontainer version is refused (realms)" test "$rc" -eq 2
 YGG_BIND="$T/missing" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "a missing bind mount is refused (realms)" test "$rc" -eq 2
+YGG_BIND="$T/plain" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
+check "a bind folder with nothing mounted on it is refused (realms)" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 FAKE_RUN_RC=5 run "$S/ygg-smoke-realms.sh" --build "${rargs[@]}"
 check "the exit code of the run is the script's (realms)" test "$rc" -eq 5
 projects=("$R"/smoke-realms-*/)
@@ -150,16 +160,27 @@ FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 projects=("$R"/smoke-realms-*/)
 check "each run gets a project of its own" test "${#projects[@]}" -eq 2
 
-# The same script runs the content smoke run: another lead realm, a brief, and a tag for its files.
+# The same script runs the content smoke run: another graph, a brief, and a tag for its files.
 printf 'a brief\n' > "$T/brief.md"
 sleep 1 # a project is named by the second it is made in
-FAKE_ARGS_LOG="$T/args.log" FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --realm midgard-react --brief "$T/brief.md" --tag h15
-check "the lead realm and the brief are given to the run" grep -q -- "--realm midgard-react --brief $T/brief.md" "$T/args.log"
+FAKE_ARGS_LOG="$T/args.log" FAKE_RUN_RC=0 run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software --brief "$T/brief.md" --tag h15
+check "the graph and the brief are given to the run" grep -q -- "--graph software --brief $T/brief.md" "$T/args.log"
+check "no run argument holds --realm" bash -c "! grep -q -- '--realm' '$T/args.log'"
 check "the files of the run carry the tag" test -f "$R/h15-run.txt" -a -f "$R/h15-report.txt"
 run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --brief "$T/nope.md"
 check "a brief that is not there is refused" test "$rc" -eq 2
 sleep 1
 FAKE_ARGS_LOG="$T/args2.log" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
-check "without options the run is the smoke-lead realm with no brief, as before" bash -c "grep -q -- '--realm smoke-lead' '$T/args2.log' && ! grep -q -- '--brief' '$T/args2.log'"
+check "without options the run is the smoke-lead graph folder of odin with no brief" bash -c "grep -q -- '--graph $T/odin/testdata/smoke-realms/smoke-lead' '$T/args2.log' && ! grep -q -- '--brief' '$T/args2.log' && ! grep -q -- '--realm' '$T/args2.log'"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
+check "a graph given by name needs a config with a graphs section" test "$rc" -eq 2
+check "and the refusal says why" has "no graphs section"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n# graphs:\n#   dir: /somewhere\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
+check "a commented-out graphs section does not count" bash -c "[ $rc = 2 ] && grep -q 'no graphs section' '$T/out'"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n  graphs:\n    dir: /somewhere\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
+check "a graphs key indented under another key does not count" bash -c "[ $rc = 2 ] && grep -q 'no graphs section' '$T/out'"
 
 exit "$fail"

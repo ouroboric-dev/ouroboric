@@ -37,7 +37,13 @@ cat > "$T/bin/devcontainer" <<'EOF2'
 #!/usr/bin/env bash
 echo "${FAKE_CLI:-0.89.0}"
 EOF2
-chmod +x "$T/bin/podman" "$T/bin/devcontainer"
+# mountpoint -q DIR succeeds only for a folder that holds a .fake-mounted file (nothing is really mounted here).
+cat > "$T/bin/mountpoint" <<'EOF2'
+#!/usr/bin/env bash
+[ -e "${2:?}/.fake-mounted" ]
+EOF2
+chmod +x "$T/bin/podman" "$T/bin/devcontainer" "$T/bin/mountpoint"
+touch "$T/bind/.fake-mounted"
 export PATH="$T/bin:$PATH" YGG_BIND="$T/bind" YGG_ENGINE_TIMEOUT=2
 
 run bash "$S/ygg-engine.sh" check --folder "$D"
@@ -68,6 +74,10 @@ check "check refuses another devcontainer CLI version" bash -c "[ $rc = 2 ]" && 
 
 YGG_BIND="$T/nowhere" run bash "$S/ygg-engine.sh" check --folder "$D"
 check "check refuses a missing bind mount" bash -c "[ $rc = 2 ]" && has "bind mount"
+
+mkdir -p "$T/plain"
+YGG_BIND="$T/plain" run bash "$S/ygg-engine.sh" check --folder "$D"
+check "check refuses a folder that exists but has nothing mounted on it" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 
 D2="$T/other"; mkdir -p "$D2"; printf 'sandbox:\n  engine: unix://%s/gone.sock\n' "$T" > "$D2/factory.yaml"
 run bash "$S/ygg-engine.sh" check --folder "$D2"

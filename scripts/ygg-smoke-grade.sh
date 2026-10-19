@@ -178,7 +178,7 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   # An interrupt or an early exit must not leave the poller running.
   trap 'touch "$watchlog.stop"; kill "$watcher" 2>/dev/null || true' EXIT
   set +e
-  eval "$ygg run --project '$project' --config '$v/factory.yaml' --realm '$realm' --brief '$tasks/$task/instruction.md'" 2>&1 | tee "$v/run.txt"
+  eval "$ygg run --project '$project' --config '$v/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'" 2>&1 | tee "$v/run.txt"
   rc="${PIPESTATUS[0]}"
   set -e
   id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
