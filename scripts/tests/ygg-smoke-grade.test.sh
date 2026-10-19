@@ -165,8 +165,10 @@ check "a missing factory.yaml is refused" test "$rc" -eq 2
 printf 'sandbox:\n  engine: unix:///run/ygg-test.sock\n' >"$D/factory.yaml"
 run "$S/ygg-smoke-grade.sh" --folder "$D" --tasks "$T/nowhere" --odin "$T/odin"
 check "a missing task folder is refused" test "$rc" -eq 2
-run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
+FAKE_ARGS_LOG="$T/gargs.log" run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --build
 check "a good run passes every check and exits 0" test "$rc" -eq 0
+check "ygg run is given --graph and never --realm (grade)" bash -c "grep -q '^run .*--graph $T/odin/testdata/smoke-grade' '$T/gargs.log' && ! grep '^run ' '$T/gargs.log' | grep -q -- '--realm'"
+check "ygg sandbox build keeps --realm (grade)" bash -c "grep '^sandbox build ' '$T/gargs.log' | grep -q -- '--realm $T/odin/testdata/smoke-grade'"
 check "the reference case grades 1" has "smoke-grade: reference reward 1"
 check "the empty case grades 0" has "smoke-grade: empty reward 0"
 check "no check failed" hasnt "FAIL"
@@ -238,6 +240,8 @@ FAKE_ARGS_LOG="$T/args.log" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
 check "a dry run exits 0" test "$rc" -eq 0
 check "a dry run says what it would run, under a wall clock" has "would run: timeout --signal=INT --kill-after=2m 90m"
 check "a dry run runs the doctor" grep -q '^doctor ' "$T/args.log"
+check "a dry run prints a run with --graph" has "--graph '$T/odin/testdata/smoke-grade'"
+check "and the printed run holds no --realm" bash -c "! grep 'would run: timeout' '$T/out' | grep -q -- '--realm'"
 check "a dry run does not start the run" test -z "$(grep '^run ' "$T/args.log")"
 check "a dry run does not load the credentials, not even for the doctor" test -z "$(grep '^loaded:' "$T/args.log")"
 check "a dry run prints the caps" has "per_run: { tokens: 400000, turns: 100, usd: 3 }"
@@ -258,6 +262,8 @@ check "the credentials were loaded for the run" grep -q '^loaded:run$' "$T/args3
 check "and not for the first doctor, which comes before the run" test "$(head -n 1 "$T/args3.log" | cut -d' ' -f1)" = doctor
 check "no credential value is printed" hasnt "$MARK_A"
 check "nor the second" hasnt "$MARK_B"
+check "ygg run is given --graph and never --realm (real)" bash -c "grep -q '^run .*--graph $T/odin/testdata/smoke-grade' '$T/args3.log' && ! grep '^run ' '$T/args3.log' | grep -q -- '--realm'"
+check "ygg sandbox build keeps --realm (real)" bash -c "grep '^sandbox build ' '$T/args3.log' | grep -q -- '--realm $T/odin/testdata/smoke-grade'"
 check "the score is printed" has "reward 0, fail-to-pass 6/6"
 check "the cost is printed from the ledger" has 'cost $0.3750'
 check "and the cap beside it" has 'per_run cap is $3'

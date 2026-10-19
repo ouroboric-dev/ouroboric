@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the realms smoke run (v0-H13) with real agents, then print the evidence report.
-#   ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--realm NAME] [--brief FILE] [--tag TAG]
+#   ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--graph NAME|DIR] [--brief FILE] [--tag TAG]
 # The run builds a tiny product from two realm leaves (smoke-lead and smoke-api, in odin/testdata/smoke-realms):
 # real planners write the leaves file and the plan in scratch workspaces in sandboxes, Odin publishes them,
 # creates the leaves from their realms' templates, and a real implementer builds one task in each leaf.
@@ -14,27 +14,30 @@
 #   5. runs the realm and keeps its raw output in DIR/h13-run.txt (shown live as ygg prints it: do not paste
 #      that file, paste the report);
 #   6. prints the report of ygg-evidence.sh, with the credentials removed (also in DIR/h13-report.txt): paste it.
-# The same script runs the content smoke run (v0-H15) with --realm midgard-react --brief BRIEF --tag h15: the real
-# realms, scripted agents, the real check ladder. --realm is the lead realm (default smoke-lead), --brief the
+# The same script runs the content smoke run (v0-H15) with --graph software --brief BRIEF --tag h15: the real
+# realms, scripted agents, the real check ladder. --graph is the graph pack, a name or a folder (default: the
+# smoke-lead folder of odin/testdata/smoke-realms; a name needs a graphs section in factory.yaml), --brief the
 # brief the run is given, and --tag names the files of the run and its report in DIR (h13 by default).
 # Defaults: DIR=$HOME/ygg-it, FILE=$HOME/.config/ouroboric/factory.env. For tests and other machines: YGG_CMD
 # (how ygg runs), YGG_ODIN (the odin folder), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind) and
 # YGG_CLI_VERSION (default 0.89.0). The engine environment comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" build=0 clip=() realm=smoke-lead brief="" tag=h13
+dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" build=0 clip=() graph="" brief="" tag=h13
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build=1; shift ;;
     --folder) dir="${2:?--folder needs a folder}"; shift 2 ;;
     --env) envfile="${2:?--env needs a file}"; shift 2 ;;
     --clip) clip=(--clip); shift ;;
-    --realm) realm="${2:?--realm needs a realm name}"; shift 2 ;;
+    --graph) graph="${2:?--graph needs a name or a folder}"; shift 2 ;;
     --brief) brief="${2:?--brief needs a file}"; shift 2 ;;
     --tag) tag="${2:?--tag needs a name}"; shift 2 ;;
-    *) echo "usage: ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--realm NAME] [--brief FILE] [--tag TAG]" >&2; exit 2 ;;
+    *) echo "usage: ygg-smoke-realms.sh [--build] [--folder DIR] [--env FILE] [--clip] [--graph NAME|DIR] [--brief FILE] [--tag TAG]" >&2; exit 2 ;;
   esac
 done
+odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
+[ -n "$graph" ] || graph="$odin/testdata/smoke-realms/smoke-lead"
 want="${YGG_CLI_VERSION:-0.89.0}" bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 export PATH="$dir/dc/node_modules/.bin:$PATH"
 # The engine environment is ygg-engine.sh's: the engine of DIR/factory.yaml (never the shell's CONTAINER_HOST),
@@ -45,11 +48,13 @@ if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
 fi
 [ -f "$dir/factory.yaml" ] || { echo "smoke-realms: $dir/factory.yaml is missing; copy odin/testdata/smoke-realms/factory.example.yaml there and set the engine, the mount and realms.dir" >&2; exit 2; }
 [ -f "$envfile" ] || { echo "smoke-realms: the credentials file $envfile is missing" >&2; exit 2; }
-grep -q '^realms:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no realms section: the run is given a realm by name ($realm), and realms.dir says where it is" >&2; exit 2; }
+grep -q '^realms:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no realms section: realms.dir says where the leaf realms are" >&2; exit 2; }
+case "$graph" in */*) ;; *) grep -q '^graphs:' "$dir/factory.yaml" || { echo "smoke-realms: $dir/factory.yaml has no graphs section: the run is given a graph by name ($graph), and graphs.dir says where it is" >&2; exit 2; } ;; esac
 [ -z "$brief" ] || [ -f "$brief" ] || { echo "smoke-realms: the brief $brief is missing" >&2; exit 2; }
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
 [ "$got" = "$want" ] || { echo "smoke-realms: devcontainer CLI is '${got:-missing}', want $want; put the right one first on PATH" >&2; exit 2; }
 [ -d "$bind" ] || { echo "smoke-realms: the bind mount $bind is missing; a WSL restart removes it (see Phase 3 v0-H07)" >&2; exit 2; }
+mountpoint -q "$bind" || { echo "smoke-realms: the bind mount $bind is a folder with nothing mounted on it; run: sudo mount --bind <the mount's host folder in $dir/factory.yaml> $bind (a WSL restart removes it, see Phase 3 v0-H07)" >&2; exit 2; }
 
 project="$dir/smoke-realms-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$project"
@@ -61,7 +66,6 @@ echo "smoke-realms: made $project"
 
 ygg="${YGG_CMD:-}"
 if [ -z "$ygg" ]; then
-  odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
   if command -v ygg >/dev/null 2>&1; then ygg=ygg; else ygg="cd '$odin' && go run ./cmd/ygg"; fi
 fi
 out="$dir/$tag-run.txt"
@@ -73,7 +77,7 @@ set +e
   . "$envfile"
   set +a
   if [ "$build" -eq 1 ]; then eval "$ygg sandbox build --config '$dir/factory.yaml' --all"; fi
-  eval "$ygg run --project '$project' --config '$dir/factory.yaml' --realm '$realm' ${brief:+--brief '$brief'}"
+  eval "$ygg run --project '$project' --config '$dir/factory.yaml' --graph '$graph' ${brief:+--brief '$brief'}"
 ) 2>&1 | tee "$out"
 rc="${PIPESTATUS[0]}"
 set -e

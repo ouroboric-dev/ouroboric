@@ -51,6 +51,7 @@ fi
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
 [ "$got" = "$want" ] || fail "the devcontainer CLI is '${got:-missing}', want $want; install it in $dir/dc (npm install --prefix $dir/dc @devcontainers/cli@$want)"
 [ -d "$bind" ] || fail "the bind mount $bind is missing; a WSL restart removes it"
+mountpoint -q "$bind" || fail "the bind mount $bind is a folder with nothing mounted on it; run: sudo mount --bind $dir $bind (if $dir is the mount's host folder in factory.yaml; a WSL restart removes it, see Phase 3 v0-H07)"
 
 case "$mode" in
   check)
