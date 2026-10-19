@@ -47,16 +47,18 @@ nservers() { pgrep -fc "$T/bin/llama-server"; }
 # cmd
 run bash "$L" cmd
 check "cmd: binds 127.0.0.1:8088 with a 102400 context, a q8_0 KV cache, one slot and low effort" \
-  eval '[ $rc = 0 ] && has "--host 127.0.0.1" && has "--port 8088" && has "-c 102400" && has "--cache-type-k q8_0" && has "--cache-type-v q8_0" && has "--parallel 1" && has "{\"reasoning_effort\":\"low\"}"'
+  eval '[ $rc = 0 ] && has "--host 127.0.0.1" && has "--port 8088" && has "-c 102400" && has "--cache-type-k q8_0" && has "--cache-type-v q8_0" && has "--parallel 1" && has "--reasoning-effort low"'
+check "cmd: MTP is on by default, with the draft file from QWEN_HOME on the GPU" \
+  eval 'has "--spec-type draft-mtp -md $T/qh/models/mtp.gguf -ngld all -ctkd q8_0 -ctvd q8_0"'
 QWEN_EFFORT=off run bash "$L" cmd
-check "cmd: effort off turns thinking off" eval 'has "{\"enable_thinking\":false}"'
+check "cmd: effort off turns thinking off" eval 'has "--reasoning off" && ! has "--reasoning-effort"'
 QWEN_EFFORT=high run bash "$L" cmd
 check "cmd: an unknown effort is a usage error that names the allowed values" \
   eval '[ $rc = 2 ] && has QWEN_EFFORT && has "low, medium, xhigh, off"'
 QWEN_MTP_ARGS="--spec-a x" run bash "$L" cmd
 check "cmd: QWEN_MTP_ARGS ends the argument list" eval 'grep -Eq -- "--spec-a x ?\$" "$T/out"'
 QWEN_MTP_ARGS="" run bash "$L" cmd
-check "cmd: an empty QWEN_MTP_ARGS adds nothing" eval '! has "--spec-a"'
+check "cmd: an empty QWEN_MTP_ARGS turns MTP off" eval '! has "--spec-a" && ! has "--spec-type"'
 
 # start
 QWEN_MODEL="$T/missing.gguf" run bash "$L" start

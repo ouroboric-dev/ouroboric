@@ -9,7 +9,8 @@
 #   QWEN_LLAMA_SERVER   the binary ($QWEN_HOME/llama.cpp/build/bin/llama-server)
 #   QWEN_MODEL          the GGUF file ($QWEN_HOME/models/model.gguf)
 #   QWEN_EFFORT         reasoning effort: low (default), medium, xhigh, or off (no thinking)
-#   QWEN_MTP_ARGS       the multi-token prediction flags, split on spaces; empty turns MTP off
+#   QWEN_MTP_ARGS       the multi-token prediction flags, split on spaces; empty turns MTP off. The default
+#                       drafts with $QWEN_HOME/models/mtp.gguf, all on the GPU
 #   QWEN_START_TIMEOUT  seconds to wait for /health (300: loading 17 GB takes a while)
 # The log is $QWEN_HOME/logs/server.log; the previous one is kept as server.log.1.
 set -euo pipefail
@@ -21,19 +22,19 @@ usage() { echo "usage: qwen-local.sh start|stop|status|cmd" >&2; exit 2; }
 bin="${QWEN_LLAMA_SERVER:-$QWEN_HOME/llama.cpp/build/bin/llama-server}"
 model="${QWEN_MODEL:-$QWEN_HOME/models/model.gguf}"
 effort="${QWEN_EFFORT:-low}"
-mtp="${QWEN_MTP_ARGS-}"
+mtp="${QWEN_MTP_ARGS---spec-type draft-mtp -md $QWEN_HOME/models/mtp.gguf -ngld all -ctkd q8_0 -ctvd q8_0}"
 timeout="${QWEN_START_TIMEOUT:-300}"
 pidf="$QWEN_HOME/run/server.pid"
 log="$QWEN_HOME/logs/server.log"
 
 case "$effort" in
-  off) kwargs='{"enable_thinking":false}' ;;
-  low | medium | xhigh) kwargs="{\"reasoning_effort\":\"$effort\"}" ;;
+  off) reasoning=(--reasoning off) ;;
+  low | medium | xhigh) reasoning=(--reasoning-effort "$effort") ;;
   *) echo "QWEN_EFFORT is '$effort'; use one of low, medium, xhigh, off" >&2; exit 2 ;;
 esac
 args=(-m "$model" --alias "$QWEN_ALIAS" --host 127.0.0.1 --port "$QWEN_PORT" -ngl 999 -c "$QWEN_CTX"
   -fa on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja
-  --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 --chat-template-kwargs "$kwargs")
+  --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 "${reasoning[@]}")
 # shellcheck disable=SC2206 # QWEN_MTP_ARGS is a list of flags, split on spaces on purpose
 [ -z "$mtp" ] || args+=($mtp)
 

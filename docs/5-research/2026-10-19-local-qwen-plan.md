@@ -205,8 +205,11 @@ git commit -m "Local Qwen: setup procedure and verified server flags"
   `server.log.1`.
 
 The `cmd` argument list, in this order:
-`-m $QWEN_MODEL --alias $QWEN_ALIAS --host 127.0.0.1 --port $QWEN_PORT -ngl 999 -c $QWEN_CTX -fa on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 --chat-template-kwargs <json> $QWEN_MTP_ARGS`.
-The `<json>` is `{"reasoning_effort":"<effort>"}`, or `{"enable_thinking":false}` for `off`.
+`-m $QWEN_MODEL --alias $QWEN_ALIAS --host 127.0.0.1 --port $QWEN_PORT -ngl 999 -c $QWEN_CTX -fa on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 <reasoning> $QWEN_MTP_ARGS`.
+`<reasoning>` is `--reasoning-effort <effort>`, or `--reasoning off` for `off`. (Corrected in Task 2: the
+plan first passed `--chat-template-kwargs`; llama-server has native reasoning flags.) The default
+`QWEN_MTP_ARGS`, confirmed in Task 1, is
+`--spec-type draft-mtp -md $QWEN_HOME/models/mtp.gguf -ngld all -ctkd q8_0 -ctvd q8_0`.
 
 - [ ] **Step 1: Write the failing tests** in `scripts/tests/qwen-local.test.sh`
 
@@ -222,8 +225,8 @@ Use the `check`, `run` and `has` helpers from `ygg-engine.test.sh`. Put fakes in
 
 ```text
 cmd: default line contains "--host 127.0.0.1", "--port 8088", "-c 102400", "--cache-type-k q8_0",
-     "--parallel 1", and '{"reasoning_effort":"low"}'
-cmd: QWEN_EFFORT=off -> contains '{"enable_thinking":false}'
+     "--parallel 1", and "--reasoning-effort low"; MTP flags on by default
+cmd: QWEN_EFFORT=off -> contains "--reasoning off", no "--reasoning-effort"
 cmd: QWEN_EFFORT=high -> exit 2, message names QWEN_EFFORT and the four allowed values
 cmd: QWEN_MTP_ARGS="--spec-a x" -> last two args are "--spec-a" "x"; QWEN_MTP_ARGS="" -> no "--spec-a"
 start: QWEN_MODEL missing -> exit 2, message names the path; no fake server started
