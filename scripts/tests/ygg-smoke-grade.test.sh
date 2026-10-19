@@ -83,6 +83,7 @@ case "$FAKE_VERB" in
       echo '{"seq":3,"event":"grade_finished","ygg.grade.reward":'"$reward"'}'
       echo '{"seq":4,"event":"run_finished","gen_ai.usage.input_tokens":1500,"gen_ai.usage.output_tokens":300,"ygg.usage.turns":5,"ygg.usage.cost_usd":0.375}'
     } >"$proj/.factory/runs/$id/ledger.jsonl"
+    [ -z "${FAKE_LEDGER_UNREADABLE:-}" ] || chmod 000 "$proj/.factory/runs/$id/ledger.jsonl"
     echo "Run $id is done."
     exit "${FAKE_RUN_RC:-0}" ;;
   grade)
@@ -134,11 +135,25 @@ L="$T/ledger.jsonl"
   echo 'not json'
 } >"$L"
 printf 'budget:\n  per_run: { tokens: 400000, turns: 100, usd: 3 }\n' >"$T/cap.yaml"
+printf 'mode: unattended\n' >"$T/nocap.yaml"
 run "$S/ygg-cost.sh" "$L" "$T/cap.yaml"
 check "the cost counts the two sessions and not the run's own total" has "2 session line(s): 1500 tokens in, 300 out, 5000 cache read, 5 turns"
 check "the cost is the sum of the sessions" has 'cost $0.3750'
 check "an estimated cost is marked" has "an estimate"
 check "the per_run cap is printed beside it" has 'per_run cap is $3'
+run "$S/ygg-cost.sh" "$L" "$T/nocap.yaml"
+check "a factory.yaml with no per_run line does not abort the cost" test "$rc" -eq 0
+check "and says the cap is unknown" has "cap unknown"
+{
+  echo '[1,2]'
+  echo '5'
+  echo 'null'
+  echo '"text"'
+  echo '{"seq":1,"event":"node_finished","gen_ai.usage.input_tokens":null,"gen_ai.usage.output_tokens":7,"ygg.usage.turns":null,"ygg.usage.cost_usd":null}'
+} >"$T/odd.jsonl"
+run "$S/ygg-cost.sh" "$T/odd.jsonl"
+check "non-object lines and null usage fields are tolerated" test "$rc" -eq 0
+check "and the good fields still count" has "1 session line(s): 0 tokens in, 7 out"
 run "$S/ygg-cost.sh" "$T/nope.jsonl"
 check "a missing ledger is refused" test "$rc" -eq 2
 
@@ -258,6 +273,14 @@ check "a hostile wall clock is refused with exit 2" test "$rc" -eq 2
 check "and nothing ran" test ! -e "$T/pwned"
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall "1x;m"
 check "a wall clock like 1x;m is refused" test "$rc" -eq 2
+sleep 1
+FAKE_RUN_RC=3 FAKE_LEDGER_UNREADABLE=1 run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a cost that cannot be read does not replace the run's exit code" test "$rc" -eq 3
+mkdir -p "$T/odin2/testdata/smoke-grade"; cp "$O/pack.yaml" "$T/odin2/testdata/smoke-grade/"
+grep -v -E '^  per_(run|day):' "$O/factory.real.example.yaml" >"$T/odin2/testdata/smoke-grade/factory.real.example.yaml"
+sleep 1
+run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$T/odin2" --env "$T/factory.env" --dry-run
+check "a config with no cap lines still dry-runs to exit 0" test "$rc" -eq 0
 sleep 1
 bash -x "$S/ygg-smoke-real.sh" "${rargs[@]}" >"$T/out" 2>&1
 check "a run under bash -x leaves no credential value in the output" test -z "$(grep -F -e "$MARK_A" -e "$MARK_B" "$T/out")"

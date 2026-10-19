@@ -109,7 +109,7 @@ if [ -z "$ygg" ]; then
 fi
 
 echo "smoke-real: the caps in $work/factory.yaml:"
-grep -E '^  per_(run|day):' "$work/factory.yaml" | sed 's/^/  /'
+{ grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 echo "smoke-real: ygg doctor on that config"
 if ! eval "$ygg doctor --project '$project' --config '$work/factory.yaml'"; then fail "ygg doctor refused the config; nothing was spent"; fi
 
@@ -154,7 +154,7 @@ else
   echo "smoke-real: no score.json: the run did not reach the grade node"
 fi
 if [ -n "$id" ] && [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
-  "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
+  "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml" || echo "smoke-real: the cost could not be read from the ledger" >&2
 fi
 echo "smoke-real: the folder is $work" >&2
 exit "$rc"
