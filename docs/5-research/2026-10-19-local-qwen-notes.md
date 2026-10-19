@@ -94,10 +94,74 @@ First run (2026-10-20), with a 30-token coding prompt at low effort:
 Smoke runs (2026-10-20). Each was asked which files in `scripts/` start with `qwen`, and each made a
 tool call and answered correctly:
 
-- OpenCode: 8 seconds.
+- OpenCode: 8 seconds. After the `--standalone` fix (see [Measurements](#measurements)), 4.5
+  seconds with `run --auto`.
 - Claude Code, after the template fix: 14 seconds.
 
 ## Measurements
+
+All measurements were taken on 2026-10-20, with UD-Q4_K_M at a 102,400-token context and a q8_0 KV
+cache. The figures are the server's own timings for each request (`timings` in the
+`/v1/chat/completions` response, and `print_timing` in the server log). The short prompt asked for a
+Go duration parser with table-driven tests (75 tokens, 512 tokens out).
+
+| Run | Decode (tokens/s) | Prompt (tokens/s) | MTP drafts accepted | VRAM in use |
+| --- | --- | --- | --- | --- |
+| Short prompt, MTP on (3 runs) | 83.9 median (82.3–92.2) | about 180 (cold) | 58–67% | 23.5 GB |
+| Short prompt, MTP off (3 runs) | 46.5 median (46.3–46.6) | about 200 (cold) | none | 21.2 GB |
+| 94,975-token prompt of Go source, MTP on | 68.6 | 1,987 (48 s to read it) | 82% | 23.6 GB |
+
+- **MTP pays.** It gives about 1.8 times the decode speed, for about 2.3 GB of VRAM. [ANALYSIS]
+- **The full context fits.** About 95K tokens of context loaded and answered, with no out-of-memory
+  error. The design's floor of 64K was not needed, so the default stays at 102,400.
+- **Speed at long context.** Decode slowed to about 69 tokens per second at 95K tokens filled, which
+  is still above the 40 target. The cost of a long context is in reading it: about 2,000 tokens per
+  second, so a fresh 95K-token prompt takes about 48 seconds. Later turns reuse the prompt cache.
+
+**Reasoning effort.** The server was restarted at each level, then given the short prompt with a
+20,000-token cap. Each level was run once, so these are rough figures:
+
+| `QWEN_EFFORT` | Output tokens | Reasoning (characters) | Wall time |
+| --- | --- | --- | --- |
+| `low` | 2,635 | 4,777 | 27.0 s |
+| `medium` | 2,365 | 4,138 | 23.9 s |
+| `xhigh` (the model's default) | 6,042 | 19,928 | 67.8 s |
+
+`xhigh` spent about four times the reasoning of `low`, for the same small task. `low` and `medium`
+were about the same on this prompt. [ANALYSIS]
+
+**Per-request effort.** The template adds different instructions for each level, so the prompt's
+token count shows which level a request got: 75 tokens at `low`, 45 at `medium` and 87 at `xhigh`.
+
+- **The OpenAI API honours it.** `"reasoning_effort": "xhigh"` in a `/v1/chat/completions` request
+  overrides the server's default.
+- **OpenCode can send it.** A capture of its requests showed that a model's
+  `"options": {"reasoningEffort": "xhigh"}` arrives as `reasoning_effort`. Its title requests ask for
+  `low`.
+- **The Anthropic API ignores it.** `/v1/messages` gives the same prompt whatever
+  `output_config.effort` or `thinking` says. Claude Code sends `effort: high` and adaptive thinking,
+  and the server ignores both. For Claude Code, only the server's `QWEN_EFFORT` counts.
+
+**OpenCode's background service.**
+
+- OpenCode 2 starts `opencode serve --service` on first use. Later `opencode run` calls connect to it,
+  and it keeps the config and environment it started with. A new `OPENCODE_CONFIG_CONTENT` was
+  silently ignored, so the launcher's provider limit and credential stripping would not have applied.
+- `qwen-opencode.sh` now always passes `--standalone`, which gives each session a private server. The
+  flag must come after `run` (`opencode run --standalone`), or first for the interactive session.
+- In standalone mode, a headless `run` that calls a tool waits for approval, with no way to give
+  it. Pass `--auto` to approve tools in a run you trust.
+
+**Only the local server got model calls.**
+
+- Every model call in the smoke runs appears in the server log as a slot task.
+- The launcher tests prove that `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` and
+  `OPENROUTER_API_KEY` never reach either tool.
+- The two capture runs, pointed at a dummy server, showed that each tool sends its model calls only
+  to the configured base URL. Claude Code sent one `/v1/messages` request; OpenCode sent 13
+  `/v1/chat/completions` requests.
+
+Verified on 2026-10-20.
 
 ## Comparison
 
