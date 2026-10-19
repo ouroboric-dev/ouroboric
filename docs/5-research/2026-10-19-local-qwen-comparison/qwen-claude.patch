@@ -1,0 +1,41 @@
+diff --git a/internal/engine/engine.go b/internal/engine/engine.go
+index 0e5db0d..bc9844e 100644
+--- a/internal/engine/engine.go
++++ b/internal/engine/engine.go
+@@ -103,6 +103,9 @@ func advance(ctx context.Context, r *run.Run) (Outcome, error) {
+ 			err = runInit(ctx, r, n)
+ 		case schema.KindGrade:
+ 			err = runGrade(ctx, r, n)
++		default:
++			// A kind the engine does not know is a bad manifest, never a pass.
++			err = &nodeFailure{fmt.Errorf("bad_manifest: the graph names the node kind %q, which the engine does not know", n.Kind)}
+ 		}
+ 		var sb *sentBack
+ 		var ex *expanded
+diff --git a/internal/engine/engine_test.go b/internal/engine/engine_test.go
+index 853b58a..b128838 100644
+--- a/internal/engine/engine_test.go
++++ b/internal/engine/engine_test.go
+@@ -8,6 +8,7 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	"github.com/ouroboric-dev/gungnir/schema"
+ 	"github.com/ouroboric-dev/odin/internal/ledger"
+ 	"github.com/ouroboric-dev/odin/internal/run"
+ 	"github.com/ouroboric-dev/odin/internal/tree/treetest"
+@@ -254,3 +255,14 @@ func TestEveryNodeInALeafEndsWithACheckpoint(t *testing.T) {
+ 		t.Error("node a's node_finished line doesn't carry its checkpoint commit")
+ 	}
+ }
++
++func TestAnUnknownNodeKindIsABadManifest(t *testing.T) {
++	r := start(t, "key-points", "", "  - { id: a, kind: exec, run: [echo, hi], repo: repos/app }\n", "steps: {}\n")
++	// ParseGraph refuses the kinds its schema doesn't know; the case this covers is a graph whose
++	// schema is newer than the engine's (backlog B-071), so the node is put in after the run started.
++	r.Setup.Graph.Nodes = append([]schema.Node{{ID: "odd", Kind: "quincunx", Repo: "repos/app"}}, r.Setup.Graph.Nodes...)
++	out, err := Advance(context.Background(), r)
++	if err != nil || out.Status != run.StatusFailed || !strings.Contains(out.Err.Error(), "bad_manifest") {
++		t.Fatalf("Advance() = %+v, %v; want failed with bad_manifest", out, err)
++	}
++}

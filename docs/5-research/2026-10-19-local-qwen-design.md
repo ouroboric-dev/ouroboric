@@ -1,6 +1,6 @@
 ---
 title: Local Qwen 3.8 27B coding assistant
-status: draft
+status: accepted
 date: 2026-10-19
 style: spec
 ---
