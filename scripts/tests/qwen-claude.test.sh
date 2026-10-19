@@ -76,7 +76,7 @@ check "run with the server down: refuses with the start hint; claude does not ru
 touch "$T/healthy"
 ANTHROPIC_API_KEY=a CLAUDE_CODE_OAUTH_TOKEN=b OPENROUTER_API_KEY=c run bash "$C" -p "hi there"
 check "run passes the arguments and points Claude Code at the local server and config dir" \
-  eval '[ $rc = 0 ] && called "$Q -p hi there" && envhas "ANTHROPIC_BASE_URL=http://127.0.0.1:8088" && envhas "CLAUDE_CONFIG_DIR=$Q" && envhas ANTHROPIC_MODEL=qwen3.8-27b && envhas ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen3.8-27b && envhas CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 && envhas DISABLE_AUTOUPDATER=1'
+  eval '[ $rc = 0 ] && called "$Q -p hi there" && envhas "ANTHROPIC_BASE_URL=http://127.0.0.1:8088" && envhas "CLAUDE_CONFIG_DIR=$Q" && envhas ANTHROPIC_MODEL=qwen3.8-27b && envhas ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen3.8-27b && envhas CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 && envhas DISABLE_AUTOUPDATER=1 && envhas CLAUDE_CODE_MAX_CONTEXT_TOKENS=102400'
 check "no cloud credential from the caller's shell reaches claude" \
   eval '[ -e "$T/env" ] && ! grep -Eq "^(ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=" "$T/env"'
 check "nothing under ~/.claude-personal or ~/.claude changed" eval '[ "$(sums)" = "$before" ]'

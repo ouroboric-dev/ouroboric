@@ -72,7 +72,16 @@ Done on 2026-10-19 and 2026-10-20. Everything except steps 1 and 2 runs without 
      turns thinking off.
    - At 102,400 tokens of context, with MTP, the card holds 23.5 of 24.6 GB, of which Windows uses
      about 2.1 GB.
-7. **Set up the local Claude Code config dir.** Run `scripts/qwen-claude.sh init`.
+7. **Save a fixed chat template, once.** With the server running, run `scripts/qwen-local.sh template`, then
+   restart the server. Claude Code sends hook context, such as superpowers' SessionStart text, as a
+   `system` message in the middle of the conversation. The model's template refuses any system
+   message after the first (`Jinja Exception: System message must be at the beginning.`), so every
+   Claude Code request failed with HTTP 500. The saved copy renders such a message as a system turn,
+   and `start` uses it from then on (`--chat-template-file`).
+8. **Set up the local Claude Code config dir.** Run `scripts/qwen-claude.sh init`. It added the
+   marketplace and installed the three plugins into `~/.claude-qwen`. Claude Code does not know the
+   model, so `qwen-claude.sh` sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS` to the server's context. Without
+   it, Claude Code assumes 200K tokens and would compact too late.
 
 First run (2026-10-20), with a 30-token coding prompt at low effort:
 
@@ -81,6 +90,12 @@ First run (2026-10-20), with a 30-token coding prompt at low effort:
 - The reasoning was 887 characters long.
 
 `/v1/messages`, the Anthropic Messages API, answered with a `thinking` block and a `text` block.
+
+Smoke runs (2026-10-20). Each was asked which files in `scripts/` start with `qwen`, and each made a
+tool call and answered correctly:
+
+- OpenCode: 8 seconds.
+- Claude Code, after the template fix: 14 seconds.
 
 ## Measurements
 

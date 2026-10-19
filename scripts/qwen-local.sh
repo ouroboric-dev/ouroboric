@@ -5,6 +5,9 @@
 #   qwen-local.sh stop     stop it (TERM, then KILL after 30 seconds)
 #   qwen-local.sh status   exit 0 and print the URL when it runs, exit 3 when it does not
 #   qwen-local.sh cmd      print the server command line, and run nothing
+#   qwen-local.sh template save the running model's chat template, changed so that a system message
+#                          after the first one is rendered instead of refused (Claude Code sends one,
+#                          for hook context); start uses the saved file from then on
 # Environment, besides qwen-lib.sh's QWEN_HOME, QWEN_PORT, QWEN_CTX and QWEN_ALIAS:
 #   QWEN_LLAMA_SERVER   the binary ($QWEN_HOME/llama.cpp/build/bin/llama-server)
 #   QWEN_MODEL          the GGUF file ($QWEN_HOME/models/model.gguf)
@@ -12,11 +15,12 @@
 #   QWEN_MTP_ARGS       the multi-token prediction flags, split on spaces; empty turns MTP off. The default
 #                       drafts with $QWEN_HOME/models/mtp.gguf, all on the GPU
 #   QWEN_START_TIMEOUT  seconds to wait for /health (300: loading 17 GB takes a while)
+#   QWEN_CHAT_TEMPLATE  the saved chat template ($QWEN_HOME/models/chat-template.jinja), used when it exists
 # The log is $QWEN_HOME/logs/server.log; the previous one is kept as server.log.1.
 set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=qwen-lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/qwen-lib.sh"
-usage() { echo "usage: qwen-local.sh start|stop|status|cmd" >&2; exit 2; }
+usage() { echo "usage: qwen-local.sh start|stop|status|cmd|template" >&2; exit 2; }
 [ $# -eq 1 ] || usage
 
 bin="${QWEN_LLAMA_SERVER:-$QWEN_HOME/llama.cpp/build/bin/llama-server}"
@@ -24,6 +28,7 @@ model="${QWEN_MODEL:-$QWEN_HOME/models/model.gguf}"
 effort="${QWEN_EFFORT:-low}"
 mtp="${QWEN_MTP_ARGS---spec-type draft-mtp -md $QWEN_HOME/models/mtp.gguf -ngld all -ctkd q8_0 -ctvd q8_0}"
 timeout="${QWEN_START_TIMEOUT:-300}"
+tplf="${QWEN_CHAT_TEMPLATE:-$QWEN_HOME/models/chat-template.jinja}"
 pidf="$QWEN_HOME/run/server.pid"
 log="$QWEN_HOME/logs/server.log"
 
@@ -35,6 +40,7 @@ esac
 args=(-m "$model" --alias "$QWEN_ALIAS" --host 127.0.0.1 --port "$QWEN_PORT" -ngl 999 -c "$QWEN_CTX"
   -fa on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja
   --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 "${reasoning[@]}")
+[ ! -f "$tplf" ] || args+=(--chat-template-file "$tplf")
 # shellcheck disable=SC2206 # QWEN_MTP_ARGS is a list of flags, split on spaces on purpose
 [ -z "$mtp" ] || args+=($mtp)
 
@@ -71,8 +77,25 @@ stop_pid() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
+# The model's template refuses a system message after the first. This renders it as a system turn.
+fix_template='
+import json, sys
+t = json.load(sys.stdin)["chat_template"]
+old = "{{- raise_exception(\x27System message must be at the beginning.\x27) }}"
+if t.count(old) != 1:
+    sys.exit("did not find the line that refuses later system messages in the chat template; check the template by hand")
+open(sys.argv[1], "w").write(t.replace(old, "{{- \x27<|im_start|>system\\n\x27 + content + \x27<|im_end|>\\n\x27 }}"))
+'
+
 case "$1" in
   cmd) quote "$bin" "${args[@]}" ;;
+  template)
+    qwen_require_server
+    mkdir -p "$(dirname "$tplf")"
+    if ! curl -fsS -m 10 "$(qwen_url)/props" | python3 -I -c "$fix_template" "$tplf.tmp"; then rm -f "$tplf.tmp"; exit 1; fi
+    mv -f "$tplf.tmp" "$tplf"
+    echo "saved $tplf; restart the server to use it: qwen-local.sh stop && qwen-local.sh start"
+    ;;
   status)
     qwen_load_state
     if running >/dev/null; then echo "running on $(qwen_url)"; else echo "not running"; exit 3; fi

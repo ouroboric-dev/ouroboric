@@ -8,6 +8,7 @@
 #   QWEN_CLAUDE_DIR    the local config dir ($HOME/.claude-qwen); never the work or personal one
 #   QWEN_PERSONAL_DIR  the personal config dir, only read ($HOME/.claude-personal)
 #   QWEN_CLAUDE_BIN    the claude binary (the one on PATH; the zsh `claude` function is not used)
+# Claude Code does not know this model, so CLAUDE_CODE_MAX_CONTEXT_TOKENS tells it the server's context.
 # It never writes to ~/.claude, ~/.claude.json or the personal config dir, and removes the cloud
 # credentials of the caller's shell, so a session cannot reach a hosted model by accident.
 set -euo pipefail
@@ -51,5 +52,5 @@ exec env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN -u OPENROUTER_API_KEY \
   CLAUDE_CONFIG_DIR="$dir" ANTHROPIC_BASE_URL="$(qwen_url)" ANTHROPIC_AUTH_TOKEN=local-qwen \
   ANTHROPIC_MODEL="$QWEN_ALIAS" ANTHROPIC_DEFAULT_OPUS_MODEL="$QWEN_ALIAS" ANTHROPIC_DEFAULT_SONNET_MODEL="$QWEN_ALIAS" \
   ANTHROPIC_DEFAULT_HAIKU_MODEL="$QWEN_ALIAS" CLAUDE_CODE_SUBAGENT_MODEL="$QWEN_ALIAS" \
-  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1 \
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS="$QWEN_CTX" CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1 \
   "$bin" "$@"

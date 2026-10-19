@@ -31,10 +31,11 @@ trap 'rm -f "$T/healthy"; kill \$! 2>/dev/null; exit 0' TERM
 [ -n "\${FAKE_NEVER_READY:-}" ] || touch "$T/healthy"
 sleep 300 & wait
 EOF2
+# The fake curl answers /props from $T/props, and anything else with a health answer.
 cat > "$T/bin/curl" <<EOF2
 #!/usr/bin/env bash
 [ -e "$T/healthy" ] || exit 7
-echo '{"status":"ok"}'
+case "\${*: -1}" in */props) cat "$T/props" ;; *) echo '{"status":"ok"}' ;; esac
 EOF2
 chmod +x "$T/bin/llama-server" "$T/bin/curl"
 touch "$T/model.gguf"
@@ -59,6 +60,28 @@ QWEN_MTP_ARGS="--spec-a x" run bash "$L" cmd
 check "cmd: QWEN_MTP_ARGS ends the argument list" eval 'grep -Eq -- "--spec-a x ?\$" "$T/out"'
 QWEN_MTP_ARGS="" run bash "$L" cmd
 check "cmd: an empty QWEN_MTP_ARGS turns MTP off" eval '! has "--spec-a" && ! has "--spec-type"'
+
+tpl="$T/qh/models/chat-template.jinja"
+mkdir -p "$T/qh/models"; echo x > "$tpl"
+run bash "$L" cmd
+check "cmd: a saved chat template is passed to the server" eval 'has "--chat-template-file $tpl"'
+rm -f "$tpl"
+run bash "$L" cmd
+check "cmd: without a saved chat template, the model's own is used" eval '! has "--chat-template-file"'
+
+# template
+run bash "$L" template
+check "template: needs the server running" eval '[ $rc = 2 ] && has "server is not running" && [ ! -e "$tpl" ]'
+touch "$T/healthy"
+python3 -I -c 'import json,sys; print(json.dumps({"chat_template": "{%- if a %}\n        {{- raise_exception(\x27System message must be at the beginning.\x27) }}\n{%- endif %}"}))' > "$T/props"
+run bash "$L" template
+check "template: saves the model's template with later system messages rendered as system turns" \
+  eval '[ $rc = 0 ] && has "$tpl" && ! grep -q raise_exception "$tpl" && grep -qF "<|im_start|>system\\n" "$tpl" && grep -qF " + content + " "$tpl" && grep -qF "{%- if a %}" "$tpl"'
+rm -f "$tpl"; echo '{"chat_template": "no such line"}' > "$T/props"
+run bash "$L" template
+check "template: a template without the expected line is refused, and nothing is saved" \
+  eval '[ $rc = 1 ] && has "did not find" && [ ! -e "$tpl" ]'
+rm -f "$T/healthy" "$T/props"
 
 # start
 QWEN_MODEL="$T/missing.gguf" run bash "$L" start
