@@ -241,6 +241,15 @@ FAKE_RUN_SLEEP=30 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall 1s
 check "the wall clock ends a run that hangs, and the code is 124" test "$rc" -eq 124
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall soon
 check "a wall clock that is not a duration is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall "1s; touch $T/pwned; echo h"
+check "a hostile wall clock is refused with exit 2" test "$rc" -eq 2
+check "and nothing ran" test ! -e "$T/pwned"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall "1x;m"
+check "a wall clock like 1x;m is refused" test "$rc" -eq 2
+sleep 1
+bash -x "$S/ygg-smoke-real.sh" "${rargs[@]}" >"$T/out" 2>&1
+check "a run under bash -x leaves no credential value in the output" test -z "$(grep -F -e "$MARK_A" -e "$MARK_B" "$T/out")"
+check "nor in any saved file" test -z "$(grep -rl -e "$MARK_A" -e "$MARK_B" "$(newest "smoke-real-*")" 2>/dev/null | head -n 1)"
 # The script does not read the credentials file: every line that names it is on this list.
 bad="$(grep -n 'envfile' "$S/ygg-smoke-real.sh" | grep -v -E 'envfile=|--env\)|\[ -f "\$envfile" \]|grep -c -E "[^"]*" "\$envfile"|\. "\$envfile"|\$envfile (has|is missing)|source=|FILE' || true)"
 check "the only uses of the credentials file are the existence test, grep -c on a name, and the subshell load" test -z "$bad"

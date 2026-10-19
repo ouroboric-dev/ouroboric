@@ -43,7 +43,7 @@ done
 fail() { echo "smoke-real: $*" >&2; exit 2; }
 task=smoke-notes
 bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
-case "$wall" in [1-9]*[smh]) ;; *) fail "--wall is a number and s, m or h, such as 90m" ;; esac
+[[ $wall =~ ^[1-9][0-9]*[smh]$ ]] || fail "--wall is a number and s, m or h, such as 90m"
 
 export PATH="$dir/dc/node_modules/.bin:$PATH"
 if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
@@ -125,6 +125,7 @@ out="$work/run.txt"
 # The credentials live only in this subshell; nothing here prints them.
 set +e
 (
+  { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
   set -a
   # shellcheck source=/dev/null
   . "$envfile"
@@ -137,7 +138,8 @@ set -e
 echo "smoke-real: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 wall clock)" >&2
 
 report="$work/report.txt"
-( set -a
+( { set +x; } 2>/dev/null # as above
+  set -a
   # shellcheck source=/dev/null
   . "$envfile"
   set +a
