@@ -242,6 +242,16 @@ as if they were Anthropic's; the real cost was GPU time and electricity.
   - Claude Code's effort settings are ignored by `/v1/messages`.
   - OpenCode 2's background service ignores a new config, so the launcher passes `--standalone`.
   - OpenCode's `run` waits for a tool approval that a headless run cannot give, so pass `--auto`.
-- **The remaining unfairness.** The hosted run also had the founder's personal memory and the
-  claude.ai connectors; neither was relevant to this task. Each configuration ran once, so the
-  timing and token figures are one sample each.
+- **The remaining unfairness.** The local Claude Code shares the personal setup's three plugins,
+  its skills and its merge hook. It differs from the hosted run in these ways:
+  - The hosted run had the personal auto-memory and the claude.ai connectors. Neither was relevant
+    to this task.
+  - `~/.claude-personal/settings.json` sets `defaultMode: auto`, a permissions allowlist, and
+    `effortLevel` (`high` for Opus 5.5). The local config uses `defaultMode: default` and has no
+    allowlist. All three headless runs overrode the mode with `acceptEdits` and the same Bash
+    allowlist. The local server ignores Claude Code's effort setting.
+  - Each configuration ran once, so the timing and token figures are one sample each.
+- **The skills link is a write path.** `~/.claude-qwen/skills` links to `~/.claude-personal/skills`, so
+  the local model sees the same skills, as the founder asked. A local session could change a personal
+  skill through that link, for example with skill-creator, but only through an action that the
+  founder approves. Copy the skills instead if that matters more than staying in sync.
