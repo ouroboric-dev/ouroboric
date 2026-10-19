@@ -29,10 +29,16 @@ inside() {
   [ "$d" = "$r" ] || [[ "$d" == "$r"/* ]]
 }
 
+# Both modes refuse a config dir that is, or is inside, a real account's config dir, and one that holds
+# them (such as $HOME, where ~/.claude.json lives): Claude Code would write that account's files.
+for r in "$HOME/.claude" "$HOME/.claude-personal" "$personal"; do
+  if inside "$dir" "$r" || inside "$r" "$dir"; then
+    echo "QWEN_CLAUDE_DIR $dir overlaps the account config dir $r; the local config dir must be separate" >&2
+    exit 2
+  fi
+done
+
 if [ "${1:-}" = init ]; then
-  for r in "$HOME/.claude" "$personal"; do
-    if inside "$dir" "$r"; then echo "QWEN_CLAUDE_DIR $dir is inside $r; the local config dir must be separate" >&2; exit 2; fi
-  done
   mkdir -p "$dir"
   enabled="" sep=""
   for p in "${plugins[@]}"; do enabled+="$sep\"$p@$market\":true"; sep=","; done
@@ -48,7 +54,10 @@ fi
 
 [ -f "$dir/settings.json" ] || { echo "$dir is not set up; run scripts/qwen-claude.sh init first" >&2; exit 2; }
 qwen_require_server
+# The Bedrock, Vertex and Foundry switches would send the session to a hosted model, past the base URL.
 exec env -u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN -u OPENROUTER_API_KEY \
+  -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY \
+  -u ANTHROPIC_BEDROCK_BASE_URL -u ANTHROPIC_VERTEX_BASE_URL \
   CLAUDE_CONFIG_DIR="$dir" ANTHROPIC_BASE_URL="$(qwen_url)" ANTHROPIC_AUTH_TOKEN=local-qwen \
   ANTHROPIC_MODEL="$QWEN_ALIAS" ANTHROPIC_DEFAULT_OPUS_MODEL="$QWEN_ALIAS" ANTHROPIC_DEFAULT_SONNET_MODEL="$QWEN_ALIAS" \
   ANTHROPIC_DEFAULT_HAIKU_MODEL="$QWEN_ALIAS" CLAUDE_CODE_SUBAGENT_MODEL="$QWEN_ALIAS" \
