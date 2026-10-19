@@ -49,6 +49,10 @@ nservers() { pgrep -fc "$T/bin/llama-server"; }
 run bash "$L" cmd
 check "cmd: binds 127.0.0.1:8088 with a 102400 context, a q8_0 KV cache, one slot and low effort" \
   eval '[ $rc = 0 ] && has "--host 127.0.0.1" && has "--port 8088" && has "-c 102400" && has "--cache-type-k q8_0" && has "--cache-type-v q8_0" && has "--parallel 1" && has "--reasoning-effort low"'
+check "cmd: the prompt cache in system RAM is capped at 2048 MiB, so it fits WSL's memory cap" eval 'has "--cache-ram 2048"'
+QWEN_CACHE_RAM=0 run bash "$L" cmd
+check "cmd: QWEN_CACHE_RAM sets the cap" eval 'has "--cache-ram 0"'
+run bash "$L" cmd
 check "cmd: MTP is on by default, with the draft file from QWEN_HOME on the GPU" \
   eval 'has "--spec-type draft-mtp -md $T/qh/models/mtp.gguf -ngld all -ctkd q8_0 -ctvd q8_0"'
 QWEN_EFFORT=off run bash "$L" cmd

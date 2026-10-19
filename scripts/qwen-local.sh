@@ -14,6 +14,9 @@
 #   QWEN_EFFORT         reasoning effort: low (default), medium, xhigh, or off (no thinking)
 #   QWEN_MTP_ARGS       the multi-token prediction flags, split on spaces; empty turns MTP off. The default
 #                       drafts with $QWEN_HOME/models/mtp.gguf, all on the GPU
+#   QWEN_CACHE_RAM      the most MiB of system RAM for llama-server's prompt cache (2048). Its own default,
+#                       8192, grew past WSL's 12 GB memory cap in an agent session, and the kernel's
+#                       out-of-memory killer stopped the server
 #   QWEN_START_TIMEOUT  seconds to wait for /health (300: loading 17 GB takes a while)
 #   QWEN_CHAT_TEMPLATE  the saved chat template ($QWEN_HOME/models/chat-template.jinja), used when it exists
 # The log is $QWEN_HOME/logs/server.log; the previous one is kept as server.log.1.
@@ -38,7 +41,7 @@ case "$effort" in
   *) echo "QWEN_EFFORT is '$effort'; use one of low, medium, xhigh, off" >&2; exit 2 ;;
 esac
 args=(-m "$model" --alias "$QWEN_ALIAS" --host 127.0.0.1 --port "$QWEN_PORT" -ngl 999 -c "$QWEN_CTX"
-  -fa on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja
+  -fa on --cache-type-k q8_0 --cache-type-v q8_0 --cache-ram "${QWEN_CACHE_RAM:-2048}" --parallel 1 --jinja
   --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0 "${reasoning[@]}")
 [ ! -f "$tplf" ] || args+=(--chat-template-file "$tplf")
 # shellcheck disable=SC2206 # QWEN_MTP_ARGS is a list of flags, split on spaces on purpose
