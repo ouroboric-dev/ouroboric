@@ -59,6 +59,7 @@ cat >"$T/bin/ygg" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >>"${FAKE_ARGS_LOG:-/dev/null}"
 proj='' cfg=''
+[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || echo "loaded:$FAKE_VERB" >>"${FAKE_ARGS_LOG:-/dev/null}"
 while [ $# -gt 0 ]; do case "$1" in --project) proj="$2" ;; --config) cfg="$2" ;; esac; shift; done
 case "$FAKE_VERB" in
   doctor)
@@ -67,7 +68,6 @@ case "$FAKE_VERB" in
   status) echo "status:   done" ;;
   build) echo "built" ;;
   run)
-    [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || echo "the credentials were loaded" >>"${FAKE_ARGS_LOG:-/dev/null}"
     [ -z "${FAKE_RUN_SLEEP:-}" ] || exec sleep "$FAKE_RUN_SLEEP"
     id=20261018-000000-000001
     mkdir -p "$proj/.factory/runs/$id"
@@ -212,7 +212,7 @@ check "a dry run exits 0" test "$rc" -eq 0
 check "a dry run says what it would run, under a wall clock" has "would run: timeout --signal=INT --kill-after=2m 90m"
 check "a dry run runs the doctor" grep -q '^doctor ' "$T/args.log"
 check "a dry run does not start the run" test -z "$(grep '^run ' "$T/args.log")"
-check "a dry run does not load the credentials" test -z "$(grep 'credentials were loaded' "$T/args.log")"
+check "a dry run does not load the credentials, not even for the doctor" test -z "$(grep '^loaded:' "$T/args.log")"
 check "a dry run prints the caps" has "per_run: { tokens: 400000, turns: 100, usd: 3 }"
 rc_yaml="$(newest "smoke-real-*")/factory.yaml"
 check "the config has no place left to fill" test -z "$(grep -h '@[A-Z]*@' "$rc_yaml")"
@@ -227,7 +227,8 @@ sleep 1
 FAKE_ARGS_LOG="$T/args3.log" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --build
 check "a run with the fake ygg exits with the run's code" test "$rc" -eq 0
 check "the images are built on request" has "built"
-check "the credentials were loaded for the run" grep -q 'credentials were loaded' "$T/args3.log"
+check "the credentials were loaded for the run" grep -q '^loaded:run$' "$T/args3.log"
+check "and not for the first doctor, which comes before the run" test "$(head -n 1 "$T/args3.log" | cut -d' ' -f1)" = doctor
 check "no credential value is printed" hasnt "$MARK_A"
 check "nor the second" hasnt "$MARK_B"
 check "the score is printed" has "reward 0, fail-to-pass 6/6"
@@ -243,6 +244,7 @@ check "a wall clock that is not a duration is refused" test "$rc" -eq 2
 # The script does not read the credentials file: every line that names it is on this list.
 bad="$(grep -n 'envfile' "$S/ygg-smoke-real.sh" | grep -v -E 'envfile=|--env\)|\[ -f "\$envfile" \]|grep -c -E "[^"]*" "\$envfile"|\. "\$envfile"|\$envfile (has|is missing)|source=|FILE' || true)"
 check "the only uses of the credentials file are the existence test, grep -c on a name, and the subshell load" test -z "$bad"
+check "exactly two lines source the credentials file, both in subshells" test "$(grep -c '^[[:space:]]*\. "\$envfile"' "$S/ygg-smoke-real.sh")" -eq 2
 check "the credentials file is not read by cat, head, tail, sed or awk" test -z "$(grep -E '(cat|head|tail|sed|awk|cut) [^|]*envfile' "$S/ygg-smoke-real.sh")"
 
 exit "$fail"
