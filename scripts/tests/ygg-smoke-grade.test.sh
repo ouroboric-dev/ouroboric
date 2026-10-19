@@ -189,6 +189,18 @@ check "and the smoke exits 1" test "$rc" -eq 1
 sleep 1
 FAKE_DOCTOR_RC=1 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
 check "a doctor that does not find 0 grader containers fails the smoke" has "FAIL  reference: ygg doctor finds 0 grader containers"
+sleep 1
+FAKE_REWARD=null run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
+check "an empty product with a null reward fails the smoke" has "FAIL  empty: reward is below 1"
+sleep 1
+FAKE_RUN_SLEEP=31337 "$S/ygg-smoke-grade.sh" "${gargs[@]}" >"$T/out" 2>&1 &
+gpid=$!
+sleep 4
+kill -TERM "$gpid" 2>/dev/null
+pkill -f 'sleep 31337' 2>/dev/null
+wait "$gpid" 2>/dev/null
+sleep 3
+check "a smoke that is killed leaves no poller of the engine behind" test -z "$(pgrep -f "ygg-smoke-grade.sh --folder $D" || true)"
 
 # --- ygg-smoke-real.sh. The credentials are made-up values; none may appear anywhere in the output.
 MARK_A='sekret-claude-0123456789'

@@ -174,7 +174,9 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   config "$c" >"$v/factory.yaml"
   : >"$v/mounts.log"
   watch "$v/mounts.log" &
-  local watcher=$!
+  watcher=$! watchlog="$v/mounts.log"
+  # An interrupt or an early exit must not leave the poller running.
+  trap 'touch "$watchlog.stop"; kill "$watcher" 2>/dev/null || true' EXIT
   set +e
   eval "$ygg run --project '$project' --config '$v/factory.yaml' --realm '$realm' --brief '$tasks/$task/instruction.md'" 2>&1 | tee "$v/run.txt"
   rc="${PIPESTATUS[0]}"
@@ -191,13 +193,14 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   fi
   touch "$v/mounts.log.stop"
   wait "$watcher" || true
+  trap - EXIT
   local score="$project/.factory/runs/${id:-none}/score.json" reward=none
   [ -f "$score" ] && reward="$(jq -r '.reward' "$score")"
   echo "smoke-grade: $c reward $reward"
   if [ "$c" = reference ]; then
     check "reference: reward is 1" jq -e '.reward == 1' "$score"
   else
-    check "empty: reward is below 1 (it is $reward)" jq -e '.reward < 1' "$score"
+    check "empty: reward is below 1 (it is $reward)" jq -e '(.reward | type) == "number" and .reward < 1' "$score"
   fi
   check "$c: the ledger has grade_finished twice (the node, then the command)" is_count "$project/.factory/runs/${id:-none}/ledger.jsonl" '"event": ?"grade_finished"' 2
   check "$c: no container with the label ygg.grader is left" is_empty "$(podman ps -a -q --filter label=ygg.grader 2>/dev/null || true)"
