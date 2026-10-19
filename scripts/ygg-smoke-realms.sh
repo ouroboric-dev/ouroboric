@@ -54,7 +54,7 @@ case "$graph" in */*) ;; *) grep -q '^graphs:' "$dir/factory.yaml" || { echo "sm
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
 [ "$got" = "$want" ] || { echo "smoke-realms: devcontainer CLI is '${got:-missing}', want $want; put the right one first on PATH" >&2; exit 2; }
 [ -d "$bind" ] || { echo "smoke-realms: the bind mount $bind is missing; a WSL restart removes it (see Phase 3 v0-H07)" >&2; exit 2; }
-mountpoint -q "$bind" || { echo "smoke-realms: the bind mount $bind is a folder with nothing mounted on it; run: sudo mount --bind <the mount's host folder in $dir/factory.yaml> $bind (a WSL restart removes it, see Phase 3 v0-H07)" >&2; exit 2; }
+mountpoint -q "$bind" || { echo "smoke-realms: the bind mount $bind is a folder with nothing mounted on it; run: sudo mount --bind <the host folder of factory.yaml's mount> $bind (a WSL restart removes it, see Phase 3 v0-H07)" >&2; exit 2; }
 
 project="$dir/smoke-realms-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$project"

@@ -107,6 +107,8 @@ FAKE_CLI_VERSION=0.88.0 run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "a wrong devcontainer version is refused" test "$rc" -eq 2
 YGG_BIND="$T/missing" run "$S/ygg-smoke-loop.sh" "${args[@]}"
 check "a missing bind mount is refused" test "$rc" -eq 2
+YGG_BIND="$T/plain" run "$S/ygg-smoke-loop.sh" "${args[@]}"
+check "a bind folder with nothing mounted on it is refused (loop)" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 FAKE_RUN_RC=4 run "$S/ygg-smoke-loop.sh" --build "${args[@]}"
 check "the exit code of the run is the script's" test "$rc" -eq 4
 check "the project is made" test -f "$D/smoke-loop/umbrella.yaml"
@@ -145,8 +147,7 @@ check "a wrong devcontainer version is refused (realms)" test "$rc" -eq 2
 YGG_BIND="$T/missing" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
 check "a missing bind mount is refused (realms)" test "$rc" -eq 2
 YGG_BIND="$T/plain" run "$S/ygg-smoke-realms.sh" "${rargs[@]}"
-check "a bind folder with nothing mounted on it is refused (realms)" test "$rc" -eq 2
-check "and the refusal says how to mount it" has "sudo mount --bind"
+check "a bind folder with nothing mounted on it is refused (realms)" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 FAKE_RUN_RC=5 run "$S/ygg-smoke-realms.sh" --build "${rargs[@]}"
 check "the exit code of the run is the script's (realms)" test "$rc" -eq 5
 projects=("$R"/smoke-realms-*/)
@@ -175,5 +176,11 @@ printf 'mode: unattended\nrealms:\n  dir: /somewhere\n' > "$R/factory.yaml"
 run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
 check "a graph given by name needs a config with a graphs section" test "$rc" -eq 2
 check "and the refusal says why" has "no graphs section"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n# graphs:\n#   dir: /somewhere\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
+check "a commented-out graphs section does not count" bash -c "[ $rc = 2 ] && grep -q 'no graphs section' '$T/out'"
+printf 'mode: unattended\nrealms:\n  dir: /somewhere\n  graphs:\n    dir: /somewhere\n' > "$R/factory.yaml"
+run "$S/ygg-smoke-realms.sh" "${rargs[@]}" --graph software
+check "a graphs key indented under another key does not count" bash -c "[ $rc = 2 ] && grep -q 'no graphs section' '$T/out'"
 
 exit "$fail"

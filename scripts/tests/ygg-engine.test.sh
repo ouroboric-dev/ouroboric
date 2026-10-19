@@ -77,7 +77,7 @@ check "check refuses a missing bind mount" bash -c "[ $rc = 2 ]" && has "bind mo
 
 mkdir -p "$T/plain"
 YGG_BIND="$T/plain" run bash "$S/ygg-engine.sh" check --folder "$D"
-check "check refuses a folder that exists but has nothing mounted on it" bash -c "[ $rc = 2 ]" && has "is not mounted" && has "sudo mount --bind"
+check "check refuses a folder that exists but has nothing mounted on it" bash -c "[ $rc = 2 ] && grep -q 'nothing mounted' '$T/out' && grep -q 'sudo mount --bind' '$T/out'"
 
 D2="$T/other"; mkdir -p "$D2"; printf 'sandbox:\n  engine: unix://%s/gone.sock\n' "$T" > "$D2/factory.yaml"
 run bash "$S/ygg-engine.sh" check --folder "$D2"

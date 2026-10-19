@@ -37,6 +37,7 @@ export PATH="$dir/dc/node_modules/.bin:$PATH"
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
 [ "$got" = "$want" ] || { echo "smoke-loop: devcontainer CLI is '${got:-missing}', want $want; put the right one first on PATH" >&2; exit 2; }
 [ -d "$bind" ] || { echo "smoke-loop: the bind mount $bind is missing; a WSL restart removes it (see Phase 3 v0-H07)" >&2; exit 2; }
+mountpoint -q "$bind" || { echo "smoke-loop: the bind mount $bind is a folder with nothing mounted on it; run: sudo mount --bind <the host folder of factory.yaml's mount> $bind (a WSL restart removes it, see Phase 3 v0-H07)" >&2; exit 2; }
 
 project="$dir/smoke-loop"
 if [ ! -d "$project" ]; then
