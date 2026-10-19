@@ -47,10 +47,16 @@ check "the config points at the running server's port and context, and only at t
   eval '[ $rc = 0 ] && conf "c[\"provider\"][\"qwen-local\"][\"options\"][\"baseURL\"] == \"http://127.0.0.1:9000/v1\"" && conf "c[\"provider\"][\"qwen-local\"][\"models\"][\"qwen3.8-27b\"][\"limit\"][\"context\"] == 65536" && conf "c[\"enabled_providers\"] == [\"qwen-local\"]"'
 check "the model and the small model are both the local one; sharing and updates are off" \
   eval 'conf "c[\"model\"] == c[\"small_model\"] == \"qwen-local/qwen3.8-27b\"" && conf "c[\"share\"] == \"disabled\" and c[\"autoupdate\"] is False"'
-check "the arguments pass through unchanged" eval '[ "$(cat "$T/args")" = "$(printf "run\nhi there")" ]'
+check "run gets --standalone, so a background service with an older config is never used" \
+  eval '[ "$(cat "$T/args")" = "$(printf "run\n--standalone\nhi there")" ]'
 check "OpenCode does not read ~/.claude (the work account) or outside skills, and does not update, share or fetch models" \
   eval 'envhas OPENCODE_DISABLE_CLAUDE_CODE=1 && envhas OPENCODE_DISABLE_EXTERNAL_SKILLS=1 && envhas OPENCODE_DISABLE_AUTOUPDATE=true && envhas OPENCODE_DISABLE_SHARE=true && envhas OPENCODE_DISABLE_MODELS_FETCH=true'
 check "no cloud credential from the caller's shell reaches opencode" \
   eval '[ -e "$T/env" ] && ! grep -Eq "^(ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=" "$T/env"'
 
+run bash "$O"
+check "the interactive session gets --standalone too" eval '[ $rc = 0 ] && [ "$(cat "$T/args")" = "--standalone" ]'
+run bash "$O" ./some/project
+check "a project folder for the interactive session follows --standalone" \
+  eval '[ "$(cat "$T/args")" = "$(printf -- "--standalone\n./some/project")" ]'
 exit $fail
