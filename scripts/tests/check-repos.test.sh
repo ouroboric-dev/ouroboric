@@ -82,4 +82,8 @@ check "shared, helheim-go's source missing: FAIL for helheim-go" [ "$(shared "$r
 mkdir -p "$T/nohash" && printf '#!/bin/sh\nexit 1\n' > "$T/nohash/sha256sum" && chmod +x "$T/nohash/sha256sum"
 r="$(shared_root same same)"
 check "shared, sha256sum fails: FAIL naming the file" [ "$(PATH="$T/nohash:$PATH" shared "$r" midgard-react)" = "FAIL midgard-react shared: can't read $r/yggdrasil/helheim-go/$F" ]
+# agents: voluspa is a leaf, so it lives at <root>/yggdrasil/voluspa and must link the yggdrasil invariants.
+mkdir -p "$T/vroot/yggdrasil/voluspa"
+printf '# AGENTS.md: Voluspa\n\nInvariants: https://github.com/ouroboric-dev/yggdrasil/blob/main/AGENTS.md#invariants\n' > "$T/vroot/yggdrasil/voluspa/AGENTS.md"
+check "agents, voluspa is a leaf under yggdrasil: PASS" [ "$(CHECK_REPOS_ROOT="$T/vroot" "$HERE/../check-repos.sh" --check agents voluspa)" = "PASS voluspa agents" ]
 exit $fail

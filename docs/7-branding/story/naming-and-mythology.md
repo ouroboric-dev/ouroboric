@@ -140,9 +140,9 @@ means illustrative.
 | **Gleipnir** | harness layer: agent adapters, sandbox drivers, context assembly, policies, check runner | v0 |
 | **Jormungandr** | loop layer: build→check→fix semantics, attempts, backoff, budgets, feedback, escalation | v0 |
 | **Ouroboros** | the brand symbol and org (`ouroboric-dev`): self-improvement. Not a module | brand |
-| **realms** | the nine domains of Yggdrasil's work, each with its flavors as leaf repos (`<realm>-<flavor>`): the stack layer, implementer prompt, templates and checks of the loop Odin runs (the graph moves to Voluspa). See [the realms](#the-realms) | v0 (Midgard and Helheim: `midgard-react`, `helheim-go`) |
+| **realms** | the nine domains of Yggdrasil's work, each with its flavors as leaf repos (`<realm>-<flavor>`): the stack layer, implementer prompt, templates and checks of the loop Odin runs (the graph lives in Voluspa). See [the realms](#the-realms) | v0 (Midgard and Helheim: `midgard-react`, `helheim-go`) |
 | **Havamal** | the skill library: vendored and own skills, `skills.lock`, evals. Each skill is one of Odin's charms | v0 |
-| **Voluspa** | the graph library: one graph for all software (`software`), later Asgard's `kickstart`. Runs pin it like a realm | designed; before Yggdrasil v0 Phase 5c (name screening pending) |
+| **Voluspa** | the graph library: one graph for all software (`software`), later Asgard's `kickstart`. Runs pin it like a realm | built and name-screened (2026-10-19); `voluspa`, graph `software` |
 | **Ratatoskr** | routing: per-umbrella index bundles, hierarchical descent | later as a module (v0 ships it as a package) |
 | **Norns** | observability: ledger, metrics, reports, live status | later as a module |
 | **Mimir** | benchmarks: kit, frozen briefs, hidden suites, scoring | later (its own milestone) |
