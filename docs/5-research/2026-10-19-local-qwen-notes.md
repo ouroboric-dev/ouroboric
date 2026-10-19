@@ -165,4 +165,83 @@ Verified on 2026-10-20.
 
 ## Comparison
 
+**The task.** The founder chose backlog item B-071 in `odin`: `Advance` had no `default` case, so a
+graph node of an unknown kind passed silently. Each run started from `odin` `bc973e3`, in a
+throwaway worktree.
+
+**The setup.**
+
+- All three runs got the same prompt: fix it, add a test, run `go test ./internal/engine/` (about 90
+  seconds), do not commit, and do not ask questions.
+- They ran headless, by the founder's choice:
+  - OpenCode with `run --auto`.
+  - Claude Code with `-p --permission-mode acceptEdits`, and Bash limited to `go`, `gofmt`,
+    `git diff` and `git status`.
+- The server ran at `QWEN_EFFORT=low`, with MTP on.
+
+| Run | Wall time | Turns or requests | Tokens | Result |
+| --- | --- | --- | --- | --- |
+| OpenCode + local Qwen | 508 s | 46 tool calls, 42 model requests | 131,591 prompt tokens read and 21,137 generated (server log); largest context 91,707 | `default` case + test; `go test` and `go vet` pass |
+| Claude Code + local Qwen | 551 s | 64 turns, 54 model requests | 109,008 prompt tokens read and 25,005 generated (server log); largest context 76,439 | `default` case + test; `go test` and `go vet` pass |
+| Claude Code + hosted Sonnet | 146 s | 12 turns | 20 input + 295,376 cache-read + 31,908 cache-write, and 4,403 output; $0.20 of usage | `default` case + helper + test; `go test` and `go vet` pass |
+
+**How the results were checked.**
+
+- `go vet ./...` and `go test ./internal/engine/` ran in each worktree after the runs.
+- Each new test was run again with `-count=1`.
+- Each new test was then run against the original `engine.go`. All three failed there with the bug's
+  symptom (`Status:done`, when the test wants a failed run), so each test does catch the bug.
+
+**The three fixes.**
+
+- All three chose the engine's existing failure path: a `nodeFailure` that `fail()` turns into a
+  failed run, with `bad_manifest` in the error.
+- **Hosted Sonnet** added a helper. It uses the `gungnir.GradeBadManifest` constant, logs a
+  `node_failed` event, and repeats the node ID in the message (which `fail()` already adds).
+- **OpenCode** noticed that `fail()` adds the node ID, and left it out of its message on purpose.
+- **Claude Code on Qwen** wrote the smallest change. Both Qwen runs wrote `bad_manifest` as a
+  string, not as the constant.
+
+**Retries.** None of the runs needed a correction. Two earlier attempts of the local runs ended
+when the kernel's out-of-memory killer stopped `llama-server` (see [Lessons](#lessons)); those
+attempts are not counted above.
+
+The founder's verdict on the diffs: pending.
+
+Claude Code puts an "estimated cost" of $2.37 on the local run. It prices the local model's tokens
+as if they were Anthropic's; the real cost was GPU time and electricity.
+
 ## Lessons
+
+- **Local Qwen did the real task.** Both local harnesses produced a correct, tested fix to a real
+  backlog item, with a test that fails without the fix. It took about 3.5 to 4 times the hosted
+  run's wall time, and no subscription usage. [ANALYSIS]
+- **The hosted model was more efficient and slightly more thorough.** It took 12 turns, against 46 to
+  64 for the local model, and used the package's constant and event log. The local runs read more
+  code before they acted: OpenCode's context reached 91,707 tokens, close to the 102,400 limit.
+  [ANALYSIS]
+- **On this task, OpenCode and Claude Code were about even on Qwen.** OpenCode was a little faster and
+  more careful about the message. Claude Code made a smaller diff. [ANALYSIS]
+- **Qwen handled superpowers well enough.** The local Claude Code had the founder's superpowers
+  plugin, whose SessionStart text tells the model to use skills first. The task prompt said not to
+  ask questions, and the run went straight to the work. [ANALYSIS: one run only.]
+- **System RAM, not VRAM, was the binding limit.** The GPU held the model and the context with room
+  to spare. The kernel's out-of-memory killer stopped `llama-server` three times under WSL's 12 GB
+  cap, because two llama-server defaults keep state in system RAM:
+  - the prompt cache, `--cache-ram`, 8 GB by default;
+  - for this hybrid model, 32 context checkpoints of its recurrent state, which grew the server from
+    2.0 to 5.7 GB in a 20-turn test.
+
+  With `--cache-ram 2048` and `--ctx-checkpoints 4`, the server peaked at 3.0 GB during both local
+  runs. On the founder's request, `.wslconfig` now gives WSL 20 GB (it was 12 GB). That takes effect
+  after `wsl --shutdown`.
+- **Each harness had a surprise.**
+  - Claude Code sends hook context as a mid-conversation `system` message, which Qwen's template
+    refuses. The fix is a saved template.
+  - Claude Code does not know the model's context size and assumes 200K.
+  - Claude Code's effort settings are ignored by `/v1/messages`.
+  - OpenCode 2's background service ignores a new config, so the launcher passes `--standalone`.
+  - OpenCode's `run` waits for a tool approval that a headless run cannot give, so pass `--auto`.
+- **The remaining unfairness.** The hosted run also had the founder's personal memory and the
+  claude.ai connectors; neither was relevant to this task. Each configuration ran once, so the
+  timing and token figures are one sample each.
