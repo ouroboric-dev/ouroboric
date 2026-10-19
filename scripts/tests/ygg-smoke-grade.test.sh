@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for ygg-smoke-grade.sh.   scripts/tests/ygg-smoke-grade.test.sh
+# Tests for ygg-smoke-grade.sh, ygg-smoke-real.sh and ygg-cost.sh.   scripts/tests/ygg-smoke-grade.test.sh
 # A fake `ygg`, a fake `podman` and a fake `devcontainer` stand in for the real tools: no model, no engine, no
 # network, no money. The task folder is a small made-up mimir with a made-up public suite.
 # shellcheck disable=SC2329,SC2016 # check calls has and hasnt by name; the $ in the patterns is literal
@@ -124,6 +124,24 @@ D="$T/it"
 newest() { find "$D" -maxdepth 1 -type d -name "$1" | sort | tail -n 1; } # the newest folder the script made
 gargs=(--folder "$D" --tasks "$M" --odin "$T/odin")
 
+# --- ygg-cost.sh.
+L="$T/ledger.jsonl"
+{
+  echo '{"seq":1,"event":"node_started"}'
+  echo '{"seq":2,"event":"node_finished","gen_ai.usage.input_tokens":1000,"gen_ai.usage.output_tokens":200,"gen_ai.usage.cache_read.input_tokens":5000,"ygg.usage.turns":3,"ygg.usage.cost_usd":0.25}'
+  echo '{"seq":3,"event":"node_failed","gen_ai.usage.input_tokens":500,"gen_ai.usage.output_tokens":100,"ygg.usage.turns":2,"ygg.usage.cost_usd":0.125,"ygg.usage.cost_estimated":true}'
+  echo '{"seq":4,"event":"run_finished","gen_ai.usage.input_tokens":1500,"gen_ai.usage.output_tokens":300,"ygg.usage.turns":5,"ygg.usage.cost_usd":0.375}'
+  echo 'not json'
+} >"$L"
+printf 'budget:\n  per_run: { tokens: 400000, turns: 100, usd: 3 }\n' >"$T/cap.yaml"
+run "$S/ygg-cost.sh" "$L" "$T/cap.yaml"
+check "the cost counts the two sessions and not the run's own total" has "2 session line(s): 1500 tokens in, 300 out, 5000 cache read, 5 turns"
+check "the cost is the sum of the sessions" has 'cost $0.3750'
+check "an estimated cost is marked" has "an estimate"
+check "the per_run cap is printed beside it" has 'per_run cap is $3'
+run "$S/ygg-cost.sh" "$T/nope.jsonl"
+check "a missing ledger is refused" test "$rc" -eq 2
+
 # --- ygg-smoke-grade.sh.
 run "$S/ygg-smoke-grade.sh" --nope
 check "an unknown flag is refused" test "$rc" -eq 2
@@ -171,5 +189,60 @@ check "and the smoke exits 1" test "$rc" -eq 1
 sleep 1
 FAKE_DOCTOR_RC=1 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
 check "a doctor that does not find 0 grader containers fails the smoke" has "FAIL  reference: ygg doctor finds 0 grader containers"
+
+# --- ygg-smoke-real.sh. The credentials are made-up values; none may appear anywhere in the output.
+MARK_A='sekret-claude-0123456789'
+MARK_B='sekret-openrouter-9876543210'
+rargs=(--folder "$D" --tasks "$M" --odin "$T/odin" --env "$T/factory.env")
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
+check "a missing credentials file is refused" test "$rc" -eq 2
+printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$MARK_A" >"$T/factory.env"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
+check "a credentials file with one name missing is refused" test "$rc" -eq 2
+check "and the refusal names the missing variable" has "OPENROUTER_API_KEY"
+check "and prints no value" hasnt "$MARK_A"
+printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\nOPENROUTER_API_KEY=\n' "$MARK_A" >"$T/factory.env"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
+check "a name with no value is refused" test "$rc" -eq 2
+printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\nOPENROUTER_API_KEY=%s\n' "$MARK_A" "$MARK_B" >"$T/factory.env"
+rm -f "$T/args.log"
+sleep 1
+FAKE_ARGS_LOG="$T/args.log" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
+check "a dry run exits 0" test "$rc" -eq 0
+check "a dry run says what it would run, under a wall clock" has "would run: timeout --signal=INT --kill-after=2m 90m"
+check "a dry run runs the doctor" grep -q '^doctor ' "$T/args.log"
+check "a dry run does not start the run" test -z "$(grep '^run ' "$T/args.log")"
+check "a dry run does not load the credentials" test -z "$(grep 'credentials were loaded' "$T/args.log")"
+check "a dry run prints the caps" has "per_run: { tokens: 400000, turns: 100, usd: 3 }"
+rc_yaml="$(newest "smoke-real-*")/factory.yaml"
+check "the config has no place left to fill" test -z "$(grep -h '@[A-Z]*@' "$rc_yaml")"
+check "the config has the real agents" grep -q 'agent: claude-code' "$rc_yaml"
+check "and the reviewer on OpenRouter" grep -q 'agent: opencode' "$rc_yaml"
+check "and dollar caps for the day" grep -q 'per_day:.*usd: 6' "$rc_yaml"
+sleep 1
+FAKE_DOCTOR_RC=1 FAKE_ARGS_LOG="$T/args2.log" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a config that doctor refuses stops the script before the run" test "$rc" -eq 2
+check "and the run did not start" test -z "$(grep '^run ' "$T/args2.log")"
+sleep 1
+FAKE_ARGS_LOG="$T/args3.log" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --build
+check "a run with the fake ygg exits with the run's code" test "$rc" -eq 0
+check "the images are built on request" has "built"
+check "the credentials were loaded for the run" grep -q 'credentials were loaded' "$T/args3.log"
+check "no credential value is printed" hasnt "$MARK_A"
+check "nor the second" hasnt "$MARK_B"
+check "the score is printed" has "reward 0, fail-to-pass 6/6"
+check "the cost is printed from the ledger" has 'cost $0.3750'
+check "and the cap beside it" has 'per_run cap is $3'
+w="$(newest "smoke-real-*")"
+check "no credential value is in the saved report or run output" test -z "$(grep -rl -e "$MARK_A" -e "$MARK_B" "$w" 2>/dev/null | head -n 1)"
+sleep 1
+FAKE_RUN_SLEEP=30 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall 1s
+check "the wall clock ends a run that hangs, and the code is 124" test "$rc" -eq 124
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --wall soon
+check "a wall clock that is not a duration is refused" test "$rc" -eq 2
+# The script does not read the credentials file: every line that names it is on this list.
+bad="$(grep -n 'envfile' "$S/ygg-smoke-real.sh" | grep -v -E 'envfile=|--env\)|\[ -f "\$envfile" \]|grep -c -E "[^"]*" "\$envfile"|\. "\$envfile"|\$envfile (has|is missing)|source=|FILE' || true)"
+check "the only uses of the credentials file are the existence test, grep -c on a name, and the subshell load" test -z "$bad"
+check "the credentials file is not read by cat, head, tail, sed or awk" test -z "$(grep -E '(cat|head|tail|sed|awk|cut) [^|]*envfile' "$S/ygg-smoke-real.sh")"
 
 exit "$fail"
