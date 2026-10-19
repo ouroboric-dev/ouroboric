@@ -12,7 +12,7 @@ FACTORIES=" yggdrasil asgard "   # the only repos with issues on
 LEAVES=" gungnir odin gleipnir jormungandr midgard-react helheim-go havamal "
 LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
 REALMS=" midgard-react helheim-go "   # build realms; they share scripts, and helheim-go's copy is the source
-SHARED=(devcontainer/checks/docs.sh)
+SHARED=(devcontainer/checks/docs.sh devcontainer/checks/protected-common)
 HIDDEN=" huldra "   # private repos that agents must never see
 unset BOT_REPOS     # set only by bot_repos below, never from the environment
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }

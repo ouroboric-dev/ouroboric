@@ -44,15 +44,19 @@ check "settings, factory repo with issues off: FAIL" [ "$(settings_result asgard
 check "settings, other repo with issues off: PASS" [ "$(settings_result gungnir false)" = PASS ]
 check "settings, other repo with issues on: FAIL" [ "$(settings_result ouroboric true)" = FAIL ]
 # shared: the realms carry one copy of each shared script, and helheim-go's is the source.
-# A fixture umbrella: <helheim-go file content|-> <midgard-react file content|-|nodir>
+# A fixture umbrella: <helheim-go docs.sh|-> <midgard-react docs.sh|-|nodir> [<helheim-go protected-common|->] [<midgard-react protected-common|->]
+# protected-common defaults to the same content in both realms; "-" leaves it out.
 F=devcontainer/checks/docs.sh
+PC=devcontainer/checks/protected-common
 shared_root() {
   local d; d="$(mktemp -d -p "$T")"
   mkdir -p "$d/yggdrasil/helheim-go/devcontainer/checks"
   [ "$1" = - ] || printf '%s\n' "$1" > "$d/yggdrasil/helheim-go/$F"
+  [ "${3-pc}" = - ] || printf '%s\n' "${3-pc}" > "$d/yggdrasil/helheim-go/$PC"
   if [ "$2" != nodir ]; then
     mkdir -p "$d/yggdrasil/midgard-react/devcontainer/checks"
     [ "$2" = - ] || printf '%s\n' "$2" > "$d/yggdrasil/midgard-react/$F"
+    [ "${4-pc}" = - ] || printf '%s\n' "${4-pc}" > "$d/yggdrasil/midgard-react/$PC"
   fi
   echo "$d"
 }
@@ -62,6 +66,10 @@ check "shared, same file in both realms: PASS" [ "$(shared "$r" midgard-react)" 
 check "shared, helheim-go against itself: PASS" [ "$(shared "$r" helheim-go)" = "PASS helheim-go shared" ]
 r="$(shared_root same other)"
 check "shared, one byte different: FAIL naming docs.sh" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $F differs from helheim-go's" ]
+r="$(shared_root same same pc other)"
+check "shared, protected-common differs: FAIL naming protected-common" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $PC differs from helheim-go's" ]
+r="$(shared_root same same pc -)"
+check "shared, protected-common missing in midgard-react: FAIL naming the path" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/midgard-react/$PC is missing" ]
 r="$(shared_root same -)"
 check "shared, file missing in midgard-react: FAIL naming the path" [ "$(shared "$r" midgard-react)" = "FAIL midgard-react shared: $r/yggdrasil/midgard-react/$F is missing" ]
 r="$(shared_root same nodir)"
