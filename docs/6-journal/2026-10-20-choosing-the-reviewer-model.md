@@ -44,26 +44,89 @@ they only ranked the candidates. We ran our own.
 
 ## Decision
 
-Measure on our own failure, with our own prompt, on the same product, 6 to 8 sessions per model. Two
+Measure on our own failure, with our own prompt, on the same product, 3 to 8 sessions per model. Two
 tests: does the model give a valid report without inventing a fault, and does it still find a real fault
 when we plant one. Qwen3.8 27B becomes the reviewer of the smoke.
 
 ## Result
 
-Pending: the full smoke has not passed yet. What we have, from about 20 cents of calls:
+Pending: the full smoke has not passed yet. What we have is below. Every session ran on the same product (the
+one the failed run built), with the engine's real reviewer prompt and the adapter's real settings: strict
+privacy, `effort: high`, read-only permissions. "Tokens in" counts everything the model read, cache included;
+the figure in brackets is what was not served from the cache. "Tokens out" includes reasoning. Averages per
+session.
 
-| Model | Valid report | Invents a fault |
-| --- | --- | --- |
-| DeepSeek V4 Flash | 6 of 8 | 6 of 8 sessions |
-| Qwen3.8 27B | 8 of 8 | never |
-| GLM 5.3 Flash | 8 of 8 | never |
-| Claude Haiku 5.5 | 8 of 8 | never; reports a minor point every time |
-| Claude Sonnet 5.5 | 6 of 6 | never |
+### A product with no known fault
 
-Planted faults (a typo in `start.sh`, the wrong port, notes in the wrong order): Qwen3.8 27B reported the
-planted fault and nothing else in 18 of 18 sessions; Sonnet 5.5 in 9 of 9. A Qwen session costs about one
-cent. The reviewer's price per token matters less than its output: a strong model such as Sonnet writes
-about 400 tokens per review, and a weak reasoning model wrote 10,000.
+| Model | Sessions | Valid reports | Findings per session | Tokens in (new) | Tokens out | Cost per session |
+| --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek V4 Flash | 8 | 6 | 0, 1, 1, 1, 0, 2 (2 answers in prose) | 36.3k (11.0k) | 10.9k (largest 19.0k) | $0.002 |
+| Qwen3.8 27B | 8 | 8 | 0 in all 8 | 25.3k (7.9k) | 2.1k | $0.011 |
+| GLM 5.3 Flash | 8 | 8 | 0 in 7, 1 in 1 | 20.4k (12.3k) | 6.0k (largest 18.5k) | $0.005 |
+| Claude Haiku 5.5 | 8 | 8 | 1, 2, 1, 1, 1, 2, 2, 2 | 29.7k (6.1k) | 2.4k | about $0.002 (estimate) |
+| Claude Sonnet 5.5 | 6 | 6 | 0 in all 6 | 26.5k (9.5k) | 0.5k | about $0.03 (estimate) |
+
+Costs are what OpenRouter reported. It reported nothing for the two Claude models, so theirs are estimates
+from list prices ($0.10 and $0.50 per million tokens for Haiku, $2 and $10 for Sonnet, cached input at a
+tenth of the input price).
+
+What the findings were:
+
+- **DeepSeek V4 Flash** said `findIndex` is not a JavaScript method in 5 of 8 sessions (4 inside a valid
+  report, 1 in an answer written as prose). One session also said that `req.destroy()` does not exist. Both
+  are false. It stated the same false claim in the real smoke twice more, after the implementer had shown it
+  wrong. Only 2 of 8 sessions gave a valid and clean report.
+- **Qwen3.8 27B** reported nothing in all 8 sessions.
+- **GLM 5.3 Flash** reported nothing in 7 sessions. The other one pointed out that `POST /api/logout` answers
+  204 when there is no session. The brief lists 204 for logout, so this is a judgement call.
+- **Claude Haiku 5.5** reported something in every session, nearly always that the note length is counted in
+  UTF-16 code units and not in characters. It sometimes said the same of the password. That is true of the
+  code and small, and in a loop it would send the implementer back for a nitpick every time.
+- **Claude Sonnet 5.5** reported nothing in all 6 sessions, with the smallest output of all.
+
+A reviewer that says "fine" every time would pass this table, so we planted faults.
+
+### The same product with one planted fault
+
+Three copies of the product, each with one change, as small as a real mistake:
+
+1. `start.sh` runs `node servr.js` (a typo), so the product cannot start.
+2. The server listens on port 8080, not 3000 as the brief requires.
+3. `GET /api/notes` no longer reverses the list, so notes come back oldest first, against the brief.
+
+A session counts as a catch when its report names the planted fault. We read the claims, not only a keyword
+match.
+
+| Planted fault | Model | Sessions | Caught | Findings per session | Tokens in (new) | Tokens out | Cost per session |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1. `servr.js` typo | Qwen3.8 27B | 6 | 6 | 1 in all 6 | 22.9k (5.1k) | 1.3k | $0.008 |
+| 1. `servr.js` typo | Claude Sonnet 5.5 | 3 | 3 | 1 in all 3 | 22.6k (10.2k) | 0.4k | about $0.03 (estimate) |
+| 2. port 8080 | Qwen3.8 27B | 6 | 6 | 1 in all 6 | 22.0k (6.5k) | 1.0k | $0.007 |
+| 2. port 8080 | Claude Sonnet 5.5 | 3 | 3 | 1 in all 3 | 26.6k (3.9k) | 0.5k | about $0.02 (estimate) |
+| 3. oldest first | Qwen3.8 27B | 6 | 6 | 1 in all 6 | 23.2k (4.9k) | 2.0k | $0.010 |
+| 3. oldest first | Claude Sonnet 5.5 | 3 | 3 | 1 in all 3 | 26.5k (4.0k) | 0.5k | about $0.02 (estimate) |
+
+Every report held one finding, the planted one, and nothing else. The wording was specific. For fault 1 the
+models wrote that `start.sh` runs `node servr.js` and the only program file is `server.js`. For fault 2 they
+quoted `server.listen(8080, '0.0.0.0')` against the brief's port 3000. For fault 3 they wrote that
+`GET /api/notes` returns notes oldest first (some: "in insertion order") and the brief requires newest first.
+We did not test GLM or Haiku on the planted faults.
+
+What these tests do not show: all three faults are visible by reading a few lines. A fault that needs
+reasoning across files, such as one user reaching another user's notes, is untested. The sample is small
+(3 to 8 sessions a cell), and the hosted models change from hour to hour.
+
+### Cost of the experiment
+
+OpenRouter reported about $0.29 for the DeepSeek, Qwen and GLM sessions. The Claude sessions were not
+reported. At list prices they come to about $0.45. The check on your OpenRouter dashboard is the truth.
+
+### The reasoning effort setting
+
+The same captured request sent six times straight to OpenRouter, with the effort not named: 2 of 6 started
+the review, 4 of 6 asked what to do. With `low`, `high` or reasoning off: 8 of 8 started in each case. In whole
+sessions, `high` gave 9 of 10 valid reports. Switching reasoning off gave 2 of 10: the model narrated before
+its answer and invented more faults.
 
 Open questions, to answer in this entry:
 
@@ -80,6 +143,9 @@ Open questions, to answer in this entry:
   behind a hosted provider changes under you. Repeat a trial later before you trust it.
 - Choose the reviewer on the failure you have, not on a leaderboard. No public number tests whether a
   model invents a fault.
+- A reviewer's cost is set by its output, not by its price per token. The cheapest model per token wrote 10.9k
+  tokens a session and Sonnet wrote 0.5k, so a model that costs 40 times more per token cost about the same to run
+  as the cheapest model's reasoning.
 - A reviewer's precision matters more than its recall in a loop with no arbiter. One false blocker ends
   the run.
 - Test the reviewer on a product with a known fault, as well as one without. A reviewer that always says
