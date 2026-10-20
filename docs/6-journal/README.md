@@ -41,6 +41,7 @@ considered, what we chose, and the measured result. In the naming story these en
 | 2026-10-12 | [designing the logo](2026-10-12-designing-the-logo.md) | brand, design, logo, accessibility | resolved | yes |
 | 2026-10-19 | [a definition of done for realms](2026-10-19-a-definition-of-done-for-realms.md) | realms, readiness, ci, process | resolved | yes |
 | 2026-10-19 | [one graph for every run](2026-10-19-one-graph-for-every-run.md) | graph, realms, architecture, voluspa | resolved | yes |
+| 2026-10-20 | [choosing the reviewer model](2026-10-20-choosing-the-reviewer-model.md) | models, review, routing, measurement, cost, sandbox | open | yes |
 
 ## When to write an entry
 
