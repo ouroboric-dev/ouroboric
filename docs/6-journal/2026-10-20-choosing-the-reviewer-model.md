@@ -8,8 +8,8 @@ evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.
 ## Challenge
 
 The real-agent smoke builds a small web product with Claude Code (the implementer) and reviews it with a
-cheap model on OpenRouter (the reviewer). It failed three times at the reviewer, each time for a different
-reason. The first two looked like wiring faults. The third was the model.
+cheap model on OpenRouter (the reviewer). It failed four times at the reviewer, for four different reasons. The first two were a permission and a
+prompt. The last two were the model.
 
 ## Context
 
@@ -68,8 +68,8 @@ Run 20261020-205528-86a693, the same graph and prompts as the failed runs, only 
 | Merge, pointer move, grade | done; the public sample suite of the task gave reward 1.0, 6 of 6 fail-to-pass, 1 of 1 pass-to-pass |
 
 The loop passed in its first attempt. The run took under two minutes and cost $0.09 in all (an estimate: the
-implementer's figure is what the same tokens would cost on the API). The three earlier runs ended at the
-reviewer, at $0.07, $0.08 and $0.12.
+implementer's figure is what the same tokens would cost on the API). The four earlier runs all ended at the
+reviewer, and the last of them cost $0.12.
 
 This run did not use the loop's repair path: the reviewer found nothing, so the implementer was never sent
 back. The planted-fault tests show that Qwen reports a real fault. They do not show that the implementer
