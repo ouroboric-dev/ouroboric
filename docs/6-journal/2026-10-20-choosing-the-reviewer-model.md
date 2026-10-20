@@ -3,7 +3,7 @@ date: 2026-10-20
 tags: [models, review, routing, measurement, cost, sandbox]
 status: open
 post-candidate: yes
-evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff"]
+evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693"]
 ---
 ## Challenge
 
@@ -50,11 +50,30 @@ when we plant one. Qwen3.8 27B becomes the reviewer of the smoke.
 
 ## Result
 
-Pending: the full smoke has not passed yet. What we have is below. Every session ran on the same product (the
+The smoke passes with Qwen3.8 27B as the reviewer (first section). The fault-finding loop with a real fault is not proved yet (open questions, at the end). The model comparison follows. Every session ran on the same product (the
 one the failed run built), with the engine's real reviewer prompt and the adapter's real settings: strict
 privacy, `effort: high`, read-only permissions. "Tokens in" counts everything the model read, cache included;
 the figure in brackets is what was not served from the cache. "Tokens out" includes reasoning. Averages per
 session.
+
+### The full smoke, with Qwen as the reviewer
+
+Run 20261020-205528-86a693, the same graph and prompts as the failed runs, only the reviewer changed:
+
+| Step | Result |
+| --- | --- |
+| Implementer (Claude Sonnet, on the subscription) | one session, 3 turns, 36 s, 8.1k tokens in (20.2k cached), 4.2k out, $0.079 at API prices |
+| `unit` check | passed |
+| Reviewer (Qwen3.8 27B) | one session, 4 turns, 50 s, 14.8k in (11.5k cached), 1.6k out, about $0.012; report: no findings |
+| Merge, pointer move, grade | done; the public sample suite of the task gave reward 1.0, 6 of 6 fail-to-pass, 1 of 1 pass-to-pass |
+
+The loop passed in its first attempt. The run took under two minutes and cost $0.09 in all (an estimate: the
+implementer's figure is what the same tokens would cost on the API). The three earlier runs ended at the
+reviewer, at $0.07, $0.08 and $0.12.
+
+This run did not use the loop's repair path: the reviewer found nothing, so the implementer was never sent
+back. The planted-fault tests show that Qwen reports a real fault. They do not show that the implementer
+fixes it, or that Qwen then drops the finding. That needs a run with a fault the implementer actually makes.
 
 ### A product with no known fault
 
@@ -130,7 +149,8 @@ its answer and invented more faults.
 
 Open questions, to answer in this entry:
 
-- Does the smoke pass end to end with Qwen as the reviewer?
+- Answered: the smoke passes end to end with Qwen as the reviewer (reward 1.0, $0.09).
+- Does the repair path work with Qwen: a real finding, a fix by the implementer, and the finding closed?
 - Does Qwen find a subtler fault, such as one user reaching another's notes?
 - Would Qwen also work as the implementer? Claude Code runs on a flat subscription, so the implementer
   costs nothing per run, and a swap only pays when that limit binds.
