@@ -19,27 +19,12 @@ The names come from Norse myth; the [naming and mythology record](7-branding/sto
 
 | Folder | What's there |
 | --- | --- |
-| [`1-company/`](1-company/charter.md) | charter, roadmap, legal, readiness |
+| [`1-company/`](1-company/charter.md) | charter, roadmap, budget, legal, readiness, [repositories](1-company/repos.md) |
 | [`4-ways-of-working/`](4-ways-of-working/spec-driven-development.md) | the standards every Ouroboric product follows: [spec-driven development](4-ways-of-working/spec-driven-development.md), [docs](4-ways-of-working/docs-standard.md), [writing styles](4-ways-of-working/writing-styles.md), [diagrams](4-ways-of-working/diagrams.md) |
 | [`5-research/`](5-research/README.md) | company-level research |
 | [`6-journal/`](6-journal/README.md) | the journey: challenges, solutions, results |
 | [`7-branding/`](7-branding/README.md) | the Ouroboric story, identity, voice, prompts |
 
-Repositories in the `ouroboric-dev` organisation:
-
-| Repository | Visibility | Role |
-| --- | --- | --- |
-| `.github` | public | organisation profile and defaults (health files, issue forms, PR template); every change is organisation-wide |
-| `ouroboric` | public | this company umbrella |
-| `yggdrasil` | public | the product: the agentic factory |
-| `asgard` | public | the Asgard realm; a product umbrella until it becomes a leaf of `yggdrasil` after Yggdrasil v0 |
-
-Each operator also keeps a **private instance umbrella** (L0), outside this repository, with pinned
-factory versions, their own projects, hidden benchmarks and private notes. It never lives here.
-
-Products, as submodules under [`products/`](../products/) (clone with `--recurse-submodules`):
-
-| Product | What it is |
-| --- | --- |
-| [Yggdrasil](https://github.com/ouroboric-dev/yggdrasil) | the agentic factory |
-| [Asgard](https://github.com/ouroboric-dev/asgard) | Yggdrasil's kickstart realm; moves under `yggdrasil` after Yggdrasil v0 |
+The [repositories](1-company/repos.md) page lists every repo in the `ouroboric-dev`
+organisation and where it sits in the tree. The products are submodules under
+[`products/`](../products/): clone with `--recurse-submodules`.
