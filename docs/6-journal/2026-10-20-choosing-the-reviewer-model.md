@@ -143,9 +143,8 @@ Open questions, to answer in this entry:
   behind a hosted provider changes under you. Repeat a trial later before you trust it.
 - Choose the reviewer on the failure you have, not on a leaderboard. No public number tests whether a
   model invents a fault.
-- A reviewer's cost is set by its output, not by its price per token. The cheapest model per token wrote 10.9k
-  tokens a session and Sonnet wrote 0.5k, so a model that costs 40 times more per token cost about the same to run
-  as the cheapest model's reasoning.
+- Output narrows the price gap between models. Sonnet costs 40 to 60 times more per token than DeepSeek, but
+  it wrote 0.5k tokens a session against 10.9k, so a session cost it about 15 times more (an estimate).
 - A reviewer's precision matters more than its recall in a loop with no arbiter. One false blocker ends
   the run.
 - Test the reviewer on a product with a known fault, as well as one without. A reviewer that always says
