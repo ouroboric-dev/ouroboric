@@ -20,7 +20,7 @@ loosen these.
 
 ## Map
 
-- Company direction: `docs/1-company/` (charter, roadmap, budget, legal, readiness).
+- Company direction: `docs/1-company/` (charter, roadmap, budget, legal, readiness, repositories).
 - Standards: `docs/4-ways-of-working/` (spec-driven development, docs standard, writing styles,
   diagrams).
 - Research and journal: `docs/5-research/`, `docs/6-journal/`.
