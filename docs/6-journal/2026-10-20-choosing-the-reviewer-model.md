@@ -3,7 +3,7 @@ date: 2026-10-20
 tags: [models, review, routing, measurement, cost, sandbox]
 status: open
 post-candidate: yes
-evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69", "run 20261021-220441-84e852", "run 20261021-220651-618061", "run 20261021-222954-05983c", "run 20261021-225348-f4bd10"]
+evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69", "run 20261021-220441-84e852", "run 20261021-220651-618061", "run 20261021-222954-05983c", "run 20261021-225348-f4bd10", "run 20261021-231003-db15c7"]
 ---
 ## Challenge
 
@@ -202,6 +202,14 @@ versions of the form 1.2.3, so 1.0.0 becomes 1.0.1000. `grader.tasks_dir` points
 the same. Evidence: `~/ygg-it/smoke-real-20261022-000440`, `~/ygg-it/smoke-real-20261022-000650` and
 `~/ygg-it/smoke-real-20261022-002953`.
 
+A fourth run repeated the third with the derived task (run 20261021-231003-db15c7, built from odin 4bbaf9a for
+the reason given in the next section). Qwen raised `cross-user-note-delete` (major, `notes.js:18-20`) in attempt
+1, Sonnet added the owner check in attempt 2, and Qwen closed the finding. The grader scored the derived task
+smoke-notes 1.0.1000 against the same public suite: reward 1.0, 6 of 6 fail-to-pass, 1 of 1 pass-to-pass. The
+run took 19 turns and cost $0.0996 (an estimate). In attempt 2 the reviewer answered twice: its first answer gave
+`proof` as a JSON object, the second as a string. The ledger closes the finding only after the second. The loop
+gives the reviewer two tries to answer, and the second try cost about a cent. Evidence: `~/ygg-it/smoke-real-20261022-011003`.
+
 ### Qwen as the implementer (added 2026-10-22)
 
 One run changed only the implementer: Qwen3.8 27B through OpenCode (`ygg-smoke-real.sh --implementer
@@ -242,8 +250,7 @@ Open questions, to answer in this entry:
 
 - Answered: the smoke passes end to end with Qwen as the reviewer (reward 1.0, $0.09).
 - Answered: the repair path works with Qwen. It raised a real finding, Sonnet fixed it, and Qwen closed it
-  with proof ($0.093). That run was not graded. This pull request lets a `--brief-note` run be graded against
-  a derived task version.
+  with proof. A graded run did it again with reward 1.0 on the derived task ($0.0996).
 - Answered: Qwen finds a fault across two files, one user deleting another's note (8 of 8, $0.11).
 - Answered, for now: Qwen as the implementer is not good enough on this brief (reward 0.5, against 1.0 for
   Sonnet, for about $0.06 a run), and the Qwen reviewer missed its faults. Claude Code runs on a flat
