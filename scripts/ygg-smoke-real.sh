@@ -19,10 +19,17 @@
 #      execute bit, so the project's start.sh then runs the leaf's start.sh as a program when it is executable,
 #      and with sh when it is not. The planted-fault leaves are in scripts/testdata/reviewer-bench (see
 #      ygg-reviewer-bench.sh);
-#      With --brief-note FILE, the run's brief is the text of FILE, a blank line, then the task's instruction.md,
-#      written to DIR/smoke-real-<time>/brief.md (B-109). A note that narrows the implementer's task keeps the
-#      work small, and the reviewer still gets the whole spec. The line "the brief note" says which file was used,
-#      in the terminal and in report.txt. FILE must exist and have text. See scripts/testdata/reviewer-bench/P4-note.md;
+#      With --brief-note FILE, the run's brief is the text of FILE, a blank line, then the task's instruction.md
+#      (B-109). A note that narrows the implementer's task keeps the work small, and the reviewer still gets the
+#      whole spec. A changed brief is another task version, and odin grades a brief only as the instruction.md of
+#      a task in grader.tasks_dir whose brief_sha256 it matches. So the task folder is copied to
+#      DIR/smoke-real-<time>/tasks/<task>, with that brief as its instruction.md, its SHA-256 as brief_sha256, and
+#      a derived version (the patch number plus 1000: 1.0.0 becomes 1.0.1000). Every note gives that same
+#      version, so two runs with different notes have the same task_version in score.json and differ only in
+#      brief_sha256: never group scores by version alone. The run's brief is that instruction.md and
+#      grader.tasks_dir is DIR/smoke-real-<time>/tasks. The lines "the brief note" and "the task is a derived
+#      version" say which file was used and the version and hash, in the terminal and in report.txt.
+#      FILE must exist and have text. See scripts/testdata/reviewer-bench/P4-note.md;
 #   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit, the tree state and
 #      the go.work file the build used, or "no go.work"; GOWORK=off turns go.work off), then
 #      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
@@ -86,7 +93,7 @@ fi
 [ -f "$dir/factory.yaml" ] || fail "$dir/factory.yaml is missing; it names the engine (sandbox.engine)"
 engine="$(sed -n 's/^[[:space:]]*engine:[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$dir/factory.yaml" | head -n 1)"
 case "$engine" in unix://*) ;; *) fail "sandbox.engine in $dir/factory.yaml is '${engine:-missing}'; it must be a unix:// URL" ;; esac
-for tool in jq python3 git timeout; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
+for tool in jq python3 git timeout sha256sum; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
 tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no mimir folder at $tasks (--tasks)"
 odin="$(cd "$odin" 2>/dev/null && pwd)" || fail "no odin folder at $odin (--odin)"
 realm="$odin/testdata/smoke-grade"
@@ -98,11 +105,20 @@ done
 suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
 [ -n "$suite" ] || fail "$tasks/$task/task.toml has no metadata.suite"
 
-# The brief note: a file with some text in it (not only blanks).
+# The brief note: a file with some text in it (not only blanks). The task.toml it derives a version from has one
+# version line of the form 1.2.3 and one brief_sha256 line. odin's task.version is 1.2.3 and nothing else
+# (gungnir.ValidVersion), so the derived version adds 1000 to the patch number: 1.0.0 becomes 1.0.1000.
 if [ -n "$note" ]; then
   [ -f "$note" ] || fail "no brief note at $note (--brief-note)"
   grep -q '[^[:space:]]' "$note" || fail "the brief note $note is empty (--brief-note)"
   note="$(cd "$(dirname "$note")" && pwd)/$(basename "$note")"
+  for key in version brief_sha256; do
+    n="$(grep -c "^${key}[[:space:]]*=" "$tasks/$task/task.toml" || true)"
+    [ "$n" = 1 ] || fail "$tasks/$task/task.toml has $n line(s) that set $key; --brief-note needs exactly 1"
+  done
+  old_version="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$tasks/$task/task.toml")"
+  [[ $old_version =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] || fail "the version in $tasks/$task/task.toml is '$old_version'; --brief-note needs one of the form 1.2.3"
+  version="${BASH_REMATCH[1]}.$((10#${BASH_REMATCH[2]} + 1000))"
 fi
 
 # The leaf to start from: its files, without .git, each a plain name pack.yaml can list without quotes.
@@ -150,12 +166,29 @@ chmod +x "$project/start.sh"
 git -C "$project" add umbrella.yaml start.sh
 git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the real-agent smoke project"
 echo "smoke-real: made $work"
-brief="$tasks/$task/instruction.md" note_line=""
+brief="$tasks/$task/instruction.md" note_line="" derived_line="" grader_tasks="$tasks"
 if [ -n "$note" ]; then
-  { printf '%s\n\n' "$(<"$note")"; cat "$tasks/$task/instruction.md"; } >"$work/brief.md"
-  brief="$work/brief.md"
+  # A changed brief is another task version (task.toml: "Any change to the brief makes a new task version"), and
+  # odin grades a brief only against the task it is the instruction.md of. So the run gets its own copy of the
+  # task, with the noted brief, its hash and the derived version, and the grader reads its tasks from there.
+  derived="$work/tasks/$task" toml="$work/tasks/$task/task.toml"
+  mkdir -p "$work/tasks"
+  cp -R "$tasks/$task" "$derived"
+  { printf '%s\n\n' "$(<"$note")"; cat "$tasks/$task/instruction.md"; } >"$derived/instruction.md"
+  brief_sha="$(sha256sum "$derived/instruction.md" | cut -d' ' -f1)"
+  sed -i -e "s/^version[[:space:]]*=.*/version = \"$version\"/" -e "s/^brief_sha256[[:space:]]*=.*/brief_sha256 = \"$brief_sha\"/" "$toml"
+  { printf '# A derived version of %s %s, made by ygg-smoke-real.sh --brief-note: its instruction.md is the note\n' "$task" "$old_version"
+    printf '# %s, a blank line, then the task'"'"'s instruction.md. The version and brief_sha256 below are the derived ones.\n' "$note"
+    cat "$toml"; } >"$toml.new"
+  mv "$toml.new" "$toml"
+  if ! grep -q -x -F "version = \"$version\"" "$toml" || ! grep -q -x -F "brief_sha256 = \"$brief_sha\"" "$toml"; then
+    fail "the version and brief_sha256 could not be set in $toml"
+  fi
+  brief="$derived/instruction.md" grader_tasks="$work/tasks"
   note_line="smoke-real: the brief note: $note (the brief is $brief: the note, a blank line, then the task's instruction.md)"
+  derived_line="smoke-real: the task is a derived version: $task $version (from $old_version), brief_sha256 $brief_sha, in $derived; grader.tasks_dir is $grader_tasks"
   echo "$note_line"
+  echo "$derived_line"
 fi
 echo "smoke-real: the suite is the PUBLIC sample suite $public/tests (suite $suite)"
 if [ -n "$leaf" ]; then
@@ -174,7 +207,7 @@ text="$(<"$example")"
 text="${text//@ENGINE@/$engine}"
 text="${text//@FOLDER@/$dir}"
 text="${text//@BIND@/$bind}"
-text="${text//@TASKS@/$tasks}"
+text="${text//@TASKS@/$grader_tasks}"
 text="${text//@SUITES@/$work/suites}"
 printf '%s\n' "$text" >"$work/factory.yaml"
 if grep -q '@[A-Z]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
@@ -260,7 +293,7 @@ echo "smoke-real: the run ended with exit code $rc (0 done, 1 a node failed, 3 s
 report="$work/report.txt"
 ( { set +x; } 2>/dev/null # as above
   echo "$ygg_line"
-  if [ -n "$note_line" ]; then echo "$note_line"; fi
+  if [ -n "$note_line" ]; then echo "$note_line"; echo "$derived_line"; fi
   set -a
   # shellcheck source=/dev/null
   . "$envfile"
