@@ -2,7 +2,7 @@
 # Run the real-agent smoke (v0-H17): the task smoke-notes built by the real Claude Code and the real OpenCode on
 # OpenRouter, then graded. IT COSTS MONEY: the caps are in odin/testdata/smoke-grade/factory.real.example.yaml.
 #   ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip]
-#                     [--from-leaf LEAF] [--implementer AGENT:MODEL]
+#                     [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE]
 # The suite is the PUBLIC sample suite of the task (no hidden suite of smoke-notes exists); the agents never mount
 # it. Needs DIR/factory.yaml (it names the engine; this script never writes it), the credentials file, the
 # devcontainer CLI 0.89.0, jq and python3, the engine up, the bind mount present, and a checkout of `mimir`. It
@@ -19,7 +19,12 @@
 #      execute bit, so the project's start.sh then runs the leaf's start.sh as a program when it is executable,
 #      and with sh when it is not. The planted-fault leaves are in scripts/testdata/reviewer-bench (see
 #      ygg-reviewer-bench.sh);
-#   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit and tree state), then
+#      With --brief-note FILE, the run's brief is the text of FILE, a blank line, then the task's instruction.md,
+#      written to DIR/smoke-real-<time>/brief.md (B-109). A note that narrows the implementer's task keeps the
+#      work small, and the reviewer still gets the whole spec. The line "the brief note" says which file was used,
+#      in the terminal and in report.txt. FILE must exist and have text. See scripts/testdata/reviewer-bench/P4-note.md;
+#   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit, the tree state and
+#      the go.work file the build used, or "no go.work"; GOWORK=off turns go.work off), then
 #      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
 #   5. with --dry-run, stops here and prints what it would run, and what it would do after the run;
 #   6. otherwise runs `ygg run` under `timeout` (--wall, default 90m) with the credentials loaded in a subshell
@@ -37,9 +42,9 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=0
-leaf="" implementer=""
+leaf="" implementer="" note=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
-usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL]" >&2; exit 2; }
+usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -52,6 +57,7 @@ while [ $# -gt 0 ]; do
     --clip) clip=1; shift ;;
     --from-leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
+    --brief-note) [ $# -ge 2 ] || usage; note="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -91,6 +97,13 @@ for f in "$tasks/$task/task.toml" "$tasks/$task/instruction.md" "$public/tests/m
 done
 suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
 [ -n "$suite" ] || fail "$tasks/$task/task.toml has no metadata.suite"
+
+# The brief note: a file with some text in it (not only blanks).
+if [ -n "$note" ]; then
+  [ -f "$note" ] || fail "no brief note at $note (--brief-note)"
+  grep -q '[^[:space:]]' "$note" || fail "the brief note $note is empty (--brief-note)"
+  note="$(cd "$(dirname "$note")" && pwd)/$(basename "$note")"
+fi
 
 # The leaf to start from: its files, without .git, each a plain name pack.yaml can list without quotes.
 if [ -n "$leaf" ]; then
@@ -137,6 +150,13 @@ chmod +x "$project/start.sh"
 git -C "$project" add umbrella.yaml start.sh
 git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the real-agent smoke project"
 echo "smoke-real: made $work"
+brief="$tasks/$task/instruction.md" note_line=""
+if [ -n "$note" ]; then
+  { printf '%s\n\n' "$(<"$note")"; cat "$tasks/$task/instruction.md"; } >"$work/brief.md"
+  brief="$work/brief.md"
+  note_line="smoke-real: the brief note: $note (the brief is $brief: the note, a blank line, then the task's instruction.md)"
+  echo "$note_line"
+fi
 echo "smoke-real: the suite is the PUBLIC sample suite $public/tests (suite $suite)"
 if [ -n "$leaf" ]; then
   # The run's own copy of the pack, with LEAF as the template of repos/notes. odin's pack is not changed.
@@ -189,7 +209,10 @@ fi
 if [ "$built" -eq 1 ]; then
   sha="$(git -C "$odin" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   if [ -n "$(git -C "$odin" status --porcelain 2>/dev/null)" ]; then tree="tree DIRTY"; else tree="tree clean"; fi
-  ygg_line="$ygg_line, built from $odin at commit $sha, $tree"
+  # The same environment as the build, so GOWORK=off is honoured. go prints a path, nothing, or "off".
+  gw="$(cd "$odin" && go env GOWORK 2>/dev/null || true)"
+  case "$gw" in ""|off) gw="no go.work" ;; esac
+  ygg_line="$ygg_line, built from $odin at commit $sha, $tree, go.work: $gw"
 else
   ygg_line="$ygg_line, odin commit unknown (not built by this script)"
 fi
@@ -209,7 +232,7 @@ after_run_notes() {
   fi
 }
 
-run="$ygg run --project '$project' --config '$work/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'"
+run="$ygg run --project '$project' --config '$work/factory.yaml' --graph '$realm' --brief '$brief'"
 if [ "$dry" -eq 1 ]; then
   [ "$build" -eq 0 ] || echo "smoke-real: would run: $ygg sandbox build --config '$work/factory.yaml' --realm '$realm'"
   echo "smoke-real: would run: timeout --signal=INT --kill-after=2m $wall $run"
@@ -237,6 +260,7 @@ echo "smoke-real: the run ended with exit code $rc (0 done, 1 a node failed, 3 s
 report="$work/report.txt"
 ( { set +x; } 2>/dev/null # as above
   echo "$ygg_line"
+  if [ -n "$note_line" ]; then echo "$note_line"; fi
   set -a
   # shellcheck source=/dev/null
   . "$envfile"
