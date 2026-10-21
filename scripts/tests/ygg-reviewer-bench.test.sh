@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests for ygg-reviewer-bench.sh (B-108).   scripts/tests/ygg-reviewer-bench.test.sh
-# A fake opencode (YGG_REVIEWER_BENCH_OPENCODE) prints canned sessions: no model, no network, no money.
+# A fake opencode (--opencode) prints canned sessions, and a fake npm (YGG_REVIEWER_BENCH_NPM) stands in for the
+# installer: no model, no network, no npm, no money.
 # Each check is a condition string run by eval: $rc and the helpers are read there, so the linter cannot
 # see them used.
 # shellcheck disable=SC2016,SC2034,SC2329
@@ -31,13 +32,18 @@ O="$T/odin"; mkdir -p "$O/testdata/smoke-grade/prompts"
 printf 'Review the work in this repository. REVIEW-PROMPT-MARK\n' >"$O/testdata/smoke-grade/prompts/review.md"
 M="$T/mimir"; mkdir -p "$M/smoke-notes"
 printf '# Notes: product brief\n\nBRIEF-MARK\n' >"$M/smoke-notes/instruction.md"
-common=(--odin "$O" --tasks "$M")
+# A made-up gleipnir with the pinned OpenCode version, as sandbox/images.go has it.
+G="$T/gleipnir"; mkdir -p "$G/sandbox"
+printf 'package sandbox\n\nconst (\n\tNode     = "24"\n\tOpenCode = "1.18.32"\n)\n' >"$G/sandbox/images.go"
+common=(--odin "$O" --tasks "$M" --gleipnir "$G" --opencode "$T/bin/opencode")
 
 # The fake opencode: it keeps what it was given, writes a file into its folder, prints the canned session
 # of its number and exits with the canned code (0 by default).
 mkdir -p "$T/bin"
+echo 1.18.32 >"$T/version"
 cat >"$T/bin/opencode" <<EOF
 #!/usr/bin/env bash
+if [ "\$1" = --version ]; then cat "$T/version"; exit 0; fi
 n=\$((\$(cat "$T/calls/count" 2>/dev/null || echo 0) + 1))
 echo "\$n" >"$T/calls/count"
 printf '%s\n' "\$@" >"$T/calls/\$n.args"
@@ -50,7 +56,6 @@ cat "$T/answers/\$n.jsonl" 2>/dev/null
 exit "\$(cat "$T/answers/\$n.exit" 2>/dev/null || echo 0)"
 EOF
 chmod +x "$T/bin/opencode"
-export YGG_REVIEWER_BENCH_OPENCODE="$T/bin/opencode"
 fresh() { rm -rf -- "$T/calls" "$T/answers"; mkdir -p "$T/calls" "$T/answers"; }
 
 # canned N TEXT [COST]: session N reads in a first step (with a sentence that is not the answer) and answers
@@ -101,8 +106,8 @@ check "an odin without the smoke reviewer prompt is refused" eval '[ $rc = 2 ] &
 fresh
 run bash "$B" --dry-run --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 8 --fault "$P4RE" --out "$T/dry" "${common[@]}"
 check "dry run: exit 0, and opencode never runs" eval '[ $rc = 0 ] && [ "$(calls)" = 0 ] && has "spends nothing"'
-check "dry run: the command is opencode run, standalone, JSON events, the OpenRouter model" \
-  eval 'has "run --standalone --format json -m openrouter/qwen/qwen3.8-27b"'
+check "dry run: the command is the engine's: opencode run, JSON events, the model, no --standalone for 1.x" \
+  eval 'has "run --format json -m openrouter/qwen/qwen3.8-27b" && hasnt "--standalone"'
 check "dry run: strict provider settings (no data kept, zero retention, no fallback), effort high" \
   eval 'has "\"data_collection\":\"deny\"" && has "\"zdr\":true" && has "\"allow_fallbacks\":false" && has "\"effort\":\"high\""'
 check "dry run: read-only permissions, and the graph's 10 turns" \
@@ -146,8 +151,8 @@ check "the claims are printed, and the one that matches the fault is marked" \
   eval 'has "fault found" && has "reaches another user" && has "findIndex is not a JavaScript method"'
 check "the summary and each session's events are kept in the out folder" \
   eval 'grep -q "| P4 |" "$T/five/summary.md" && [ -s "$T/five/session-1.jsonl" ] && [ -s "$T/five/session-5.jsonl" ]'
-check "the runner gets the command line: run, standalone, JSON events, the model" \
-  eval '[ "$(cat "$T/calls/1.args")" = "$(printf "run\n--standalone\n--format\njson\n-m\nopenrouter/qwen/qwen3.8-27b")" ]'
+check "the runner gets the engine's command line: run, JSON events, the model; no --standalone, no --auto" \
+  eval '[ "$(cat "$T/calls/1.args")" = "$(printf "run\n--format\njson\n-m\nopenrouter/qwen/qwen3.8-27b")" ]'
 check "the prompt goes on stdin: odin's review.md, the brief, the report format, the reviewer id and the passed check" \
   eval 'grep -q REVIEW-PROMPT-MARK "$T/calls/1.stdin" && grep -q BRIEF-MARK "$T/calls/1.stdin" && grep -q "end your answer with the document" "$T/calls/1.stdin" && grep -q "Your id is review" "$T/calls/1.stdin" && grep -q "The checks that passed on this work: unit." "$T/calls/1.stdin"'
 check "the session runs in a copy of the leaf, never in the leaf itself" \
@@ -198,6 +203,64 @@ check "only the bare report after prose is valid; with no --fault the fault colu
   eval '[ $rc = 0 ] && has "| P2 | qwen/qwen3.8-27b | 10 | 1 | -, -, -, -, -, -, 1, -, -, - | - |"'
 check "the reasons: two fences, a source, a location, a closed finding, an id twice, two documents, the exit code, a check id, an unknown field" \
   eval 'has "session 1: not a valid report: more than one code fence" && has "session 2: not a valid report" && has "session 3: not a valid report" && has "session 4: not a valid report" && has "session 5: not a valid report" && has "session 6: not a valid report: more than one document" && has "session 8: not a valid report: opencode exited 1" && has "session 9: not a valid report" && has "session 10: not a valid report"'
+
+# --- the OpenCode version: the engine's pin (B-108) ---
+fresh
+run bash "$B" --dry-run --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 1 --out "$T/dryv" "${common[@]}"
+check "dry run: it names the OpenCode binary and its version" eval 'has "OpenCode: $T/bin/opencode 1.18.32"'
+echo v2.0.32 >"$T/version"
+run bash "$B" --dry-run --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 1 --out "$T/dryw" "${common[@]}"
+check "a version other than the pin is refused, naming both" eval '[ $rc = 2 ] && has "2.0.32" && has "1.18.32" && has "--any-opencode"'
+run bash "$B" --dry-run --any-opencode --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 1 --out "$T/dryx" "${common[@]}"
+check "--any-opencode allows it and says so; 'v2.0.32' is major 2, so --standalone" \
+  eval '[ $rc = 0 ] && has "not the pin" && has "run --standalone --format json -m openrouter/qwen/qwen3.8-27b"'
+fresh
+canned 1 '{"findings": []}'
+run bash "$B" --any-opencode --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/v2" "${common[@]}"
+check "v2 argv has --standalone, and summary.md names the binary and version" \
+  eval '[ "$(cat "$T/calls/1.args")" = "$(printf "run\n--standalone\n--format\njson\n-m\nopenrouter/qwen/qwen3.8-27b")" ] && grep -q "OpenCode: $T/bin/opencode v2.0.32" "$T/v2/summary.md" && has "OpenCode: $T/bin/opencode v2.0.32"'
+fresh
+run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/v2no" "${common[@]}"
+check "a refused version runs nothing" eval '[ $rc = 2 ] && [ "$(calls)" = 0 ]'
+echo 1.18.32 >"$T/version"
+canned 1 '{"findings": []}'
+run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/v1" "${common[@]}"
+check "the pinned version runs, and the summary names it" \
+  eval '[ $rc = 0 ] && grep -q "OpenCode: $T/bin/opencode 1.18.32" "$T/v1/summary.md"'
+run bash "$B" --dry-run --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 1 --out "$T/nog" "${common[@]}" --gleipnir "$T/nowhere"
+check "a gleipnir without sandbox/images.go is refused" eval '[ $rc = 2 ] && has "images.go"'
+
+# Without --opencode: the pinned version, installed once into the cache folder by the installer.
+cat >"$T/bin/npm" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >>"$T/npm.calls"
+prefix=""
+while [ \$# -gt 0 ]; do [ "\$1" = --prefix ] && prefix="\$2"; shift; done
+mkdir -p "\$prefix/node_modules/opencode-linux-x64/bin"
+cp "$T/bin/opencode" "\$prefix/node_modules/opencode-linux-x64/bin/opencode"
+EOF
+chmod +x "$T/bin/npm"
+export YGG_REVIEWER_BENCH_NPM="$T/bin/npm" YGG_REVIEWER_BENCH_UNAME="Linux x86_64" XDG_CACHE_HOME="$T/cache"
+nocmd=(--odin "$O" --tasks "$M" --gleipnir "$G")
+CB="$T/cache/ouroboric/opencode/1.18.32/node_modules/opencode-linux-x64/bin/opencode"
+fresh
+run bash "$B" --dry-run --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 1 --out "$T/dryi" "${nocmd[@]}"
+check "dry run without --opencode: the cache path, 'would install', and nothing installed" \
+  eval '[ $rc = 0 ] && has "$CB" && has "would install" && has "1.18.32" && [ ! -e "$T/npm.calls" ] && [ ! -e "$T/cache" ] && hasnt "--standalone"'
+canned 1 '{"findings": []}'
+run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/inst" "${nocmd[@]}"
+check "the install command is npm install --ignore-scripts --prefix CACHE/1.18.32 opencode-ai@1.18.32" \
+  eval '[ $rc = 0 ] && [ "$(cat "$T/npm.calls")" = "install --ignore-scripts --prefix $T/cache/ouroboric/opencode/1.18.32 opencode-ai@1.18.32" ]'
+check "the session runs the cached binary, and the summary names it" \
+  eval '[ "$(calls)" = 1 ] && grep -q "OpenCode: $CB 1.18.32" "$T/inst/summary.md"'
+fresh
+canned 1 '{"findings": []}'
+run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/inst2" "${nocmd[@]}"
+check "a second run reuses the cache: no second install" eval '[ $rc = 0 ] && [ "$(wc -l <"$T/npm.calls")" = 1 ]'
+export YGG_REVIEWER_BENCH_UNAME="Darwin arm64" XDG_CACHE_HOME="$T/cache-mac"
+run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P0" --sessions 1 --out "$T/mac" "${nocmd[@]}"
+check "another platform is refused with a clear message, and nothing is installed" \
+  eval '[ $rc = 2 ] && has "linux x64" && [ ! -e "$T/cache-mac" ] && [ "$(wc -l <"$T/npm.calls")" = 1 ]'
 
 # --- the fixtures ---
 lines() { diff "$1" "$2" | grep -c '^[<>]'; }
