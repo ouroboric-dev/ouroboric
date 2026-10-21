@@ -39,7 +39,8 @@ folder.
 | Any real-engine run (Podman, devcontainer, the sandbox): the engine, registry config and checks | `scripts/ygg-engine.sh check\|env\|run --folder DIR`. Never set `CONTAINER_HOST` by hand: the root socket is the wrong one |
 | The realms smoke runs (v0-H13, v0-H15) and their evidence | `scripts/ygg-smoke-realms.sh`, `scripts/ygg-smoke-loop.sh`, `scripts/ygg-evidence.sh` |
 | The grader smoke on a real engine (v0-H16), with the public sample suite | `scripts/ygg-smoke-grade.sh [--build]`. Never a hidden suite |
-| The real-agent smoke (v0-H17): costs money; `--dry-run` first; the cost from the ledger | `scripts/ygg-smoke-real.sh --dry-run`, then without it; `scripts/ygg-cost.sh LEDGER`. It never prints the credentials file |
+| The real-agent smoke (v0-H17): costs money; `--dry-run` first; the cost from the ledger; a start from a planted-fault leaf; another implementer; the repair path from the ledger | `scripts/ygg-smoke-real.sh --dry-run`, then without it; `--from-leaf LEAF`, `--implementer AGENT:MODEL`; `scripts/ygg-cost.sh LEDGER`, `scripts/ygg-repair-path.sh LEDGER`. It never prints the credentials file |
+| Compare reviewer models: costs money unless `--dry-run`; on the planted-fault leaves in `scripts/testdata/reviewer-bench` | `scripts/ygg-reviewer-bench.sh --model MODEL --leaf DIR --sessions N --dry-run`, then without it |
 | Build a plan from reference commits, or execute one task by task | `scripts/plan-*` (`plan-generate.py`, `plan-replay.py`, `plan-states.sh`, `plan-red.sh`, `plan-defences.py`; `plan-blocks.py`, `plan-task-start.sh`, `plan-task-done.sh`, `plan-task-land.sh`) |
 | Check that the repos have the required setup, and that the realms' shared files match | `scripts/as-bot.sh --read all scripts/check-repos.sh`; `--check shared` runs the realms check alone |
 | Scan git history for secrets | `scripts/scan-history.sh` |
