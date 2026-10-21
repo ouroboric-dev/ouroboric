@@ -54,6 +54,7 @@ printf '#!/usr/bin/env bash\nexit 0\n' >"$T/pathbin/ygg"
 cp "$T/pathbin/ygg" "$T/other/ygg-custom"
 cat >"$T/gobin/go" <<'EOF2'
 #!/usr/bin/env bash
+[ "$1" = env ] && [ "$2" = GOWORK ] && { printf '%s\n' "${GOWORK-}"; exit 0; }
 [ "$1" = build ] && [ "$2" = -o ] && { printf '#!/usr/bin/env bash\nexit 0\n' >"$3"; chmod +x "$3"; exit 0; }
 exit 1
 EOF2
@@ -85,6 +86,16 @@ check "a clean tree is said to be clean" has "tree clean"
 printf 'x\n' >"$O/untracked.txt"
 PATH="$T/gobin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
 check "a dirty odin tree is said to be dirty" has "tree DIRTY"
+
+# --- the go.work file of the build (B-111)
+PATH="$T/gobin:$BASEPATH" GOWORK="$T/ws/go.work" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a build with GOWORK set names the go.work file" has "go.work: $T/ws/go.work"
+PATH="$T/gobin:$BASEPATH" GOWORK=off run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a build with GOWORK=off says no go.work" has "go.work: no go.work"
+PATH="$T/gobin:$BASEPATH" GOWORK='' run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a build that finds no go.work says no go.work" has "go.work: no go.work"
+PATH="$T/pathbin:$BASEPATH" GOWORK="$T/ws/go.work" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "a ygg that was not built says nothing about go.work" hasnt "go.work"
 
 # The run's folder, from the line "smoke-real: made DIR".
 work() { sed -n 's/^smoke-real: made //p' "$T/out" | head -n 1; }
@@ -167,6 +178,39 @@ for bad in opencode qwen opencode: :sonnet scripted:x gemini:x opencode:qwen/qwe
 done
 check "a refusal says what is allowed" has "--implementer is AGENT:MODEL"
 
+# --- --brief-note: the brief is the note, a blank line, then the task's instruction (B-109)
+printf 'Scope: only add the health route.\n' >"$T/note.md"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note.md"
+W="$(work)"
+check "a dry run with a note exits 0" test "$rc" -eq 0
+check "ygg run gets the run's brief.md" has "--brief '$W/brief.md'"
+check "brief.md is the note, a blank line, the instruction" bash -c "[ \"\$(cat '$W/brief.md')\" = \"\$(printf 'Scope: only add the health route.\n\n# brief')\" ]"
+check "the real instruction file is not the brief" hasnt "--brief '$M/smoke-notes/instruction.md'"
+check "it says which note was used" has "smoke-real: the brief note: $T/note.md"
+printf 'Scope: no newline at the end' >"$T/note-nonl.md"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note-nonl.md"
+check "a note without a final newline still has a blank line before the instruction" bash -c "[ \"\$(cat '$(work)/brief.md')\" = \"\$(printf 'Scope: no newline at the end\n\n# brief')\" ]"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "without a note ygg run gets the instruction file" has "--brief '$M/smoke-notes/instruction.md'"
+check "and no brief.md is made" test ! -e "$(work)/brief.md"
+check "and no note is named" hasnt "the brief note"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/no-such-note.md"
+check "a missing note is refused" test "$rc" -eq 2
+check "and named" has "no brief note at $T/no-such-note.md"
+: >"$T/note-empty.md"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note-empty.md"
+check "an empty note is refused" test "$rc" -eq 2
+printf ' \n\n' >"$T/note-blank.md"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note-blank.md"
+check "a note of blanks is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note
+check "--brief-note without a file is a usage error" test "$rc" -eq 2
+
+# The shipped note for P4 (the leaf whose fault is in the owner check of remove).
+check "P4-note.md exists" test -s "$S/testdata/reviewer-bench/P4-note.md"
+check "P4-note.md asks for GET /api/health" grep -q -F 'GET /api/health' "$S/testdata/reviewer-bench/P4-note.md"
+check "P4-note.md says nothing of deletion, owners or review" bash -c "! grep -q -i -E 'delet|remove|owner|review|fault|bug' '$S/testdata/reviewer-bench/P4-note.md'"
+
 # --- the run's tail, without --dry-run: the repair path and --clip (B-109, B-111)
 # A non-dry run reaches the code after `ygg run`. run_real refuses unless every guard holds: YGG_CMD is an
 # executable under this test's temp folder, the engine check is off, and the folder and the credentials file are the
@@ -232,6 +276,12 @@ check "it says report.txt was copied" has "(report.txt copied to the clipboard)"
 check "run_real refuses a YGG_CMD outside the temp folder" grep -q -F "run_real refused: YGG_CMD 'ygg' is not under" "$T/refusal"
 (YGG_CMD="$FY" YGG_ENGINE_CHECK=1 run_real) >"$T/refusal"
 check "run_real refuses when the engine check is on" grep -q -F "run_real refused: YGG_ENGINE_CHECK is not 0" "$T/refusal"
+
+PATH="$CLIPPATH" YGG_CMD="$FY" run_real --from-leaf "$L" --brief-note "$T/note.md"
+W="$(work)"
+check "a run with a note exits 0" test "$rc" -eq 0
+check "report.txt names the note" grep -q -F "smoke-real: the brief note: $T/note.md" "$W/report.txt"
+check "the note is printed in the terminal" has "smoke-real: the brief note: $T/note.md"
 
 # --- the real odin files, when this checkout has them: the edits must match their lines
 R="${YGG_REAL_ODIN:-$S/../../yggdrasil/odin}"
