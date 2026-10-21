@@ -16,15 +16,18 @@
 #      With --from-leaf LEAF, the leaf repos/notes starts from the files of LEAF (without .git) instead of the
 #      pack's template (B-109): the pack is copied to DIR/smoke-real-<time>/pack, LEAF becomes the copy's
 #      template, and every file of LEAF goes in the leaf's first commit. odin writes those files without the
-#      execute bit, so the project's start.sh then runs the leaf's start.sh with sh. The planted-fault leaves are
-#      in scripts/testdata/reviewer-bench (see ygg-reviewer-bench.sh);
+#      execute bit, so the project's start.sh then runs the leaf's start.sh as a program when it is executable,
+#      and with sh when it is not. The planted-fault leaves are in scripts/testdata/reviewer-bench (see
+#      ygg-reviewer-bench.sh);
 #   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit and tree state), then
 #      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
-#   5. with --dry-run, stops here and prints what it would run;
+#   5. with --dry-run, stops here and prints what it would run, and what it would do after the run;
 #   6. otherwise runs `ygg run` under `timeout` (--wall, default 90m) with the credentials loaded in a subshell
 #      only, and keeps the raw output in DIR/smoke-real-<time>/run.txt (shown live: do not paste that file);
-#   7. prints the evidence report (credentials removed), the score, whether a finding took the repair path
-#      (ygg-repair-path.sh: raised, fixed, closed, or the missing step), and the COST read from the ledger.
+#   7. prints the evidence report (credentials removed) and keeps it in DIR/smoke-real-<time>/report.txt, with
+#      the ygg line; then the score; with --from-leaf, whether a finding took the repair path (ygg-repair-path.sh:
+#      raised, fixed, closed, or the missing step; also added to report.txt); and the COST read from the ledger.
+#      --clip copies the whole report.txt to the Windows clipboard (clip.exe, in WSL).
 # The credentials are loaded by `. FILE` in the subshell that runs ygg, as the other smoke scripts do, and nothing
 # in this script echoes, greps for a value, or copies them. The exit code is the run's (0 done, 1 a node failed,
 # 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock ended it) or 2 for a refusal before it.
@@ -33,7 +36,7 @@
 # (default 0.89.0). The engine environment comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=()
+dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=0
 leaf="" implementer=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
 usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL]" >&2; exit 2; }
@@ -46,7 +49,7 @@ while [ $# -gt 0 ]; do
     --tasks) [ $# -ge 2 ] || usage; tasks="$2"; shift 2 ;;
     --odin) [ $# -ge 2 ] || usage; odin="$2"; shift 2 ;;
     --wall) [ $# -ge 2 ] || usage; wall="$2"; shift 2 ;;
-    --clip) clip=(--clip); shift ;;
+    --clip) clip=1; shift ;;
     --from-leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
     *) usage ;;
@@ -120,11 +123,16 @@ project="$work/project"
 git -C "$project" init -q -b main
 printf 'root: true\nowner: ouroboric-dev\nvisibility: private\n' >"$project/umbrella.yaml"
 # The grader's /app is the project. The product is built in the leaf; this file starts it.
-# odin writes a leaf's first-commit files without the execute bit, so a run from a leaf runs its start.sh with sh.
+# odin writes a leaf's first-commit files without the execute bit, so a run from a leaf runs its start.sh with sh
+# unless the implementer made it executable. sh is dash in the grader's image, so the shebang wins when it can.
 starter=./start.sh
-[ -z "$leaf" ] || starter="sh ./start.sh"
+[ -z "$leaf" ] || starter="if [ -x ./start.sh ]; then exec ./start.sh; else exec sh ./start.sh; fi"
 # shellcheck disable=SC2016
-printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec %s\n' "$starter" >"$project/start.sh"
+if [ -z "$leaf" ]; then
+  printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec %s\n' "$starter" >"$project/start.sh"
+else
+  printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" || exit 1\n%s\n' "$starter" >"$project/start.sh"
+fi
 chmod +x "$project/start.sh"
 git -C "$project" add umbrella.yaml start.sh
 git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the real-agent smoke project"
@@ -192,10 +200,20 @@ echo "smoke-real: the caps in $work/factory.yaml:"
 echo "smoke-real: ygg doctor on that config"
 if ! eval "$ygg doctor --project '$project' --config '$work/factory.yaml'"; then fail "ygg doctor refused the config; nothing was spent"; fi
 
+# What happens after the run. The dry run prints it from the same settings, since only a real run reaches it.
+after_run_notes() {
+  if [ -n "$leaf" ]; then echo "smoke-real: after the run: ygg-repair-path.sh checks the repair path in the run's ledger (--from-leaf)"; fi
+  if [ "$clip" -eq 1 ]; then
+    if command -v clip.exe >/dev/null 2>&1; then echo "smoke-real: after the run: report.txt is copied to the clipboard with clip.exe"
+    else echo "smoke-real: --clip needs clip.exe (WSL); the report will be in report.txt only"; fi
+  fi
+}
+
 run="$ygg run --project '$project' --config '$work/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'"
 if [ "$dry" -eq 1 ]; then
   [ "$build" -eq 0 ] || echo "smoke-real: would run: $ygg sandbox build --config '$work/factory.yaml' --realm '$realm'"
   echo "smoke-real: would run: timeout --signal=INT --kill-after=2m $wall $run"
+  after_run_notes
   echo "smoke-real: dry run: nothing was started and the credentials were not loaded"
   exit 0
 fi
@@ -223,7 +241,7 @@ report="$work/report.txt"
   # shellcheck source=/dev/null
   . "$envfile"
   set +a
-  YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --config "$work/factory.yaml" --output "$out" ${clip[@]+"${clip[@]}"} "$project"
+  YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --config "$work/factory.yaml" --output "$out" "$project"
 ) | tee "$report" || echo "smoke-real: no evidence report: the run left no ledger" >&2
 
 # The score and the cost come from the run folder and its ledger; neither holds a credential.
@@ -234,8 +252,14 @@ else
   echo "smoke-real: no score.json: the run did not reach the grade node"
 fi
 if [ -n "$id" ] && [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
-  "$HERE/ygg-repair-path.sh" "$project/.factory/runs/$id/ledger.jsonl" | tee -a "$report" || true
+  # Only a run from a planted-fault leaf is meant to take the repair path; on any other run the line would read as a failure.
+  if [ -n "$leaf" ]; then "$HERE/ygg-repair-path.sh" "$project/.factory/runs/$id/ledger.jsonl" | tee -a "$report" || true; fi
   "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml" || echo "smoke-real: the cost could not be read from the ledger" >&2
+fi
+# The whole report.txt (the ygg line, the redacted evidence, the repair path) is what the founder pastes.
+if [ "$clip" -eq 1 ]; then
+  if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then clip.exe <"$report"; echo "(report.txt copied to the clipboard)" >&2
+  else echo "smoke-real: --clip needs clip.exe (WSL); the report is in $report" >&2; fi
 fi
 echo "smoke-real: the folder is $work" >&2
 exit "$rc"

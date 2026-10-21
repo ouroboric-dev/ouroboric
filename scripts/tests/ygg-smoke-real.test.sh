@@ -96,6 +96,18 @@ check "a default run copies no pack" test ! -e "$W/pack"
 check "a default run's start.sh runs the leaf's start.sh as a program" grep -q -F 'exec ./start.sh' "$W/project/start.sh"
 check "a default run keeps the example's implementer" grep -q -F 'implementer: { agent: claude-code, model: sonnet }' "$W/factory.yaml"
 check "a default run prints the implementer" has "smoke-real: the implementer: { agent: claude-code, model: sonnet }"
+check "a default run says nothing about the repair path" hasnt "repair"
+
+# --- --clip: the whole report.txt goes to the clipboard after the run, with clip.exe (B-111, B-109)
+mkdir -p "$T/clipbin"; printf '#!/bin/sh\ncat >/dev/null\n' >"$T/clipbin/clip.exe"; chmod +x "$T/clipbin/clip.exe"
+PATH="$T/clipbin:$PATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --clip
+check "a dry run with --clip and clip.exe exits 0" test "$rc" -eq 0
+check "it says report.txt goes to the clipboard after the run" has "smoke-real: after the run: report.txt is copied to the clipboard with clip.exe"
+NOCLIP="$(tr ':' '\n' <<<"$PATH" | while IFS= read -r d; do [ -e "$d/clip.exe" ] || printf '%s:' "$d"; done)"
+PATH="${NOCLIP%:}" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --clip
+check "a dry run with --clip and no clip.exe still exits 0" test "$rc" -eq 0
+check "it says --clip needs clip.exe" has "smoke-real: --clip needs clip.exe (WSL); the report will be in report.txt only"
+check "the evidence script never gets --clip" bash -c "! grep -q -E 'ygg-evidence\.sh.*(--clip|clip\[)' '$S/ygg-smoke-real.sh'"
 
 # --- --from-leaf: the run starts from a planted-fault leaf (B-109)
 L="$T/leaf"; mkdir -p "$L/lib" "$L/.git"
@@ -115,7 +127,14 @@ check "the old template's files are gone" bash -c "[ \"\$(ls '$W/pack/templates/
 check "every leaf file is in the first commit" grep -q -F 'first_commit: [LICENSE, README.md, lib/notes.js, server.js, start.sh]' "$W/pack/pack.yaml"
 check "the rest of the pack line stays" grep -q -F 'repos/notes: { description: the notes product, template: templates/notes, first_commit:' "$W/pack/pack.yaml"
 check "odin's own pack is not changed" cmp -s "$T/pack.before" "$O/testdata/smoke-grade/pack.yaml"
-check "start.sh runs the leaf's start.sh with sh (odin writes first-commit files without the x bit)" grep -q -F 'exec sh ./start.sh' "$W/project/start.sh"
+check "start.sh runs the leaf's start.sh as a program when it is executable" grep -q -F 'if [ -x ./start.sh ]; then exec ./start.sh; else exec sh ./start.sh; fi' "$W/project/start.sh"
+# The wrapper itself, run against a leaf start.sh with and without the x bit (odin writes first-commit files 0644).
+mkdir -p "$T/app/repos/notes"; cp "$W/project/start.sh" "$T/app/start.sh"
+printf '#!/bin/sh\necho started\n' >"$T/app/repos/notes/start.sh"; chmod 644 "$T/app/repos/notes/start.sh"
+check "the wrapper runs a 0644 start.sh with sh" bash -c "[ \"\$('$T/app/start.sh')\" = started ]"
+printf '#!/usr/bin/env bash\n[[ -n x ]] && echo bash-started\n' >"$T/app/repos/notes/start.sh"; chmod 755 "$T/app/repos/notes/start.sh"
+check "the wrapper runs an executable start.sh by its own shebang" bash -c "[ \"\$('$T/app/start.sh')\" = bash-started ]"
+check "a run from a leaf says it checks the repair path after the run" has "smoke-real: after the run: ygg-repair-path.sh checks the repair path in the run's ledger (--from-leaf)"
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --from-leaf "$L" --build
 check "the dry run names the sandbox build on the copy" has "--realm '$(work)/pack'"
 
