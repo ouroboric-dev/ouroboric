@@ -3,7 +3,7 @@ date: 2026-10-20
 tags: [models, review, routing, measurement, cost, sandbox]
 status: open
 post-candidate: yes
-evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693"]
+evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69"]
 ---
 ## Challenge
 
@@ -131,9 +131,29 @@ quoted `server.listen(8080, '0.0.0.0')` against the brief's port 3000. For fault
 `GET /api/notes` returns notes oldest first (some: "in insertion order") and the brief requires newest first.
 We did not test GLM or Haiku on the planted faults.
 
-What these tests do not show: all three faults are visible by reading a few lines. A fault that needs
-reasoning across files, such as one user reaching another user's notes, is untested. The sample is small
+What these tests do not show: all three faults are visible by reading a few lines. The sample is small
 (3 to 8 sessions a cell), and the hosted models change from hour to hour.
+
+### A fault across two files (added 2026-10-21)
+
+A fourth copy (P4) has a fault that no single file shows. `server.js` reaches notes only through
+`notes.of(email)`, and `remove` in `notes.js` deletes by id without checking the owner. So one person can
+delete another person's note, and gets 204 where the brief asks for 404. We ran it with the reviewer bench,
+`scripts/ygg-reviewer-bench.sh` (B-108), on the OpenCode version the engine pins (1.18.32), with the smoke
+reviewer's prompt and settings.
+
+| Planted fault | Model | Sessions | Caught | Findings per session | Tokens in (new) | Tokens out | Cost per session |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 4. delete ignores the owner | Qwen3.8 27B | 8 | 8 | 1 in all 8 | 24.1k (10.0k) | 3.0k | $0.014 |
+
+Every report held one finding, the planted one, at `notes.js:18-20`, and named the route in `server.js` that
+answers 204. Several added that note ids come from one counter shared by all users, which is what makes the
+fault reachable. Six rated it blocker and two major; the loop treats both as blocking. The whole run cost
+about $0.11 (estimated before the run at 8 cents; one session read more and cost $0.028). Evidence:
+`~/ygg-it/bench-P4-qwen-20261021-234015`.
+
+One caveat about the earlier tables: the scratch scripts that made them are lost, and which OpenCode version
+they ran was not recorded. The P4 run is the first whose version is known to be the engine's.
 
 ### Cost of the experiment
 
@@ -151,7 +171,7 @@ Open questions, to answer in this entry:
 
 - Answered: the smoke passes end to end with Qwen as the reviewer (reward 1.0, $0.09).
 - Does the repair path work with Qwen: a real finding, a fix by the implementer, and the finding closed?
-- Does Qwen find a subtler fault, such as one user reaching another's notes?
+- Answered: Qwen finds a fault across two files, one user deleting another's note (8 of 8, $0.11).
 - Would Qwen also work as the implementer? Claude Code runs on a flat subscription, so the implementer
   costs nothing per run, and a swap only pays when that limit binds.
 
