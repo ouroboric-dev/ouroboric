@@ -11,7 +11,8 @@
 #      lines; no value is printed or kept);
 #   3. makes DIR/smoke-real-<time> with the project, the public suite and the factory.yaml filled from the
 #      example (its caps are the real ones);
-#   4. runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
+#   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit and tree state), then
+#      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
 #   5. with --dry-run, stops here and prints what it would run;
 #   6. otherwise runs `ygg run` under `timeout` (--wall, default 90m) with the credentials loaded in a subshell
 #      only, and keeps the raw output in DIR/smoke-real-<time>/run.txt (shown live: do not paste that file);
@@ -98,15 +99,35 @@ text="${text//@SUITES@/$work/suites}"
 printf '%s\n' "$text" >"$work/factory.yaml"
 if grep -q '@[A-Z]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
 
-ygg="${YGG_CMD:-}"
+# Which ygg runs. `ygg` has no version command, so the line gives the path and the modified time of the binary;
+# for a build from --odin it also gives the odin commit and whether that tree is dirty. YGG_CMD and a ygg on PATH
+# are run as they are: the line is what shows a stale one.
+ygg="${YGG_CMD:-}" built=0
 if [ -z "$ygg" ]; then
   if command -v ygg >/dev/null 2>&1; then ygg=ygg
   else
     mkdir -p "$work/bin"
     (cd "$odin" && go build -o "$work/bin/ygg" ./cmd/ygg) || fail "go build of ygg failed in $odin"
-    ygg="'$work/bin/ygg'"
+    ygg="'$work/bin/ygg'" built=1
   fi
 fi
+first="${ygg%% *}"
+if [ "$built" -eq 1 ]; then first="$work/bin/ygg"; fi
+bin="$(command -v -- "$first" 2>/dev/null || true)"
+if [ -n "$bin" ]; then
+  stamp="$(date -r "$bin" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo unknown)"
+  ygg_line="smoke-real: ygg: $bin, modified $stamp"
+else
+  ygg_line="smoke-real: ygg: $first (not found on PATH)"
+fi
+if [ "$built" -eq 1 ]; then
+  sha="$(git -C "$odin" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  if [ -n "$(git -C "$odin" status --porcelain 2>/dev/null)" ]; then tree="tree DIRTY"; else tree="tree clean"; fi
+  ygg_line="$ygg_line, built from $odin at commit $sha, $tree"
+else
+  ygg_line="$ygg_line, odin commit unknown (not built by this script)"
+fi
+echo "$ygg_line"
 
 echo "smoke-real: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
@@ -139,6 +160,7 @@ echo "smoke-real: the run ended with exit code $rc (0 done, 1 a node failed, 3 s
 
 report="$work/report.txt"
 ( { set +x; } 2>/dev/null # as above
+  echo "$ygg_line"
   set -a
   # shellcheck source=/dev/null
   . "$envfile"
