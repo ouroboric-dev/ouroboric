@@ -25,11 +25,99 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export YGG_BIND="$T/bind"; mkdir -p "$YGG_BIND"
 
 # A made-up mimir and a made-up odin (a git repo, so the build case can name its commit).
-M="$T/mimir"; mkdir -p "$M/smoke-notes/sample-suite/tests"
-printf '[metadata]\nsuite = "v1"\n' >"$M/smoke-notes/task.toml"
+# Its task.toml has every field odin's task loader checks, so a derived copy can be checked as the loader would.
+M="$T/mimir"; mkdir -p "$M/smoke-notes/sample-suite/tests" "$M/smoke-notes/environment"
 printf '# brief\n' >"$M/smoke-notes/instruction.md"
-printf '{}\n' >"$M/smoke-notes/sample-suite/tests/manifest.json"
+brief0="$(sha256sum "$M/smoke-notes/instruction.md" | cut -d' ' -f1)"
+cat >"$M/smoke-notes/task.toml" <<EOF2
+schema_version = "1.4"
+artifacts = ["/app"]
+
+[task]
+name = "ouroboric-dev/smoke-notes"
+version = "1.0.0"
+
+[metadata]
+# SHA-256 of instruction.md. Any change to the brief makes a new task version.
+brief_sha256 = "$brief0"
+suite = "v1"
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "separate"
+
+[verifier.env]
+SCORE_WEIGHTS = "notes=1"
+EOF2
+printf 'FROM scratch\n' >"$M/smoke-notes/environment/Dockerfile"
+printf '{"schema":"ygg.suite/v1","suite":"v1","scenarios":[{"id":"add a note","category":"notes","kind":"fail-to-pass"}]}\n' \
+  >"$M/smoke-notes/sample-suite/tests/manifest.json"
 printf '#!/bin/bash\n' >"$M/smoke-notes/sample-suite/tests/test.sh"
+
+# task_loads TASKS_DIR SUITE_DIR ID: the checks of odin's task.Load (yggdrasil/odin internal/task/task.go), in its
+# order, read from that file: the id; task.toml a regular file of at most 64 KiB that parses; artifacts ["/app"];
+# task.name ending in the id; task.version of the form 1.2.3 (gungnir.ValidVersion); brief_sha256 64 lowercase hex;
+# the suite name; environment_mode "separate"; timeout_sec above 0 and at most a day; verifier.env names in capitals;
+# SCORE_WEIGHTS summing to 1; no retired mark for the suite; instruction.md a regular file of at most 1 MiB whose
+# SHA-256 in lowercase hex is brief_sha256; the suite's tests folder with test.sh and manifest.json; and of the
+# manifest: its schema, suite name, at least one scenario, the suite task.toml names, and a weight for each
+# fail-to-pass category (not each scenario's own fields). It prints "loads: ID VERSION SHA256" or why it does not.
+task_loads() {
+  python3 -I - "$@" <<'PY'
+import hashlib, json, math, os, re, stat, sys, tomllib
+tasks, suites, tid = sys.argv[1:4]
+def no(msg):
+    print("does not load: " + msg); sys.exit(1)
+def regular(p, mx):
+    try: st = os.lstat(p)
+    except OSError as e: no(f"{p}: {e.strerror}")
+    if not stat.S_ISREG(st.st_mode): no(f"{p} is not a regular file")
+    if st.st_size > mx: no(f"{p} is over {mx} bytes")
+    with open(p, "rb") as fh: return fh.read()
+suite_re = r"[a-z0-9][a-z0-9._-]*"
+if not re.fullmatch(r"[a-z][a-z0-9-]*", tid): no(f"{tid!r} is not a task id")
+d = os.path.join(tasks, tid)
+try: f = tomllib.loads(regular(os.path.join(d, "task.toml"), 64 << 10).decode())
+except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e: no(f"task.toml does not parse: {e}")
+task, meta, ver = f.get("task", {}), f.get("metadata", {}), f.get("verifier", {})
+name, version, sha, suite = task.get("name", ""), task.get("version", ""), meta.get("brief_sha256", ""), meta.get("suite", "")
+if f.get("artifacts") != ["/app"]: no("artifacts is not [\"/app\"]")
+if name[name.rfind("/") + 1:] != tid: no(f"task.name {name!r} does not end in {tid}")
+if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version): no(f"task.version {version!r} is not of the form 1.2.3")
+if not re.fullmatch(r"[0-9a-f]{64}", sha): no(f"brief_sha256 {sha!r} is not a SHA-256 in hex")
+if not re.fullmatch(suite_re, suite): no(f"metadata.suite {suite!r} is not a suite version")
+if ver.get("environment_mode") != "separate": no("environment_mode is not separate")
+if not 0 < float(ver.get("timeout_sec", 0)) <= 24 * 3600: no("timeout_sec is out of range")
+env = ver.get("env", {})
+for k in env:
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", k): no(f"verifier.env {k!r} is not in capitals")
+weights, total = {}, 0.0
+for part in env.get("SCORE_WEIGHTS", "").split(","):
+    cat, _, num = part.partition("=")
+    try: v = float(num)
+    except ValueError: no(f"SCORE_WEIGHTS {part!r} is not category=weight")
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", cat) or math.isnan(v) or not 0 <= v <= 1 or cat in weights: no(f"SCORE_WEIGHTS {part!r}")
+    weights[cat] = v; total += v
+if abs(total - 1) > 1e-9: no(f"SCORE_WEIGHTS sum to {total}")
+if os.path.lexists(os.path.join(d, "retired", suite)): no(f"suite {suite} is retired")
+got = hashlib.sha256(regular(os.path.join(d, "instruction.md"), 1 << 20)).hexdigest()
+if got != sha: no(f"instruction.md hashes to {got}, task.toml says {sha}")
+tests = os.path.join(suites, tid, suite, "tests")
+if not os.path.isdir(tests): no(f"no tests folder {tests}")
+if not os.path.isfile(os.path.join(tests, "test.sh")): no("no test.sh")
+if not os.path.lexists(os.path.join(tests, "manifest.json")): no("no manifest.json")
+m = json.loads(regular(os.path.join(tests, "manifest.json"), 1 << 20))
+if set(m) - {"schema", "suite", "scenarios"}: no("manifest.json has an unknown field")
+if m.get("schema") != "ygg.suite/v1" or not re.fullmatch(suite_re, m.get("suite", "")) or not m.get("scenarios"): no("manifest.json is not a suite")
+if m["suite"] != suite: no(f"manifest.json is of suite {m['suite']}, task.toml names {suite}")
+for sc in m["scenarios"]:
+    if sc.get("kind") == "fail-to-pass" and sc.get("category") not in weights: no(f"scenario {sc.get('id')!r} has no weight")
+print(f"loads: {tid} {version} {sha}")
+PY
+}
+# loads: task_loads for check, quiet when the task loads. The line is kept in $T/loads.
+loads() { task_loads "$@" >"$T/loads" || { cat "$T/loads"; return 1; }; }
+
 O="$T/odin"; mkdir -p "$O/testdata/smoke-grade/templates/notes"
 printf 'name: smoke-grade\nleaves:\n  repos/notes: { description: the notes product, template: templates/notes, first_commit: [LICENSE] }\n' \
   >"$O/testdata/smoke-grade/pack.yaml"
@@ -178,22 +266,66 @@ for bad in opencode qwen opencode: :sonnet scripted:x gemini:x opencode:qwen/qwe
 done
 check "a refusal says what is allowed" has "--implementer is AGENT:MODEL"
 
-# --- --brief-note: the brief is the note, a blank line, then the task's instruction (B-109)
+# --- --brief-note: the brief is the note, a blank line, then the task's instruction (B-109). A changed brief is
+# another task version, so the run builds and is graded against a derived copy of the task in the run's folder.
+mkdir -p "$T/suites0/smoke-notes/v1"; cp -r "$M/smoke-notes/sample-suite/tests" "$T/suites0/smoke-notes/v1/tests"
+check "the made-up task loads with its suite" loads "$M" "$T/suites0" smoke-notes
 printf 'Scope: only add the health route.\n' >"$T/note.md"
+cp -r "$M" "$T/mimir.before"
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note.md"
 W="$(work)"
+DT="$W/tasks/smoke-notes"
+noted="$(printf 'Scope: only add the health route.\n\n# brief')"
 check "a dry run with a note exits 0" test "$rc" -eq 0
-check "ygg run gets the run's brief.md" has "--brief '$W/brief.md'"
-check "brief.md is the note, a blank line, the instruction" bash -c "[ \"\$(cat '$W/brief.md')\" = \"\$(printf 'Scope: only add the health route.\n\n# brief')\" ]"
+check "the derived task folder exists" test -d "$DT"
+check "its instruction.md is the note, a blank line, the instruction" bash -c "[ \"\$(cat '$DT/instruction.md')\" = '$noted' ]"
+check "it keeps the task's other files" cmp -s "$M/smoke-notes/environment/Dockerfile" "$DT/environment/Dockerfile"
+check "and its sample suite" cmp -s "$M/smoke-notes/sample-suite/tests/manifest.json" "$DT/sample-suite/tests/manifest.json"
+noted_sha="$(sha256sum "$DT/instruction.md" | cut -d' ' -f1)"
+check "its brief_sha256 is the SHA-256 of the noted instruction.md" grep -q -x -F "brief_sha256 = \"$noted_sha\"" "$DT/task.toml"
+check "its version is the derived version" grep -q -x -F 'version = "1.0.1000"' "$DT/task.toml"
+check "the rest of task.toml stays" bash -c "diff <(grep -v -E '^(version|brief_sha256) = |^# ' '$M/smoke-notes/task.toml') <(grep -v -E '^(version|brief_sha256) = |^# ' '$DT/task.toml')"
+check "task.toml says it is derived, and from what" grep -q -F '# A derived version of smoke-notes 1.0.0, made by ygg-smoke-real.sh --brief-note' "$DT/task.toml"
+check "the derived task loads as odin's loader would" loads "$W/tasks" "$W/suites" smoke-notes
+check "the loader line names the new version and hash" grep -q -x -F "loads: smoke-notes 1.0.1000 $noted_sha" "$T/loads"
+# The check is not vacuous: the original task.toml with the noted brief does not load.
+mkdir -p "$T/tampered/smoke-notes"; cp -r "$DT/." "$T/tampered/smoke-notes/"; cp "$M/smoke-notes/task.toml" "$T/tampered/smoke-notes/task.toml"
+task_loads "$T/tampered" "$W/suites" smoke-notes >"$T/loads"
+check "the original task.toml with the noted brief does not load" grep -q -F "does not load: instruction.md hashes to $noted_sha, task.toml says $brief0" "$T/loads"
+check "ygg run gets the derived task's instruction.md" has "--brief '$DT/instruction.md'"
+check "factory.yaml's tasks_dir is the run's tasks folder" grep -q -F "tasks_dir: $W/tasks" "$W/factory.yaml"
+check "factory.yaml's suite_dir stays the run's suites folder" grep -q -F "suite_dir: $W/suites" "$W/factory.yaml"
+check "no separate brief.md is made" test ! -e "$W/brief.md"
 check "the real instruction file is not the brief" hasnt "--brief '$M/smoke-notes/instruction.md'"
+check "mimir is not changed" diff -r "$T/mimir.before" "$M"
 check "it says which note was used" has "smoke-real: the brief note: $T/note.md"
+check "it says the task is a derived version, with its version and hash" has "smoke-real: the task is a derived version: smoke-notes 1.0.1000 (from 1.0.0), brief_sha256 $noted_sha, in $DT"
 printf 'Scope: no newline at the end' >"$T/note-nonl.md"
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/note-nonl.md"
-check "a note without a final newline still has a blank line before the instruction" bash -c "[ \"\$(cat '$(work)/brief.md')\" = \"\$(printf 'Scope: no newline at the end\n\n# brief')\" ]"
+check "a note without a final newline still has a blank line before the instruction" bash -c "[ \"\$(cat '$(work)/tasks/smoke-notes/instruction.md')\" = \"\$(printf 'Scope: no newline at the end\n\n# brief')\" ]"
 run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+W="$(work)"
 check "without a note ygg run gets the instruction file" has "--brief '$M/smoke-notes/instruction.md'"
-check "and no brief.md is made" test ! -e "$(work)/brief.md"
+check "and tasks_dir is the task checkout" grep -q -F "tasks_dir: $M" "$W/factory.yaml"
+check "and no tasks folder is made" test ! -e "$W/tasks"
+check "and no brief.md is made" test ! -e "$W/brief.md"
 check "and no note is named" hasnt "the brief note"
+check "and no derived version is named" hasnt "derived"
+# A task.toml the note cannot derive from is refused: no version, two version lines, a version not of the form 1.2.3.
+for bad in nover twover badver nosha; do
+  B="$T/mimir-$bad"; cp -r "$M" "$B"
+  case "$bad" in
+    nover) sed -i '/^version = /d' "$B/smoke-notes/task.toml" ;;
+    twover) printf '[other]\nversion = "2.0.0"\n' >>"$B/smoke-notes/task.toml" ;;
+    badver) sed -i 's/^version = .*/version = "1.0"/' "$B/smoke-notes/task.toml" ;;
+    nosha) sed -i '/^brief_sha256 = /d' "$B/smoke-notes/task.toml" ;;
+  esac
+  run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$B" --odin "$O" --env "$T/factory.env" --dry-run --brief-note "$T/note.md"
+  check "a task.toml with $bad is refused with a note" test "$rc" -eq 2
+  check "and the refusal names task.toml ($bad)" has "task.toml"
+done
+run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$T/mimir-nover" --odin "$O" --env "$T/factory.env" --dry-run
+check "without a note that task.toml is not read for a version" test "$rc" -eq 0
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --brief-note "$T/no-such-note.md"
 check "a missing note is refused" test "$rc" -eq 2
 check "and named" has "no brief note at $T/no-such-note.md"
@@ -226,7 +358,7 @@ FY="$T/fakeygg/ygg"; mkdir -p "$T/fakeygg"
 cat >"$FY" <<'EOF2'
 #!/usr/bin/env bash
 [ "$1" = run ] || exit 0
-while [ $# -gt 0 ]; do [ "$1" = --project ] && project="$2"; shift; done
+while [ $# -gt 0 ]; do [ "$1" = --project ] && project="$2"; [ "$1" = --brief ] && brief="$2"; shift; done
 d="$project/.factory/runs/20260101-000000-abcdef"; mkdir -p "$d"
 {
   echo '{"seq":1,"event":"run_started","ygg.run.id":"20260101-000000-abcdef"}'
@@ -236,7 +368,7 @@ d="$project/.factory/runs/20260101-000000-abcdef"; mkdir -p "$d"
   echo '{"seq":5,"event":"finding_closed","ygg.node.id":"build","ygg.attempt":2,"ygg.finding.id":"F1","ygg.finding.source":"review"}'
   echo '{"seq":6,"event":"run_finished","ygg.run.id":"20260101-000000-abcdef"}'
 } >"$d/ledger.jsonl"
-echo "fake ygg run"
+echo "fake ygg run, brief $brief"
 EOF2
 chmod +x "$FY"
 # The fake clip.exe keeps what it is given.
@@ -282,6 +414,16 @@ W="$(work)"
 check "a run with a note exits 0" test "$rc" -eq 0
 check "report.txt names the note" grep -q -F "smoke-real: the brief note: $T/note.md" "$W/report.txt"
 check "the note is printed in the terminal" has "smoke-real: the brief note: $T/note.md"
+check "ygg run got the derived task's instruction.md" has "fake ygg run, brief $W/tasks/smoke-notes/instruction.md"
+check "the run's factory.yaml has the run's tasks folder" grep -q -F "tasks_dir: $W/tasks" "$W/factory.yaml"
+noted_sha="$(sha256sum "$W/tasks/smoke-notes/instruction.md" | cut -d' ' -f1)"
+check "report.txt says the task is a derived version" grep -q -F "smoke-real: the task is a derived version: smoke-notes 1.0.1000 (from 1.0.0), brief_sha256 $noted_sha" "$W/report.txt"
+check "the derived task of the run loads as odin's loader would" loads "$W/tasks" "$W/suites" smoke-notes
+PATH="$CLIPPATH" YGG_CMD="$FY" run_real
+W="$(work)"
+check "a run without a note gives ygg run the instruction file" has "fake ygg run, brief $M/smoke-notes/instruction.md"
+check "and its factory.yaml has the task checkout" grep -q -F "tasks_dir: $M" "$W/factory.yaml"
+check "and report.txt names no derived version" bash -c "! grep -q 'derived' '$W/report.txt'"
 
 # --- the real odin files, when this checkout has them: the edits must match their lines
 R="${YGG_REAL_ODIN:-$S/../../yggdrasil/odin}"
@@ -294,6 +436,22 @@ if [ -f "$R/testdata/smoke-grade/pack.yaml" ] && [ -f "$R/testdata/smoke-grade/f
   check "real odin: the implementer is set" grep -q -F 'implementer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b }' "$W/factory.yaml"
 else
   echo "skip the real odin files: none at $R (set YGG_REAL_ODIN)"
+fi
+
+# --- the real smoke-notes task, when this checkout has mimir: the note's derived copy must load (B-109)
+RM="${YGG_REAL_MIMIR:-$S/../../mimir}"
+if [ -f "$RM/smoke-notes/task.toml" ]; then
+  RM="$(cd "$RM" && pwd)"
+  rv="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$RM/smoke-notes/task.toml")"
+  run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$RM" --odin "$O" --env "$T/factory.env" --dry-run \
+    --brief-note "$S/testdata/reviewer-bench/P4-note.md"
+  W="$(work)"
+  check "real mimir: the dry run with the P4 note exits 0" test "$rc" -eq 0
+  check "real mimir: the derived task loads as odin's loader would" loads "$W/tasks" "$W/suites" smoke-notes
+  check "real mimir: the derived version is the patch plus 1000" grep -q -x -F "version = \"${rv%.*}.$((${rv##*.} + 1000))\"" "$W/tasks/smoke-notes/task.toml"
+  check "real mimir: the task itself still loads" loads "$RM" "$W/suites" smoke-notes
+else
+  echo "skip the real smoke-notes task: none at $RM (set YGG_REAL_MIMIR)"
 fi
 
 [ "$fail" -eq 0 ] && echo "all ygg-smoke-real tests passed"

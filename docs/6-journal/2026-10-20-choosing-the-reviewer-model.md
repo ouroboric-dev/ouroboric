@@ -3,7 +3,7 @@ date: 2026-10-20
 tags: [models, review, routing, measurement, cost, sandbox]
 status: open
 post-candidate: yes
-evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69"]
+evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69", "run 20261021-220441-84e852", "run 20261021-220651-618061", "run 20261021-222954-05983c"]
 ---
 ## Challenge
 
@@ -50,7 +50,7 @@ when we plant one. Qwen3.8 27B becomes the reviewer of the smoke.
 
 ## Result
 
-The smoke passes with Qwen3.8 27B as the reviewer (first section). The fault-finding loop with a real fault is not proved yet (open questions, at the end). The model comparison follows. Every session ran on the same product (the
+The smoke passes with Qwen3.8 27B as the reviewer (first section). The repair path works with Qwen: a real finding, fixed and closed (a later section). The model comparison follows. Every session ran on the same product (the
 one the failed run built), with the engine's real reviewer prompt and the adapter's real settings: strict
 privacy, `effort: high`, read-only permissions. "Tokens in" counts everything the model read, cache included;
 the figure in brackets is what was not served from the cache. "Tokens out" includes reasoning. Averages per
@@ -155,6 +155,52 @@ about $0.11 (estimated before the run at 8 cents; one session read more and cost
 One caveat about the earlier tables: the scratch scripts that made them are lost, and which OpenCode version
 they ran was not recorded. The P4 run is the first whose version is known to be the engine's.
 
+### The repair path (added 2026-10-22)
+
+The full smoke above never sent the implementer back. Three runs started it from a planted-fault leaf
+(`ygg-smoke-real.sh --from-leaf`, B-109), with Claude Sonnet as the implementer and Qwen3.8 27B as the reviewer.
+Costs are estimates, as above.
+
+| Run | Leaf | What happened | Cost |
+| --- | --- | --- | --- |
+| 20261021-220441-84e852 | P3: notes oldest first | The implementer fixed the fault itself in attempt 1. Qwen found nothing. Graded: reward 1.0, 6 of 6 fail-to-pass, 1 of 1 pass-to-pass | $0.05 |
+| 20261021-220651-618061 | P4: delete ignores the owner | Again the implementer fixed the fault in attempt 1. Qwen found nothing. The run failed at grading | $0.06 |
+| 20261021-222954-05983c | P4, with a note before the brief | Qwen raised the fault in attempt 1. Sonnet fixed it in attempt 2. Qwen closed it with proof. Not graded | $0.093 |
+
+In the first two runs the implementer got the whole brief, read the code it was given, and fixed the fault
+before the reviewer saw it: `.reverse()` in `server.js` for P3, an owner check in `remove` for P4. Each of
+those commits also added two files, `a` and `b`. They are curl cookie jars from the implementer's own checks,
+each with a session id. The reviewer did not flag them.
+
+The P4 run failed at the score node with "grading failed: the score key must be 32 lowercase hex characters".
+The build used yggdrasil's go.work, which held a newer gleipnir than the one odin pins. The smoke now says which
+go.work a build used (B-111); the third run says "go.work: no go.work".
+
+The third run narrowed the implementer's task with a note before the brief (`--brief-note`,
+`scripts/testdata/reviewer-bench/P4-note.md`): add `GET /api/health`, and change nothing else. The reviewer
+still got the whole spec.
+
+| Attempt | Implementer (Sonnet) | Reviewer (Qwen3.8 27B) |
+| --- | --- | --- |
+| 1 | adds `GET /api/health` to `server.js` (2 lines) | raises `cross-user-note-delete`, major, at `notes.js:18-20` |
+| 2 | adds the owner check to `remove` in `notes.js` (2 lines) | marks it fixed, with proof; the finding is closed |
+
+Qwen's claim in attempt 1: "remove(id) deletes from the global `all` map without checking the owner, so the
+per-user wrapper returned by of(owner) lets any signed-in user delete another person's note". Its proof in
+attempt 2: "notes.js:20 now checks `n.owner !== owner` and returns false, so server.js:177 answers 404 for a note
+that is not the caller's; the unit check passed". `ygg-repair-path.sh` read the ledger: "repair path: finding
+raised, fixed, closed". The run took 14 turns and cost $0.093.
+
+The run was not graded. odin finds the task to grade from the brief's path: the brief must be the
+`instruction.md` of a task in `grader.tasks_dir`. The noted brief was a `brief.md` in the run's folder, so the
+score node refused it (`bad_task`). Even with `ygg grade --task`, odin refuses a brief whose SHA-256 is not the
+task's `brief_sha256`. That guard is right: `task.toml` says any change to the brief makes a new task version.
+So the smoke now makes one. With `--brief-note`, it copies the task to the run's folder, writes the noted brief
+as its `instruction.md`, sets `brief_sha256` to the new hash, and gives it a derived version: odin takes only
+versions of the form 1.2.3, so 1.0.0 becomes 1.0.1000. `grader.tasks_dir` points at the copy, and the suite stays
+the same. Evidence: `~/ygg-it/smoke-real-20261022-000440`, `~/ygg-it/smoke-real-20261022-000650` and
+`~/ygg-it/smoke-real-20261022-002953`.
+
 ### Cost of the experiment
 
 OpenRouter reported about $0.29 for the DeepSeek, Qwen and GLM sessions. The Claude sessions were not
@@ -170,7 +216,8 @@ its answer and invented more faults.
 Open questions, to answer in this entry:
 
 - Answered: the smoke passes end to end with Qwen as the reviewer (reward 1.0, $0.09).
-- Does the repair path work with Qwen: a real finding, a fix by the implementer, and the finding closed?
+- Answered: the repair path works with Qwen. It raised a real finding, Sonnet fixed it, and Qwen closed it
+  with proof ($0.093). That run was not graded; the next one is.
 - Answered: Qwen finds a fault across two files, one user deleting another's note (8 of 8, $0.11).
 - Would Qwen also work as the implementer? Claude Code runs on a flat subscription, so the implementer
   costs nothing per run, and a swap only pays when that limit binds.
