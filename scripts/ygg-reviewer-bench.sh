@@ -12,9 +12,13 @@
 #      ec8f18c), for the reviewer id "review" and the passed check "unit".
 # The settings are those of the OpenCode adapter (gleipnir opencode/opencode.go): strict privacy on OpenRouter (no
 # data kept, zero retention, no fallback), the effort named on every request (high), read-only permissions, 10
-# turns (the graph's max_turns) and 5 minutes. As in qwen-opencode.sh, opencode runs --standalone, with no
-# Anthropic credential, no project or Claude Code config, and no update, share or model fetch. Each session has
-# its own XDG_DATA_HOME, in a folder under TMPDIR, outside HOME.
+# turns (the graph's max_turns) and 5 minutes. There is no token limit: gleipnir ends a session at the node's
+# max_tokens, and the bench has only the 300-second timeout. As in qwen-opencode.sh, opencode runs --standalone,
+# with no project or Claude Code config, and no update, share or model fetch. As in the engine, a session gets
+# only the variables the script names (env -i): PATH, HOME, TMPDIR, XDG_CACHE_HOME (if set), OPENROUTER_API_KEY
+# and the OpenCode settings. No OPENCODE_* variable and no Anthropic credential of the caller reaches it. Each
+# session has its own empty XDG_CONFIG_HOME and XDG_DATA_HOME, in a folder under TMPDIR, outside HOME, so no
+# global OpenCode config applies. The cache (models catalogue, provider package) is the host's.
 # It prints for each session whether the answer is a valid report, by the engine's rules (gungnir ParseReport:
 # prose before the report is ignored, nothing may follow it; and jormungandr Review on a first review), and the
 # claims of its findings; then the journal's table. A finding is the fault when REGEX (Python, case ignored)
@@ -22,7 +26,7 @@
 # "Tokens out" includes reasoning. The cost is OpenCode's own figure. A session with tokens and cost 0 (OpenRouter
 # reports no cost for the Claude models) makes the cost "unknown".
 # OUT (new or empty; default a new folder under TMPDIR) keeps prompt.md, session-N.jsonl (the events),
-# session-N.err and summary.md.
+# session-N.err, session-N.exit (the exit code) and summary.md.
 # The leaves in scripts/testdata/reviewer-bench, and their --fault:
 #   P0  no known fault: the product the failed smoke run built      (no --fault)
 #   P1  start.sh runs servr.js                                       'servr'
@@ -120,8 +124,12 @@ reasoning=""
 # shellcheck disable=SC2016 # "$schema" is a JSON key, not a variable
 conf="$(printf '{"$schema":"https://opencode.ai/config.json","autoupdate":false,"share":"disabled","provider":{"openrouter":{"options":{"apiKey":"{env:OPENROUTER_API_KEY}"},"models":{"%s":{"options":{%s"provider":{"data_collection":"deny","zdr":true,"allow_fallbacks":false}}}}}},"small_model":"openrouter/%s","agent":{"build":{"steps":10}},"permission":{"edit":"deny","bash":"deny","webfetch":"deny","external_directory":"deny","task":"deny","question":"deny"}}' \
   "$id" "$reasoning" "$id")"
-env_args=(-u ANTHROPIC_API_KEY -u CLAUDE_CODE_OAUTH_TOKEN "OPENCODE_CONFIG_CONTENT=$conf"
-  OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_DISABLE_CLAUDE_CODE=1 OPENCODE_DISABLE_EXTERNAL_SKILLS=1
+# As in the engine, a session gets only the variables named here (env -i): no OPENCODE_* and nothing else of the
+# caller's shell. The key is added in the real run only, so the dry run never prints it.
+env_args=("PATH=$PATH" "HOME=$HOME")
+[ -z "${TMPDIR:-}" ] || env_args+=("TMPDIR=$TMPDIR")
+[ -z "${XDG_CACHE_HOME:-}" ] || env_args+=("XDG_CACHE_HOME=$XDG_CACHE_HOME")
+env_args+=("OPENCODE_CONFIG_CONTENT=$conf" OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_DISABLE_CLAUDE_CODE=1 OPENCODE_DISABLE_EXTERNAL_SKILLS=1
   OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_DISABLE_SHARE=true OPENCODE_DISABLE_MODELS_FETCH=true)
 bin="${YGG_REVIEWER_BENCH_OPENCODE:-opencode}"
 cmd=(run --standalone --format json -m "openrouter/$id")
@@ -130,18 +138,19 @@ if [ "$dry" = 1 ]; then
   q() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
   echo "Dry run: it spends nothing. Each of the $sessions sessions would copy $leaf (without .git) to"
   echo "$work/leaf-N, commit it there, and run in that folder:"
-  printf '  env'
-  for a in "${env_args[@]}"; do
-    case "$a" in *=*) printf ' %s=%s' "${a%%=*}" "$(q "${a#*=}")" ;; *) printf ' %s' "$a" ;; esac
-  done
-  printf ' XDG_DATA_HOME=%s timeout 300 %s %s < %s\n' "$(q "$work/data-N")" "$(q "$bin")" "${cmd[*]}" "$(q "$out/prompt.md")"
+  printf '  env -i'
+  for a in "${env_args[@]}"; do printf ' %s=%s' "${a%%=*}" "$(q "${a#*=}")"; done
+  # shellcheck disable=SC2016 # the key is shown as a reference, never as its value
+  printf ' OPENROUTER_API_KEY="$OPENROUTER_API_KEY"'
+  printf ' XDG_DATA_HOME=%s XDG_CONFIG_HOME=%s timeout 300 %s %s < %s\n' "$(q "$work/data-N")" "$(q "$work/config-N")" \
+    "$(q "$bin")" "${cmd[*]}" "$(q "$out/prompt.md")"
   echo "The prompt is in $out/prompt.md."
   exit 0
 fi
 
 for i in $(seq 1 "$sessions"); do
   copy="$work/leaf-$i"
-  mkdir -p "$copy" "$work/data-$i"
+  mkdir -p "$copy" "$work/data-$i" "$work/config-$i"
   tar -C "$leaf" --exclude=.git -cf - . | tar -C "$copy" -xf -
   git -C "$copy" init -q
   git -C "$copy" add -A
@@ -149,7 +158,8 @@ for i in $(seq 1 "$sessions"); do
     commit -q --no-verify -m "The leaf under review"
   echo "session $i of $sessions" >&2
   rc=0
-  (cd "$copy" && env "${env_args[@]}" XDG_DATA_HOME="$work/data-$i" timeout 300 "$bin" "${cmd[@]}") \
+  (cd "$copy" && env -i "${env_args[@]}" OPENROUTER_API_KEY="$OPENROUTER_API_KEY" XDG_DATA_HOME="$work/data-$i" \
+    XDG_CONFIG_HOME="$work/config-$i" timeout 300 "$bin" "${cmd[@]}") \
     <"$out/prompt.md" >"$out/session-$i.jsonl" 2>"$out/session-$i.err" || rc=$?
   echo "$rc" >"$out/session-$i.exit"
 done

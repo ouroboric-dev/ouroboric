@@ -132,6 +132,8 @@ canned 4 "$(fence "{\"findings\": [$(finding find-index server.js:174 "findIndex
 canned 5 "$(fence '{"findings": []}')
 That is all."
 export OPENROUTER_API_KEY=made-up-key ANTHROPIC_API_KEY=made-up-a CLAUDE_CODE_OAUTH_TOKEN=made-up-b
+# Host settings that must not reach a session: OpenCode variables and anything else of the caller's shell.
+export OPENCODE_PERMISSION=x OPENCODE_CONFIG=/x HOST_ONLY_VAR=y
 run bash "$B" --model qwen/qwen3.8-27b --leaf "$F/P4" --sessions 5 --fault "$P4RE" --out "$T/five" "${common[@]}"
 check "five sessions: exit 0 and five calls" eval '[ $rc = 0 ] && [ "$(calls)" = 5 ]'
 check "the table: 3 valid reports, findings per session, 1 fault found, average tokens and cost" \
@@ -159,6 +161,12 @@ check "OpenCode reads no project or Claude Code config and does not update, shar
   eval 'envhas OPENCODE_DISABLE_PROJECT_CONFIG=1 && envhas OPENCODE_DISABLE_CLAUDE_CODE=1 && envhas OPENCODE_DISABLE_EXTERNAL_SKILLS=1 && envhas OPENCODE_DISABLE_AUTOUPDATE=true && envhas OPENCODE_DISABLE_SHARE=true && envhas OPENCODE_DISABLE_MODELS_FETCH=true'
 d1="$(sed -n 's/^XDG_DATA_HOME=//p' "$T/calls/1.env")"
 d2="$(sed -n 's/^XDG_DATA_HOME=//p' "$T/calls/2.env")"
+c1="$(sed -n 's/^XDG_CONFIG_HOME=//p' "$T/calls/1.env")"
+c2="$(sed -n 's/^XDG_CONFIG_HOME=//p' "$T/calls/2.env")"
+check "no OpenCode variable and no other variable of the caller's shell reaches the session" \
+  eval '[ -s "$T/calls/1.env" ] && ! grep -Eq "^(OPENCODE_PERMISSION|OPENCODE_CONFIG|HOST_ONLY_VAR)=" "$T/calls/1.env"'
+check "each session has its own XDG_CONFIG_HOME, in the work folder, so no global OpenCode config applies" \
+  eval '[ -n "$c1" ] && [ "$c1" != "$c2" ] && case "$c1" in "$TMPDIR"/ygg-reviewer-bench-work.*/config-1) true ;; *) false ;; esac'
 check "each session has its own XDG_DATA_HOME, outside HOME" \
   eval '[ -n "$d1" ] && [ "$d1" != "$d2" ] && case "$d1" in "$HOME"/*) false ;; *) true ;; esac'
 check "the config reaches the runner with the strict provider settings and the read-only permissions" \
