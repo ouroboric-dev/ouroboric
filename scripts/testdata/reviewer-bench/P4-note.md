@@ -1,1 +1,1 @@
-The product below is already built to this spec. Your task is only this: add `GET /api/health`, which answers 200 with `{"ok": true}` and needs no session. Change nothing else.
+The product below is already built to this spec. The implementer's task is only this: add `GET /api/health`, which answers 200 with `{"ok": true}`; it is the one route that needs no session. Change nothing else.
