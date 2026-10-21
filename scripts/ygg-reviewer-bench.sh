@@ -3,7 +3,8 @@
 # reviewer-model.md). IT COSTS MONEY unless --dry-run: each session is one OpenCode session on OpenRouter (a paid
 # API: OPENROUTER_API_KEY), about 1 cent for qwen/qwen3.8-27b.
 #   ygg-reviewer-bench.sh --model MODEL --leaf DIR --sessions N [--fault REGEX] [--effort low|medium|high|off]
-#                         [--out OUT] [--odin DIR] [--tasks DIR] [--dry-run]
+#                         [--out OUT] [--odin DIR] [--tasks DIR] [--gleipnir DIR] [--opencode BIN] [--any-opencode]
+#                         [--dry-run]
 # Each session reviews a fresh copy of the leaf (one git commit, no .git of the original) with the prompt the
 # engine gives the smoke's reviewer:
 #   1. odin's smoke pack reviewer prompt, testdata/smoke-grade/prompts/review.md (odin PRs #21 and #22);
@@ -13,8 +14,15 @@
 # The settings are those of the OpenCode adapter (gleipnir opencode/opencode.go): strict privacy on OpenRouter (no
 # data kept, zero retention, no fallback), the effort named on every request (high), read-only permissions, 10
 # turns (the graph's max_turns) and 5 minutes. There is no token limit: gleipnir ends a session at the node's
-# max_tokens, and the bench has only the 300-second timeout. As in qwen-opencode.sh, opencode runs --standalone,
-# with no project or Claude Code config, and no update, share or model fetch. As in the engine, a session gets
+# max_tokens, and the bench has only the 300-second timeout. OpenCode runs with no project or Claude Code
+# config, and no update, share or model fetch.
+# The OpenCode is the engine's: the version gleipnir pins (sandbox/images.go in --gleipnir DIR, default the
+# sibling checkout). Without --opencode BIN it is installed once with npm into
+# ${XDG_CACHE_HOME:-$HOME/.cache}/ouroboric/opencode/VERSION (linux x64 only; --dry-run installs nothing). The
+# bench runs BIN --version and refuses a version other than the pin, unless --any-opencode is given. The argv is
+# the engine's for a read-only session, run --format json -m openrouter/MODEL; --standalone, which OpenCode 2
+# and later have and 1.x lacks, is added only when the major version is 2 or more. The terminal output and
+# summary.md name the binary and its version. As in the engine, a session gets
 # only the variables the script names (env -i): PATH, HOME, TMPDIR, XDG_CACHE_HOME (if set), OPENROUTER_API_KEY
 # and the OpenCode settings. No OPENCODE_* variable and no Anthropic credential of the caller reaches it. Each
 # session has its own empty XDG_CONFIG_HOME and XDG_DATA_HOME, in a folder under TMPDIR, outside HOME, so no
@@ -35,19 +43,23 @@
 #   P4  DELETE /api/notes/ID deletes another person's note. server.js reaches notes through notes.of(email);
 #       remove in notes.js ignores the owner. Neither file alone shows it.
 #       'owner|another (user|person|account)|other (users?|person|people|accounts?)|any (user|person)|not theirs|not the caller|idor'
-# YGG_REVIEWER_BENCH_OPENCODE overrides the opencode command (the test's fake). Exit 0, or 2 for a refusal.
+# The test's fakes: YGG_REVIEWER_BENCH_NPM (the installer command) and YGG_REVIEWER_BENCH_UNAME (the platform).
+# Exit 0, or 2 for a refusal.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
-  echo "usage: ygg-reviewer-bench.sh --model MODEL --leaf DIR --sessions N [--fault REGEX] [--effort low|medium|high|off] [--out OUT] [--odin DIR] [--tasks DIR] [--dry-run]" >&2
+  echo "usage: ygg-reviewer-bench.sh --model MODEL --leaf DIR --sessions N [--fault REGEX] [--effort low|medium|high|off] [--out OUT] [--odin DIR] [--tasks DIR] [--gleipnir DIR] [--opencode BIN] [--any-opencode] [--dry-run]" >&2
   exit 2
 }
 fail() { echo "reviewer-bench: $*" >&2; exit 2; }
-model="" leaf="" sessions="" fault="" effort=high out="" dry=0
-odin="$HERE/../../yggdrasil/odin" tasks="$HERE/../../mimir"
+model="" leaf="" sessions="" fault="" effort=high out="" dry=0 bin="" any=0
+odin="$HERE/../../yggdrasil/odin" tasks="$HERE/../../mimir" gleipnir="$HERE/../../yggdrasil/gleipnir"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
+    --any-opencode) any=1; shift ;;
+    --opencode) [ $# -ge 2 ] || usage; bin="$2"; shift 2 ;;
+    --gleipnir) [ $# -ge 2 ] || usage; gleipnir="$2"; shift 2 ;;
     --model) [ $# -ge 2 ] || usage; model="$2"; shift 2 ;;
     --leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
     --sessions) [ $# -ge 2 ] || usage; sessions="$2"; shift 2 ;;
@@ -74,6 +86,46 @@ review="$odin/testdata/smoke-grade/prompts/review.md"
 brief="$tasks/smoke-notes/instruction.md"
 [ -f "$review" ] || fail "$review is missing (--odin): it is the smoke reviewer's prompt"
 [ -f "$brief" ] || fail "$brief is missing (--tasks): it is the brief of the task"
+
+# The OpenCode: the version the engine's sandbox pins (gleipnir sandbox/images.go, OpenCode = "X").
+images="$gleipnir/sandbox/images.go"
+[ -f "$images" ] || fail "$images is missing (--gleipnir): it names the OpenCode version the engine pins"
+pin="$(sed -n 's/^[[:space:]]*OpenCode[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$images" | head -n 1)"
+[[ $pin =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "no OpenCode version like 1.18.32 in $images"
+installed=1
+if [ -z "$bin" ]; then
+  platform="$(echo "${YGG_REVIEWER_BENCH_UNAME:-$(uname -sm)}" | tr '[:upper:]' '[:lower:]')"
+  [ "$platform" = "linux x86_64" ] || fail "the pinned OpenCode is installed for linux x64 only, not '$platform'; give a binary with --opencode"
+  prefix="${XDG_CACHE_HOME:-$HOME/.cache}/ouroboric/opencode/$pin"
+  bin="$prefix/node_modules/opencode-linux-x64/bin/opencode"
+  if [ ! -x "$bin" ]; then
+    installed=0
+    if [ "$dry" = 0 ]; then
+      mkdir -p "$prefix"
+      echo "Installing opencode-ai@$pin into $prefix" >&2
+      "${YGG_REVIEWER_BENCH_NPM:-npm}" install --ignore-scripts --prefix "$prefix" "opencode-ai@$pin" >&2 \
+        || fail "npm install opencode-ai@$pin failed"
+      [ -x "$bin" ] || fail "npm installed opencode-ai@$pin but $bin is missing"
+    fi
+  fi
+fi
+if [ "$installed" = 0 ] && [ "$dry" = 1 ]; then
+  version="$pin"
+  opencode_line="OpenCode: $bin (not installed: a real run would install opencode-ai@$pin with npm; assumed $pin)"
+else
+  version="$(env -i "PATH=$PATH" "HOME=$HOME" "$bin" --version 2>/dev/null | head -n 1)" || true
+  [ -n "$version" ] || fail "'$bin --version' printed nothing"
+  v="${version#v}"
+  if [ "$v" != "$pin" ]; then
+    [ "$any" = 1 ] || fail "$bin is OpenCode $version, not the engine's pin $pin (gleipnir sandbox/images.go); use --any-opencode to measure it anyway"
+    opencode_line="OpenCode: $bin $version (not the pin $pin: --any-opencode)"
+  else
+    opencode_line="OpenCode: $bin $version"
+  fi
+fi
+major="${version#v}"; major="${major%%.*}"
+[[ $major =~ ^[0-9]+$ ]] || fail "cannot read a version from '$version'"
+
 [ "$dry" = 1 ] || [ -n "${OPENROUTER_API_KEY:-}" ] || fail "OPENROUTER_API_KEY is not set; use a dedicated OpenRouter key with a credit limit"
 if [ -z "$out" ]; then
   out="$(mktemp -d "${TMPDIR:-/tmp}/ygg-reviewer-bench.XXXXXX")"
@@ -131,11 +183,14 @@ env_args=("PATH=$PATH" "HOME=$HOME")
 [ -z "${XDG_CACHE_HOME:-}" ] || env_args+=("XDG_CACHE_HOME=$XDG_CACHE_HOME")
 env_args+=("OPENCODE_CONFIG_CONTENT=$conf" OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_DISABLE_CLAUDE_CODE=1 OPENCODE_DISABLE_EXTERNAL_SKILLS=1
   OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_DISABLE_SHARE=true OPENCODE_DISABLE_MODELS_FETCH=true)
-bin="${YGG_REVIEWER_BENCH_OPENCODE:-opencode}"
-cmd=(run --standalone --format json -m "openrouter/$id")
+# The engine's argv for a read-only session (gleipnir opencode/opencode.go); --standalone only where it exists.
+cmd=(run)
+[ "$major" -lt 2 ] || cmd+=(--standalone)
+cmd+=(--format json -m "openrouter/$id")
 
 if [ "$dry" = 1 ]; then
   q() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+  echo "$opencode_line"
   echo "Dry run: it spends nothing. Each of the $sessions sessions would copy $leaf (without .git) to"
   echo "$work/leaf-N, commit it there, and run in that folder:"
   printf '  env -i'
@@ -164,5 +219,9 @@ for i in $(seq 1 "$sessions"); do
   echo "$rc" >"$out/session-$i.exit"
 done
 
-python3 -I "$HERE/ygg-reviewer-bench.py" "$out" "$sessions" "$fault" "$(basename "$leaf")" "$id" | tee "$out/summary.md"
+{
+  echo "$opencode_line"
+  echo
+  python3 -I "$HERE/ygg-reviewer-bench.py" "$out" "$sessions" "$fault" "$(basename "$leaf")" "$id"
+} | tee "$out/summary.md"
 echo "The prompt, the events of each session and this summary are in $out."
