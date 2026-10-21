@@ -54,9 +54,9 @@ printf '{"schema":"ygg.suite/v1","suite":"v1","scenarios":[{"id":"add a note","c
   >"$M/smoke-notes/sample-suite/tests/manifest.json"
 printf '#!/bin/bash\n' >"$M/smoke-notes/sample-suite/tests/test.sh"
 
-# task_loads TASKS_DIR SUITE_DIR ID: the checks of odin's task.Load (yggdrasil/odin internal/task/task.go), in its
-# order, read from that file: the id; task.toml a regular file of at most 64 KiB that parses; artifacts ["/app"];
-# task.name ending in the id; task.version of the form 1.2.3 (gungnir.ValidVersion); brief_sha256 64 lowercase hex;
+# task_loads TASKS_DIR SUITE_DIR ID: the checks of odin's task.Load, in its order, read from internal/task/task.go
+# at odin commit 89722f4 (compare that file's history to spot drift): the id; task.toml a regular file of at most
+# 64 KiB that parses; artifacts ["/app"]; task.name ending in the id; task.version of the form 1.2.3 (gungnir.ValidVersion); brief_sha256 64 lowercase hex;
 # the suite name; environment_mode "separate"; timeout_sec above 0 and at most a day; verifier.env names in capitals;
 # SCORE_WEIGHTS summing to 1; no retired mark for the suite; instruction.md a regular file of at most 1 MiB whose
 # SHA-256 in lowercase hex is brief_sha256; the suite's tests folder with test.sh and manifest.json; and of the

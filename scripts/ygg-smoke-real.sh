@@ -24,9 +24,11 @@
 #      whole spec. A changed brief is another task version, and odin grades a brief only as the instruction.md of
 #      a task in grader.tasks_dir whose brief_sha256 it matches. So the task folder is copied to
 #      DIR/smoke-real-<time>/tasks/<task>, with that brief as its instruction.md, its SHA-256 as brief_sha256, and
-#      a derived version (the patch number plus 1000: 1.0.0 becomes 1.0.1000); the run's brief is that
-#      instruction.md and grader.tasks_dir is DIR/smoke-real-<time>/tasks. The lines "the brief note" and "the task
-#      is a derived version" say which file was used and the version and hash, in the terminal and in report.txt.
+#      a derived version (the patch number plus 1000: 1.0.0 becomes 1.0.1000). Every note gives that same
+#      version, so two runs with different notes have the same task_version in score.json and differ only in
+#      brief_sha256: never group scores by version alone. The run's brief is that instruction.md and
+#      grader.tasks_dir is DIR/smoke-real-<time>/tasks. The lines "the brief note" and "the task is a derived
+#      version" say which file was used and the version and hash, in the terminal and in report.txt.
 #      FILE must exist and have text. See scripts/testdata/reviewer-bench/P4-note.md;
 #   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit, the tree state and
 #      the go.work file the build used, or "no go.work"; GOWORK=off turns go.work off), then

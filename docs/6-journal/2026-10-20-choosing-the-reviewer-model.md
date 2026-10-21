@@ -173,8 +173,9 @@ those commits also added two files, `a` and `b`. They are curl cookie jars from 
 each with a session id. The reviewer did not flag them.
 
 The P4 run failed at the score node with "grading failed: the score key must be 32 lowercase hex characters".
-The build used yggdrasil's go.work, which held a newer gleipnir than the one odin pins. The smoke now says which
-go.work a build used (B-111); the third run says "go.work: no go.work".
+The build used yggdrasil's go.work, which held a newer gleipnir than the one odin pinned then (b2221a9). The newer
+one (b08b081) needs a score key, which that odin did not pass. The smoke now says which go.work a build used
+(B-111); the third run says "go.work: no go.work".
 
 The third run narrowed the implementer's task with a note before the brief (`--brief-note`,
 `scripts/testdata/reviewer-bench/P4-note.md`): add `GET /api/health`, and change nothing else. The reviewer
@@ -217,7 +218,8 @@ Open questions, to answer in this entry:
 
 - Answered: the smoke passes end to end with Qwen as the reviewer (reward 1.0, $0.09).
 - Answered: the repair path works with Qwen. It raised a real finding, Sonnet fixed it, and Qwen closed it
-  with proof ($0.093). That run was not graded; the next one is.
+  with proof ($0.093). That run was not graded. This pull request lets a `--brief-note` run be graded against
+  a derived task version.
 - Answered: Qwen finds a fault across two files, one user deleting another's note (8 of 8, $0.11).
 - Would Qwen also work as the implementer? Claude Code runs on a flat subscription, so the implementer
   costs nothing per run, and a swap only pays when that limit binds.
