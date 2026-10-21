@@ -2,6 +2,7 @@
 # Run the real-agent smoke (v0-H17): the task smoke-notes built by the real Claude Code and the real OpenCode on
 # OpenRouter, then graded. IT COSTS MONEY: the caps are in odin/testdata/smoke-grade/factory.real.example.yaml.
 #   ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip]
+#                     [--from-leaf LEAF] [--implementer AGENT:MODEL]
 # The suite is the PUBLIC sample suite of the task (no hidden suite of smoke-notes exists); the agents never mount
 # it. Needs DIR/factory.yaml (it names the engine; this script never writes it), the credentials file, the
 # devcontainer CLI 0.89.0, jq and python3, the engine up, the bind mount present, and a checkout of `mimir`. It
@@ -10,13 +11,20 @@
 #      CLAUDE_CODE_OAUTH_TOKEN and OPENROUTER_API_KEY is on one line with a value after it (grep -c counts the
 #      lines; no value is printed or kept);
 #   3. makes DIR/smoke-real-<time> with the project, the public suite and the factory.yaml filled from the
-#      example (its caps are the real ones);
+#      example (its caps are the real ones). With --implementer AGENT:MODEL, its implementer line is replaced
+#      (AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>), so one role changes (B-110).
+#      With --from-leaf LEAF, the leaf repos/notes starts from the files of LEAF (without .git) instead of the
+#      pack's template (B-109): the pack is copied to DIR/smoke-real-<time>/pack, LEAF becomes the copy's
+#      template, and every file of LEAF goes in the leaf's first commit. odin writes those files without the
+#      execute bit, so the project's start.sh then runs the leaf's start.sh with sh. The planted-fault leaves are
+#      in scripts/testdata/reviewer-bench (see ygg-reviewer-bench.sh);
 #   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit and tree state), then
 #      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
 #   5. with --dry-run, stops here and prints what it would run;
 #   6. otherwise runs `ygg run` under `timeout` (--wall, default 90m) with the credentials loaded in a subshell
 #      only, and keeps the raw output in DIR/smoke-real-<time>/run.txt (shown live: do not paste that file);
-#   7. prints the evidence report (credentials removed), the score, and the COST read from the ledger.
+#   7. prints the evidence report (credentials removed), the score, whether a finding took the repair path
+#      (ygg-repair-path.sh: raised, fixed, closed, or the missing step), and the COST read from the ledger.
 # The credentials are loaded by `. FILE` in the subshell that runs ygg, as the other smoke scripts do, and nothing
 # in this script echoes, greps for a value, or copies them. The exit code is the run's (0 done, 1 a node failed,
 # 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock ended it) or 2 for a refusal before it.
@@ -26,8 +34,9 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=()
+leaf="" implementer=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
-usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip]" >&2; exit 2; }
+usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -38,6 +47,8 @@ while [ $# -gt 0 ]; do
     --odin) [ $# -ge 2 ] || usage; odin="$2"; shift 2 ;;
     --wall) [ $# -ge 2 ] || usage; wall="$2"; shift 2 ;;
     --clip) clip=(--clip); shift ;;
+    --from-leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
+    --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -45,6 +56,18 @@ fail() { echo "smoke-real: $*" >&2; exit 2; }
 task=smoke-notes
 bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 [[ $wall =~ ^[1-9][0-9]*[smh]$ ]] || fail "--wall is a number and s, m or h, such as 90m"
+# The implementer goes into a YAML line as it is, so its model has only the characters a model id needs.
+if [ -n "$implementer" ]; then
+  impl_agent="${implementer%%:*}" impl_model="${implementer#*:}"
+  ok=0
+  if [[ $implementer == *:* ]] && [[ $impl_model =~ ^[A-Za-z0-9._/:-]+$ ]]; then
+    case "$impl_agent" in
+      claude-code) ok=1 ;;
+      opencode) [[ $impl_model == openrouter/?* ]] && ok=1 ;;
+    esac
+  fi
+  [ "$ok" = 1 ] || fail "--implementer is AGENT:MODEL, with AGENT claude-code or opencode; an opencode MODEL is openrouter/<model>, such as opencode:openrouter/qwen/qwen3.8-27b"
+fi
 
 export PATH="$dir/dc/node_modules/.bin:$PATH"
 if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
@@ -66,6 +89,22 @@ done
 suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
 [ -n "$suite" ] || fail "$tasks/$task/task.toml has no metadata.suite"
 
+# The leaf to start from: its files, without .git, each a plain name pack.yaml can list without quotes.
+if [ -n "$leaf" ]; then
+  [ -d "$leaf" ] || fail "no leaf folder at $leaf (--from-leaf)"
+  leaf="$(cd "$leaf" && pwd)"
+  odd="$(cd "$leaf" && find . -name .git -prune -o ! -type f ! -type d -print | head -n 1)"
+  [ -z "$odd" ] || fail "$leaf has $odd, which is neither a file nor a folder; odin's first commit takes plain files only"
+  leaf_files="$(cd "$leaf" && find . -name .git -prune -o -type f -print | sed 's|^\./||' | LC_ALL=C sort)"
+  [ -n "$leaf_files" ] || fail "$leaf has no files"
+  while IFS= read -r f; do
+    [[ $f =~ ^[A-Za-z0-9._/-]+$ ]] || fail "the leaf file '$f' has a name pack.yaml cannot list without quotes"
+  done <<<"$leaf_files"
+  leaf_files="$(printf '%s\n' "$leaf_files" | paste -sd, - | sed 's/,/, /g')"
+  template="$(sed -n 's|^  repos/notes: {.*template: \([^,} ]*\).*|\1|p' "$realm/pack.yaml")"
+  [ -n "$template" ] || fail "$realm/pack.yaml has no line for the leaf repos/notes with a template"
+fi
+
 # The credentials file: its existence, and the two names. grep -c prints a count and nothing else; the file's
 # lines are never shown, stored or compared. A name needs one line, with something after the equals sign.
 [ -f "$envfile" ] || fail "the credentials file $envfile is missing"
@@ -81,13 +120,26 @@ project="$work/project"
 git -C "$project" init -q -b main
 printf 'root: true\nowner: ouroboric-dev\nvisibility: private\n' >"$project/umbrella.yaml"
 # The grader's /app is the project. The product is built in the leaf; this file starts it.
+# odin writes a leaf's first-commit files without the execute bit, so a run from a leaf runs its start.sh with sh.
+starter=./start.sh
+[ -z "$leaf" ] || starter="sh ./start.sh"
 # shellcheck disable=SC2016
-printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec ./start.sh\n' >"$project/start.sh"
+printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec %s\n' "$starter" >"$project/start.sh"
 chmod +x "$project/start.sh"
 git -C "$project" add umbrella.yaml start.sh
 git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the real-agent smoke project"
 echo "smoke-real: made $work"
 echo "smoke-real: the suite is the PUBLIC sample suite $public/tests (suite $suite)"
+if [ -n "$leaf" ]; then
+  # The run's own copy of the pack, with LEAF as the template of repos/notes. odin's pack is not changed.
+  mkdir -p "$work/pack/$template"
+  tar -C "$realm" --exclude="./$template" -cf - . | tar -C "$work/pack" -xf -
+  tar -C "$leaf" --exclude=.git -cf - . | tar -C "$work/pack/$template" -xf -
+  sed -i "/^  repos\/notes: {/ s|first_commit: \[[^]]*\]|first_commit: [$leaf_files]|" "$work/pack/pack.yaml"
+  grep -q -F "first_commit: [$leaf_files]" "$work/pack/pack.yaml" || fail "the first commit of repos/notes could not be set in $work/pack/pack.yaml"
+  realm="$work/pack"
+  echo "smoke-real: the leaf repos/notes starts from $leaf: $realm is odin's pack with that leaf as its template, and every file in the first commit"
+fi
 
 # The config: the example with its places filled. Its caps are the example's.
 text="$(<"$example")"
@@ -98,6 +150,12 @@ text="${text//@TASKS@/$tasks}"
 text="${text//@SUITES@/$work/suites}"
 printf '%s\n' "$text" >"$work/factory.yaml"
 if grep -q '@[A-Z]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
+if [ -n "$implementer" ]; then
+  n="$(grep -c '^  implementer:' "$work/factory.yaml" || true)"
+  [ "$n" = 1 ] || fail "$example has $n implementer line(s) under roles; --implementer needs exactly 1"
+  sed -i "s|^  implementer:.*|  implementer: { agent: $impl_agent, model: $impl_model } # set by ygg-smoke-real.sh --implementer|" "$work/factory.yaml"
+fi
+echo "smoke-real: the implementer: $(sed -n 's/^  implementer:[[:space:]]*\({[^}]*}\).*/\1/p' "$work/factory.yaml")"
 
 # Which ygg runs. `ygg` has no version command, so the line gives the path and the modified time of the binary;
 # for a build from --odin it also gives the odin commit and whether that tree is dirty. YGG_CMD and a ygg on PATH
@@ -176,6 +234,7 @@ else
   echo "smoke-real: no score.json: the run did not reach the grade node"
 fi
 if [ -n "$id" ] && [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
+  "$HERE/ygg-repair-path.sh" "$project/.factory/runs/$id/ledger.jsonl" | tee -a "$report" || true
   "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml" || echo "smoke-real: the cost could not be read from the ledger" >&2
 fi
 echo "smoke-real: the folder is $work" >&2
