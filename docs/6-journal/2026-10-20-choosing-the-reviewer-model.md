@@ -3,7 +3,7 @@ date: 2026-10-20
 tags: [models, review, routing, measurement, cost, sandbox]
 status: open
 post-candidate: yes
-evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69", "run 20261021-220441-84e852", "run 20261021-220651-618061", "run 20261021-222954-05983c"]
+evidence: ["https://github.com/ouroboric-dev/gleipnir/pull/14", "https://github.com/ouroboric-dev/gleipnir/pull/15", "https://github.com/ouroboric-dev/gleipnir/pull/16", "https://github.com/ouroboric-dev/odin/pull/21", "https://github.com/ouroboric-dev/odin/pull/22", "https://github.com/ouroboric-dev/odin/pull/23", "v0-H17", "run 20261020-070542-d844d0", "run 20261020-190818-5b02ff", "run 20261020-205528-86a693", "https://github.com/ouroboric-dev/ouroboric/pull/68", "https://github.com/ouroboric-dev/ouroboric/pull/69", "run 20261021-220441-84e852", "run 20261021-220651-618061", "run 20261021-222954-05983c", "run 20261021-225348-f4bd10"]
 ---
 ## Challenge
 
@@ -202,6 +202,30 @@ versions of the form 1.2.3, so 1.0.0 becomes 1.0.1000. `grader.tasks_dir` points
 the same. Evidence: `~/ygg-it/smoke-real-20261022-000440`, `~/ygg-it/smoke-real-20261022-000650` and
 `~/ygg-it/smoke-real-20261022-002953`.
 
+### Qwen as the implementer (added 2026-10-22)
+
+One run changed only the implementer: Qwen3.8 27B through OpenCode (`ygg-smoke-real.sh --implementer
+opencode:openrouter/qwen/qwen3.8-27b`, B-110), on the empty template and the whole brief, with Qwen still the
+reviewer. It was built from odin 4bbaf9a, because odin main now reads scores from a keyed line that the public
+sample suite does not print yet.
+
+| | Claude Sonnet (run 20261020-205528-86a693) | Qwen3.8 27B (run 20261021-225348-f4bd10) |
+| --- | --- | --- |
+| Implementer | 3 turns, 36 s, 4.2k out, $0.079 at API prices | 11 turns, 283 s, 11.3k out, $0.056 (estimate) |
+| Reviewer (Qwen) | no findings | no findings |
+| Reward | 1.0: 6 of 6 fail-to-pass, 1 of 1 pass-to-pass | 0.5: 3 of 6 fail-to-pass, 1 of 1 pass-to-pass |
+
+Qwen wrote the product in Python (`app.py`, the standard library's HTTP server) and passed the loop's unit
+check. The public suite failed three scenarios. In "sign up then log in" and "add and list a note" the page at `/`
+never showed a field labelled Email within 20 seconds. In "notes need a session", `DELETE /api/notes/1` without a
+session answered 501 where the brief says 401.
+
+The reviewer reported nothing on this product. Both faults break the brief it was given ("a missing or wrong
+session answers 401"; the sign-up form), so this is a miss: the first reviewer miss we have seen on a fault we did
+not plant. The planted-fault tests above measured what Qwen finds when a fault is there to find. This run says
+its recall on a weaker product is not as high, which matters most when the implementer is cheap too. Evidence:
+`~/ygg-it/smoke-real-20261022-005348`.
+
 ### Cost of the experiment
 
 OpenRouter reported about $0.29 for the DeepSeek, Qwen and GLM sessions. The Claude sessions were not
@@ -221,8 +245,10 @@ Open questions, to answer in this entry:
   with proof ($0.093). That run was not graded. This pull request lets a `--brief-note` run be graded against
   a derived task version.
 - Answered: Qwen finds a fault across two files, one user deleting another's note (8 of 8, $0.11).
-- Would Qwen also work as the implementer? Claude Code runs on a flat subscription, so the implementer
-  costs nothing per run, and a swap only pays when that limit binds.
+- Answered, for now: Qwen as the implementer is not good enough on this brief (reward 0.5, against 1.0 for
+  Sonnet, for about $0.06 a run), and the Qwen reviewer missed its faults. Claude Code runs on a flat
+  subscription, so the implementer costs nothing per run, and a swap only pays when that limit binds. One run
+  is a small sample.
 
 ## Lessons
 
