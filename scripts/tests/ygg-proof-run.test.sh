@@ -370,6 +370,7 @@ check "INT during the build: the build is gone within 5 s" bash -c '! kill -0 "$
 for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
 check "INT during the build: the script is gone within 10 s" bash -c '! kill -0 "$1" 2>/dev/null' _ "$spid"
 kill -KILL "$bpid" 2>/dev/null
+kill -KILL "$spid" 2>/dev/null || true # never wait without a bound
 wait "$spid" 2>/dev/null; rc=$?
 check "INT during the build: the script exits 130" test "$rc" -eq 130
 check "INT during the build: ygg run is never called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
