@@ -78,6 +78,8 @@ case "$FAKE_VERB" in
     [ -z "${FAKE_REWARD:-}" ] || reward="$FAKE_REWARD"
     printf '{"schema":"ygg.score/v1","reward":%s,"task":"smoke-notes","task_version":"1.0.0","fail_to_pass":{"passed":6,"total":6},"pass_to_pass":{"passed":1,"total":1},"categories":{"SECRET-CAT-NAME":{"passed":4,"total":4,"weight":0.75},"other-secret":{"passed":2,"total":2,"weight":0.25}},"scenarios":[{"id":"SECRET-SCN-ID","category":"SECRET-CAT-NAME","status":"passed"}]}\n' "$reward" >"$proj/.factory/runs/$id/score.json"
     [ -z "${FAKE_LEAK:-}" ] || cp "$proj/.factory/runs/$id/score.json" "$proj/score.json"
+    # A suite's own reporter may write a score.json into the logs folder the grader keeps in the run folder.
+    [ -z "${FAKE_SUITE_SCORE:-}" ] || { mkdir -p "$proj/.factory/runs/$id/grade/logs-1"; echo '{"suite":"own"}' >"$proj/.factory/runs/$id/grade/logs-1/score.json"; }
     {
       echo '{"seq":1,"event":"node_finished","ygg.node.id":"build","gen_ai.usage.input_tokens":1000,"gen_ai.usage.output_tokens":200,"gen_ai.usage.cache_read.input_tokens":5000,"ygg.usage.turns":3,"ygg.usage.cost_usd":0.25}'
       echo '{"seq":2,"event":"node_failed","ygg.node.id":"build","gen_ai.usage.input_tokens":500,"gen_ai.usage.output_tokens":100,"ygg.usage.turns":2,"ygg.usage.cost_usd":0.125,"ygg.usage.cost_estimated":true}'
@@ -193,6 +195,13 @@ sleep 1
 FAKE_LEAK=1 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
 check "a score.json outside the run folder fails the smoke" test "$rc" -eq 1
 check "and the failing line says which check" has "FAIL  reference: score.json is in the run folder and nowhere else"
+sleep 1
+FAKE_SUITE_SCORE=1 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
+check "a score.json the suite wrote into the grader's logs folder is not a leak" test "$rc" -eq 0
+check "and the check on score.json passes" has "PASS  reference: score.json is in the run folder and nowhere else"
+sleep 1
+FAKE_SUITE_SCORE=1 FAKE_LEAK=1 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
+check "a real leak is still caught beside it" test "$rc" -eq 1
 sleep 1
 FAKE_REWARD=0.5 run "$S/ygg-smoke-grade.sh" "${gargs[@]}"
 check "a reference that does not grade 1 fails the smoke" has "FAIL  reference: reward is 1"
