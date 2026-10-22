@@ -225,7 +225,8 @@ load_env() { # in a subshell only
   { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
   set -a
   # shellcheck source=/dev/null
-  . "$envfile" || return 1
+  # The source's own stderr is silenced: on a syntax error bash prints the offending line, which can hold a secret.
+  . "$envfile" 2>/dev/null || { echo "proof-run: the credentials file could not be read" >&2; return 1; }
   set +a
 }
 # The filter works on bytes (any byte survives), replaces the exact values, and if it cannot run it drains its input
@@ -288,10 +289,11 @@ rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/build.pid"
 on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build or to timeout (and so to ygg)
   local p f
   [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop"
-  for f in build.pid run.pid; do
-    p="$(cat "$work/$f" 2>/dev/null)" || continue
-    [ -z "$p" ] || kill -s "$1" "$p" 2>/dev/null
-  done
+  # The build is an async job, which bash starts with SIGINT ignored: it gets TERM for either signal.
+  p="$(cat "$work/build.pid" 2>/dev/null)" || p=""
+  [ -z "$p" ] || kill -s TERM "$p" 2>/dev/null
+  p="$(cat "$work/run.pid" 2>/dev/null)" || p=""
+  [ -z "$p" ] || kill -s "$1" "$p" 2>/dev/null
   return 0
 }
 trap 'on_signal TERM' TERM

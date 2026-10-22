@@ -348,5 +348,28 @@ check "an env file that cannot be sourced: ygg run is not called" bash -c '! gre
 check "an env file that cannot be sourced: the exit code is not 0" test "$rc" -ne 0
 check "an env file that cannot be sourced: no credential value in the kept files" bash -c '! grep -r -a -q VALUE "$1"' _ "$(RUND)"
 
+# --- v0-T291 review round 3: a bad credentials line is never echoed; INT stops the build too
+printf 'CLAUDE_CODE_OAUTH_TOKEN=fake-claude-VALUE-1 (\nOPENROUTER_API_KEY=fake-router-VALUE-2\n' >"$T/env-badline"
+fresh
+FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=0 run proof --name go --env "$T/env-badline"
+check "a bad credentials line: the value is nowhere in stdout or stderr" bash -c '! grep -q VALUE "$1"' _ "$T/out"
+check "a bad credentials line: the value is in no kept file" bash -c '! grep -r -a -q VALUE "$1"' _ "$(RUND)"
+check "a bad credentials line: it says the file could not be read" has "credentials file could not be read"
+check "a bad credentials line: ygg run is not called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
+# INT during the build (the script is started with SIGINT at its default, as a terminal would leave it).
+fresh; rm -f "$T/build.pid" "$T/run.pid"; sleep 1
+FAKE_BUILD_SLEEP=20 FAKE_RUN_RC=0 python3 -I -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' "$SCRIPT" "${BASE[@]}" --name go --build >"$T/out" 2>&1 &
+spid=$!
+for _ in $(seq 1 50); do [ -s "$T/build.pid" ] && break; sleep 0.1; done
+bpid="$(cat "$T/build.pid" 2>/dev/null || echo 0)"
+check "the fake build is running before INT" kill -0 "$bpid"
+kill -INT "$spid" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
+wait "$spid" 2>/dev/null; rc=$?
+check "INT during the build: the script exits 130" test "$rc" -eq 130
+check "INT during the build: ygg run is never called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
+check "INT during the build: the build is gone" bash -c '! kill -0 "$1" 2>/dev/null' _ "$bpid"
+kill -KILL "$spid" "$bpid" 2>/dev/null
+
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
