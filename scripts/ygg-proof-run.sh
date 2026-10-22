@@ -256,6 +256,7 @@ for n_ in "${names[@]}"; do
   [ "$n" = 1 ] || fail "$envfile has $n line(s) that set $n_ with a value; the roles need exactly 1"
 done
 
+umask 077 # the proof folder (proof.meta, run.txt, report.txt and the rest) is private to this user
 if [ -z "$cont" ]; then
   # 5. The project and the config.
   project="$work/project"
@@ -328,7 +329,6 @@ fi
 
 # 7. The run. Only `ygg run` starts model sessions, so only it (and the output filter, which needs the exact values
 # to remove them) gets the credentials: each is sourced in its own subshell and nothing is exported by this shell.
-umask 077 # run.txt and report.txt are private to this user
 load_env() { # in a subshell only
   { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
   set -a
@@ -397,11 +397,12 @@ out="$work/run.txt" # a continuation adds to it
 if [ -z "$cont" ]; then echo "proof-run: starting the run (wall clock $wall); this costs money"
 else echo "proof-run: continuing the run (wall clock $wall); this costs money"; fi
 set +e
-rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/build.pid"
+rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/run.hup" "$work/build.pid"
 # shellcheck disable=SC2329 # called by the traps
 on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build or to timeout (and so to ygg)
   local p f
-  [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop"
+  [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop" # the first signal sets the exit code of a stop
+  [ "$1" != HUP ] || : >"$work/run.hup"                     # a hang-up is kept on its own: it can follow a Ctrl-C
   # The build starts with SIGINT and SIGHUP ignored (an async job, in the pipeline): it gets TERM for any signal.
   p="$(cat "$work/build.pid" 2>/dev/null)" || p=""
   [ -z "$p" ] || kill -s TERM "$p" 2>/dev/null
@@ -418,8 +419,9 @@ while kill -0 "$pl" 2>/dev/null; do wait "$pl"; done
 trap - TERM INT
 trap '' HUP # the run is over: a hang-up from now on does not cut the report short
 rm -f "$work/run.pid" "$work/build.pid"
-# After a hang-up the terminal is gone and every write to it fails: what is still printed is kept in hangup.txt.
-if [ "$(cat "$work/run.stop" 2>/dev/null)" = HUP ]; then exec >>"$work/hangup.txt" 2>&1; fi
+# After a hang-up (alone, or after a Ctrl-C or TERM) the terminal is gone and every write to it fails: what is still
+# printed is kept in hangup.txt.
+if [ -f "$work/run.hup" ]; then exec >>"$work/hangup.txt" 2>&1; fi
 set -e
 rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2

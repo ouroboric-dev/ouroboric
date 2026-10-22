@@ -212,6 +212,7 @@ check "the config has the suites folder" grep -q -x "  suite_dir: $SU" "$FY"
 check "the config has the realms and graphs" grep -q "dir: $YG/voluspa" "$FY"
 check "the config has the engine" grep -q 'engine: unix:///run/user/1000/podman/podman.sock' "$FY"
 check "no place is left to fill" bash -c '! grep -q "@[A-Z_]*@" "$1"' _ "$FY"
+check "proof.meta is private (600)" bash -c '[ "$(stat -c %a "$1")" = 600 ]' _ "$P/proof.meta"
 check "no credential value is in the config" bash -c '! grep -r -q "VALUE" "$1"' _ "$P"
 check "no credential value is in the output" bash -c '! grep -q "VALUE" "$1"' _ "$T/out"
 check "the plan names the graph" has "--graph"
@@ -458,11 +459,12 @@ for sig in INT HUP; do
   reap
 done
 # A terminal that closes: the kernel hangs up the session (the script leads it here), and every later write to the
-# terminal fails. The script must still stop the run, keep its exit code and make the report.
-fresh; rm -f "$T/run.pid"; sleep 1
-FAKE_TRAP=1 timeout 60 python3 -I - "$T/run.pid" "$SCRIPT" "${BASE[@]}" --name go >"$T/pty.out" 2>&1 <<'PY2'
+# terminal fails. The script must still stop the run, keep its exit code and make the report. FIRST is a signal that
+# comes just before, while the run is still shutting down (a Ctrl-C to the script's group, a TERM to the script), or
+# "none".
+cat >"$T/pty.py" <<'PY2'
 import os, pty, select, signal, sys, time
-ready, argv = sys.argv[1], sys.argv[2:]
+first, ready, argv = sys.argv[1], sys.argv[2], sys.argv[3:]
 pid, fd = pty.fork()
 if pid == 0:
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -481,6 +483,12 @@ end = time.time() + 5
 while time.time() < end and not os.path.exists(ready):
     drain(0.1)
 drain(0.5)
+if first != "none":
+    if first == "INT":
+        os.killpg(pid, signal.SIGINT)  # a Ctrl-C reaches the script's whole process group (it leads its own)
+    else:
+        os.kill(pid, getattr(signal, "SIG" + first))  # a TERM is sent to the script
+    drain(0.3)  # the run is shutting down (it takes a second) when the terminal closes
 os.close(fd)  # the terminal closes
 end = time.time() + 15
 while time.time() < end:
@@ -493,13 +501,18 @@ os.kill(pid, signal.SIGKILL)
 os.waitpid(pid, 0)
 print("rc=still-running")
 PY2
-rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"; rpg="$(pgid_of "$rpid")"
-check "a closed terminal: the script ends with the run's exit code (3)" grep -q -x 'rc=3' "$T/pty.out"
-check "a closed terminal: the run is stopped" bash -c '! kill -0 "$1" 2>/dev/null' _ "$rpid"
-check "a closed terminal: the run's shutdown lines are in run.txt" grep -q "the run shut down" "$(RUND)/run.txt"
-check "a closed terminal: report.txt is made" grep -q 'metrics output' "$(RUND)/report.txt"
-check "a closed terminal: what the script prints after it is kept in hangup.txt" bash -c 'grep -q "exit code 3" "$1" && grep -q -F -- "--continue RUN-1" "$1"' _ "$(RUND)/hangup.txt"
-[ -z "$rpg" ] || kill -KILL -- "-$rpg" 2>/dev/null
+for first in none INT TERM; do
+  case "$first" in none) what="a closed terminal" ;; *) what="$first, then a closed terminal" ;; esac
+  fresh; rm -f "$T/run.pid"; sleep 1
+  FAKE_TRAP=1 timeout 60 python3 -I "$T/pty.py" "$first" "$T/run.pid" "$SCRIPT" "${BASE[@]}" --name go >"$T/pty.out" 2>&1
+  rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"; rpg="$(pgid_of "$rpid")"
+  check "$what: the script ends with the run's exit code (3)" grep -q -x 'rc=3' "$T/pty.out"
+  check "$what: the run is stopped, no process is left" bash -c '[ "$1" != 0 ] && ! kill -0 "$1" 2>/dev/null && { [ -z "$2" ] || ! pgrep -g "$2" >/dev/null; }' _ "$rpid" "$rpg"
+  check "$what: the run's shutdown lines are in run.txt" grep -q "the run shut down" "$(RUND)/run.txt"
+  check "$what: report.txt is made" grep -q 'metrics output' "$(RUND)/report.txt"
+  check "$what: what the script prints after it is kept in hangup.txt" bash -c 'grep -q "exit code 3" "$1" && grep -q -F -- "--continue RUN-1" "$1"' _ "$(RUND)/hangup.txt"
+  [ -z "$rpg" ] || kill -KILL -- "-$rpg" 2>/dev/null
+done
 
 # --- the ouroboric review (T2): the real wall clock ends the run and what it started
 fresh; rm -f "$T/run.pid" "$T/child.pid"; sleep 1
