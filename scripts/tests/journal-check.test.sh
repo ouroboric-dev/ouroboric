@@ -96,6 +96,61 @@ bad "a comparison that names one run fails" "two different run ids"
 fresh ledger; entry 2026-10-23-a.md open no "x" "" '{"schema":"ygg.ledger/v1","seq":1,"event":"run_started"}'; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
 bad "a raw ledger line in an entry fails" "a raw ledger line"
 
+# write_entry FILE FRONT RESULT: an entry whose front matter is the given text, for the quoted and block-style cases.
+write_entry() {
+  local file="$1" front="$2" result="$3"
+  { echo "---"; printf '%s\n' "$front"; echo "---"; echo "## Challenge"; echo "What went wrong."; echo "## Context"; echo "What we knew."; echo "## Options"; echo "What we considered."; echo "## Decision"; echo "What we chose."; echo "## Result"; echo "$result"; echo "## Lessons"; echo "What we would tell someone."; } > "$J/$file"
+}
+FRONT_BLOCK_TAG=$'date: 2026-10-23\ntags:\n  - factory-change\nstatus: resolved\npost-candidate: yes\nevidence:\n  - "run 20261023-090000-a1b2c3"'
+FRONT_BLOCK_EVID=$'date: 2026-10-23\ntags: [x]\nstatus: resolved\npost-candidate: no\nevidence:\n  - "run 20261023-090000-a1b2c3"'
+
+fresh idxdate; entry 2026-10-23-a.md open no "x" "" "pending"; index "| 2026-10-22 | [a](2026-10-23-a.md) | x | open | no |"
+bad "an index row with a different date fails" "README.md row says date 2026-10-22"
+fresh dup; entry 2026-10-23-a.md open no "x" "" "pending"; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |" "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
+bad "a duplicate index row fails" "2026-10-23-a.md: has 2 rows in README.md"
+fresh qtag;  entry 2026-10-23-a.md resolved yes '"factory-change"' '"run 20261023-090000-a1b2c3"' "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | resolved | yes |"
+bad "a double-quoted factory-change tag still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh qtag1; entry 2026-10-23-a.md resolved yes "'factory-change'" '"run 20261023-090000-a1b2c3"' "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | resolved | yes |"
+bad "a single-quoted factory-change tag still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh btag;  write_entry 2026-10-23-a.md "$FRONT_BLOCK_TAG" "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | resolved | yes |"
+bad "a block-style factory-change tag still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh bev;   write_entry 2026-10-23-a.md "$FRONT_BLOCK_EVID" "Measured: fine."; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | resolved | no |"
+run "$S/journal-check.sh" "$J"
+check "a block-style evidence list counts as evidence" test "$rc" -eq 0
+fresh fence; cat > "$J/2026-10-23-a.md" <<'EOT'
+---
+date: 2026-10-23
+tags: [x]
+status: open
+post-candidate: no
+evidence: []
+---
+## Challenge
+What went wrong.
+## Context
+An example from a note:
+```markdown
+## Result
+pending
+```
+What we knew.
+## Options
+What we considered.
+## Decision
+What we chose.
+## Result
+pending
+## Lessons
+What we would tell someone.
+EOT
+index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
+run "$S/journal-check.sh" "$J"
+check "a fenced heading inside Context does not break the order rule" test "$rc" -eq 0
+fresh ledgerind; entry 2026-10-23-a.md open no "x" "" '  {"schema":"ygg.ledger/v1","seq":1}'; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
+bad "an indented raw ledger line fails" "a raw ledger line"
+fresh ledgersp; entry 2026-10-23-a.md open no "x" "" '{"schema": "ygg.ledger/v1","seq":1}'; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
+bad "a raw ledger line with a space after the colon fails" "a raw ledger line"
+
 fresh ok2; entry 2026-10-23-a.md open no "factory-change" "" "pending"; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | open | no |"
 run "$S/journal-check.sh" "$J"
 check "an open factory-change entry may still be waiting for its comparison" test "$rc" -eq 0
