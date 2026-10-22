@@ -5,6 +5,14 @@ considered, what we chose, and the measured result. In the naming story these en
 **sagas**; a future content component (**Bragi**) will turn them into blog posts. Spec:
 [§13.5](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/2-engineering/specs/2026-10-11-yggdrasil-v0-spec.md#105-journey-journal).
 
+## Checking
+
+`scripts/journal-check.sh` reads this folder and fails when an entry breaks the rules above: a missing key, a status that
+is not `open`, `resolved` or `abandoned`, sections out of order, a resolved entry with no evidence or a Result that is still
+"pending", an entry that the index below does not list or lists differently, or a raw ledger line. An entry that records a
+change to the factory carries the tag `factory-change`; once it is resolved, its Result cites the before and after with
+`ygg metrics --compare <runA> <runB>` and names both run ids (design doc §2.3, criterion 6).
+
 ## Entries
 
 | Date | Entry | Tags | Status | Post candidate |
