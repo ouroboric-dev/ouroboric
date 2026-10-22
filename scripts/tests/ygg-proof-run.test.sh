@@ -95,6 +95,29 @@ runq proof --name ok --env "$T/env-empty";            check "a credentials file 
 check "the refusal does not print the other value" hasnt "fake-router-VALUE-2"
 runq proof --name ok --env "$T/missing.env";          check "a missing credentials file is refused" refuses "credentials file"
 
+# --- review round 1: physical paths, unsafe paths, a model ending in a colon
+ln -s "$TK/inside" "$T/sl-suites"
+runq "$SCRIPT" --folder "$D" --env "$ENVF" --tasks "$TK" --suites "$T/sl-suites" --yggdrasil "$YG" --name ok
+check "a suites folder that is a symlink into the tasks folder is refused" refuses "inside"
+ln -s "$SU/tasksin" "$T/sl-tasks"
+runq "$SCRIPT" --folder "$D" --env "$ENVF" --tasks "$T/sl-tasks" --suites "$SU" --yggdrasil "$YG" --name ok
+check "a tasks folder that is a symlink into the suites folder is refused" refuses "inside"
+for odd in "a #b" "a, b" "a: b" "a}b" "a'b"; do
+  mkdir -p "$T/$odd"; cp "$D/factory.yaml" "$T/$odd/"
+  runq "$SCRIPT" --folder "$T/$odd" --env "$ENVF" --tasks "$TK" --suites "$SU" --yggdrasil "$YG" --name ok
+  check "a --folder with '$odd' is refused, naming the flag" refuses "--folder"
+done
+runq "$SCRIPT" --folder "$D" --env "$ENVF" --tasks "$TK" --suites "$SU" --yggdrasil "$T/a, b" --name ok
+check "a --yggdrasil with a comma and space is refused, naming the flag" refuses "--yggdrasil"
+runq "$SCRIPT" --folder "$D" --env "$ENVF" --tasks "$T/a #b" --suites "$SU" --yggdrasil "$YG" --name ok
+check "a --tasks with ' #' is refused, naming the flag" refuses "--tasks"
+runq "$SCRIPT" --folder "$D" --env "$ENVF" --tasks "$TK" --suites "$T/a: b" --yggdrasil "$YG" --name ok
+check "a --suites with ': ' is refused, naming the flag" refuses "--suites"
+runq proof --name ok --planner claude-code:sonnet:
+check "a model that ends in a colon is refused" refuses "--planner"
+check "the script never enters the suites folder with cd" bash -c '! grep -E "(^|[^a-z_])cd[^#]*suites" "$1"' _ "$SCRIPT"
+check "the script never evals" bash -c '! grep -E "^[^#]*\beval \"\$ygg" "$1"' _ "$SCRIPT"
+
 # --- B-130: only the names the roles need
 printf 'CLAUDE_CODE_OAUTH_TOKEN=fake-claude-VALUE-1\n' >"$T/env-claude"
 printf 'OPENROUTER_API_KEY=fake-router-VALUE-2\n' >"$T/env-router"

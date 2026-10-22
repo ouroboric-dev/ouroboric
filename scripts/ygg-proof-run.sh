@@ -79,12 +79,18 @@ for pair in run-usd:"$run_usd" day-usd:"$day_usd"; do
   [[ ${pair#*:} =~ ^[0-9]+(\.[0-9]+)?$ ]] || fail "--${pair%%:*} is a number of dollars such as 5 or 2.5, not '${pair#*:}'"
 done
 if [ -n "$baseline" ]; then [[ $baseline =~ ^[A-Za-z0-9._-]+$ ]] || fail "--baseline '$baseline' is not a run id"; fi
+# Folders go into factory.yaml as they are, so their characters cannot change how a YAML line parses.
+safe_path() { # FLAG VALUE
+  [[ $2 =~ ^[A-Za-z0-9._/@+-]+$ ]] || fail "$1 '$2' has a character outside A-Za-z0-9._/@+- (no spaces); it goes into factory.yaml"
+}
+safe_path --folder "$dir"; safe_path --tasks "$tasks"; safe_path --suites "$suites"; safe_path --yggdrasil "$ygg_dir"
+safe_path YGG_BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
 # A role goes into a YAML line as it is, so its model has only the characters a model id needs.
 role_ok() { # FLAG VALUE: sets agent_of and model_of
   local flag="$1" v="$2" agent model
   [[ $v == *:* ]] || fail "$flag is AGENT:MODEL, with AGENT claude-code or opencode, such as claude-code:sonnet"
   agent="${v%%:*}" model="${v#*:}"
-  [[ $model =~ ^[A-Za-z0-9._/:-]+$ ]] || fail "$flag has a MODEL with characters outside A-Za-z0-9._/:-"
+  [[ $model =~ ^[A-Za-z0-9._/:-]+$ && $model != *: ]] || fail "$flag has a MODEL with characters outside A-Za-z0-9._/:- or ends in a colon"
   case "$agent" in
     claude-code) ;;
     opencode) [[ $model == openrouter/?* ]] || fail "$flag: an opencode MODEL is openrouter/<model>, such as opencode:openrouter/qwen/qwen3.8-27b" ;;
@@ -106,14 +112,16 @@ fi
 [ -f "$dir/factory.yaml" ] || fail "$dir/factory.yaml is missing; it names the engine (sandbox.engine)"
 engine="$(sed -n 's/^[[:space:]]*engine:[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$dir/factory.yaml" | head -n 1)"
 case "$engine" in unix://*) ;; *) fail "sandbox.engine in $dir/factory.yaml is '${engine:-missing}'; it must be a unix:// URL" ;; esac
+safe_path sandbox.engine "${engine#unix://}"
 for tool in git python3 timeout sha256sum; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
 ygg="${YGG_CMD:-ygg}"
-command -v -- "${ygg%% *}" >/dev/null 2>&1 || fail "no ygg on the path (YGG_CMD names how it runs)"
+read -r -a ygg_arr <<<"$ygg"
+command -v -- "${ygg_arr[0]:-ygg}" >/dev/null 2>&1 || fail "no ygg on the path (YGG_CMD names how it runs)"
 
 # 2. The task, and that its brief is the frozen one.
 task="${YGG_PROOF_TASK:-client-gallery-lite}"
-tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no task folder at $tasks (--tasks)"
-ygg_dir="$(cd "$ygg_dir" 2>/dev/null && pwd)" || fail "no yggdrasil folder at $ygg_dir (--yggdrasil)"
+tasks="$(cd -P -- "$tasks" 2>/dev/null && pwd -P)" || fail "no task folder at $tasks (--tasks)"
+ygg_dir="$(cd -P -- "$ygg_dir" 2>/dev/null && pwd -P)" || fail "no yggdrasil folder at $ygg_dir (--yggdrasil)"
 for f in "$tasks/$task/task.toml" "$tasks/$task/instruction.md"; do [ -f "$f" ] || fail "no task: $f is missing"; done
 suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
 [ -n "$suite" ] || fail "$tasks/$task/task.toml has no suite key"
@@ -123,11 +131,14 @@ have="$(sha256sum "$tasks/$task/instruction.md" | cut -d' ' -f1)"
 [ -n "$frozen" ] && [ "$have" = "$frozen" ] || fail "$tasks/$task/instruction.md is not the frozen brief: its SHA-256 is $have and task.toml says '${frozen:-nothing}'; a changed brief is another task"
 
 # 3. The suites folder: one test -d, never listed or read.
-suites="$(cd "$suites" 2>/dev/null && pwd)" || fail "no suites folder at $suites for $task/$suite (--suites)"
+# readlink -f resolves the links of the path without entering or listing the suites folder.
+suites_raw="$suites"
+suites="$(readlink -f -- "$suites" 2>/dev/null)" && [ -n "$suites" ] || fail "no suites folder at $suites_raw for $task/$suite (--suites)"
 test -d "$suites/$task/$suite" || fail "the suites folder $suites has no $task/$suite (--suites)"
 work="$dir/proof-$name-$(date +%Y%m%d-%H%M%S)"
-dir_abs="$(cd "$dir" && pwd)"
+dir_abs="$(cd -P -- "$dir" && pwd -P)"
 work="$dir_abs/${work##*/}"
+for pair in tasks:"$tasks" suites:"$suites" yggdrasil:"$ygg_dir" folder:"$dir_abs"; do safe_path "--${pair%%:*} (resolved)" "${pair#*:}"; done
 inside() { case "$1/" in "$2"/*) return 0 ;; esac; return 1; } # inside A B: A is B or below B
 if inside "$suites" "$tasks"; then fail "the suites folder $suites is inside the tasks folder $tasks"; fi
 if inside "$tasks" "$suites"; then fail "the tasks folder $tasks is inside the suites folder $suites"; fi
@@ -175,16 +186,19 @@ echo "proof-run: the task is $task, suite $suite; the brief is the frozen one (S
 
 # 6. doctor, and the plan.
 echo "proof-run: ygg doctor on that config"
-if ! eval "$ygg doctor --project '$project' --config '$work/factory.yaml'"; then fail "ygg doctor refused the config; nothing was spent"; fi
-run="$ygg run --project '$project' --config '$work/factory.yaml' --graph software --brief '$tasks/$task/instruction.md'"
+if ! "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml"; then fail "ygg doctor refused the config; nothing was spent"; fi
+# Commands are printed with %q and never run through eval.
+q() { printf '%q ' "$@"; }
+run_cmd="$(q "${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml" --graph software --brief "$tasks/$task/instruction.md")"
+build_cmd="$(q "${ygg_arr[@]}" sandbox build --config "$work/factory.yaml" --realm "$ygg_dir")"
 echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 [ -z "$baseline" ] || echo "proof-run: after the run: compare with the baseline run $baseline"
 [ "$clip" -eq 0 ] || echo "proof-run: after the run: the report is copied to the clipboard"
 if [ "$dry" -eq 1 ]; then
-  [ "$build" -eq 0 ] || echo "proof-run: would run: $ygg sandbox build --config '$work/factory.yaml' --realm '$ygg_dir'"
-  echo "proof-run: would run: timeout --signal=INT --kill-after=2m $wall $run"
+  [ "$build" -eq 0 ] || echo "proof-run: would run: $build_cmd"
+  echo "proof-run: would run: timeout --signal=INT --kill-after=2m $wall $run_cmd"
   echo "proof-run: dry run: nothing was started and the credentials were not loaded"
   exit 0
 fi
