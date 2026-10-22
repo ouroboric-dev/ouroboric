@@ -23,6 +23,8 @@ runq() { rm -rf "$D"/proof-*; "$@" >"$T/out" 2>&1; rc=$?; } # a refusal makes no
 has() { grep -q -F -- "$1" "$T/out"; }
 hasnt() { ! grep -q -F -- "$1" "$T/out"; }
 export HOME="$T/home"; mkdir -p "$HOME"
+umask 022 # the caller's umask: the project and what ygg makes follow it; only the script's own files are private
+mode_is() { [ "$(stat -c %a "$2")" = "$1" ]; } # MODE PATH
 export YGG_ENGINE_CHECK=0
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export YGG_BIND="$T/bind"; mkdir -p "$YGG_BIND"
@@ -355,7 +357,14 @@ for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
 check "TERM to the script ends the script" bash -c '! kill -0 "$1" 2>/dev/null' _ "$spid"
 check "TERM to the script ends the run too" bash -c '! kill -0 "$1" 2>/dev/null' _ "$rpid"
 kill -KILL "$spid" "$rpid" 2>/dev/null; wait "$spid" 2>/dev/null
-check "the run's files are private (umask 077)" bash -c '[ "$(stat -c %a "$1")" = 600 ]' _ "$(RUND)/run.txt"
+check "the run's files are private (600)" mode_is 600 "$(RUND)/run.txt"
+# Only the script's own files are private: the project and what ygg makes in it keep the caller's umask (022 here).
+runit 0
+check "umask: the project folder follows the caller's umask (755)" mode_is 755 "$(RUND)/project"
+check "umask: the run folder ygg made follows it (755)" mode_is 755 "$(RUND)/project/.factory/runs/RUN-1"
+check "umask: a file ygg made follows it (644)" mode_is 644 "$(RUND)/project/.factory/runs/RUN-1/run.json"
+check "umask: the project's git files follow it (644)" mode_is 644 "$(RUND)/project/umbrella.yaml"
+for f in proof.meta run.txt report.txt run.rc; do check "umask: the script's own $f is private (600)" mode_is 600 "$(RUND)/$f"; done
 check "the exit line labels 137 and 141" bash -c 'grep -q "137" "$1" && grep -q "141" "$1"' _ "$SCRIPT"
 
 # --- v0-T291 review round 2: the process group, a stop before the run, a filter that fails closed
@@ -511,6 +520,7 @@ for first in none INT TERM; do
   check "$what: the run's shutdown lines are in run.txt" grep -q "the run shut down" "$(RUND)/run.txt"
   check "$what: report.txt is made" grep -q 'metrics output' "$(RUND)/report.txt"
   check "$what: what the script prints after it is kept in hangup.txt" bash -c 'grep -q "exit code 3" "$1" && grep -q -F -- "--continue RUN-1" "$1"' _ "$(RUND)/hangup.txt"
+  check "$what: hangup.txt, run.stop and run.hup are private (600)" bash -c 'for f in hangup.txt run.hup; do [ "$(stat -c %a "$1/$f")" = 600 ] || exit 1; done; [ ! -e "$1/run.stop" ] || [ "$(stat -c %a "$1/run.stop")" = 600 ]' _ "$(RUND)"
   [ -z "$rpg" ] || kill -KILL -- "-$rpg" 2>/dev/null
 done
 
@@ -560,6 +570,7 @@ check "--continue: the output is added to the folder's run.txt" bash -c 'grep -q
 check "--continue: a planted value is filtered from run.txt and the output" bash -c '! grep -q -F fake-claude-VALUE-1 "$1" && ! grep -q -F fake-claude-VALUE-1 "$2" && grep -q REDACTED "$1"' _ "$W/run.txt" "$T/out"
 check "--continue: the recorded baseline is compared" grep -q -x -F "metrics --compare $OLD RUN-1 --project $W/compare" "$T/ygg.calls"
 check "--continue: the report is added to report.txt" bash -c '[ "$(grep -c "^# proof run go: run RUN-1" "$1")" = 2 ] && grep -q "^## ygg grade" "$1"' _ "$W/report.txt"
+check "--continue: run.txt and report.txt stay private, the compare folder is private" bash -c '[ "$(stat -c %a "$1/run.txt")" = 600 ] && [ "$(stat -c %a "$1/report.txt")" = 600 ] && [ "$(stat -c %a "$1/compare")" = 700 ]' _ "$W"
 check "--continue: no new proof folder" test "$(find "$D" -maxdepth 1 -name 'proof-go-*' | wc -l)" = 1
 fresh; FAKE_RUN_RC=4 run proof --name go; W="$(RUND)"; clearlogs
 FAKE_CONT_RC=3 runc cont --continue RUN-1 --resume

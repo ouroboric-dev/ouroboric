@@ -65,6 +65,11 @@ usage() {
   exit 2
 }
 fail() { echo "proof-run: $*" >&2; exit 2; }
+# Only the script's own files are private (the credentials' values never reach them, but they hold the run's output).
+# Everything else (the project, its git repository and what ygg makes, which the sandboxes read) keeps the caller's
+# umask, as in the smoke scripts: no umask is set for the whole script.
+private() { (umask 077 && : >>"$1") && chmod 600 "$1"; } # FILE: made private; what it holds stays
+put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small control file, private
 name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
 cont="" gate_in="" note="" note_set=0 resume=0 setup_flags="" # --continue; the setup flags given (a continued run keeps its config)
 planner=claude-code:sonnet implementer=claude-code:sonnet reviewer=opencode:openrouter/qwen/qwen3.8-27b
@@ -256,7 +261,6 @@ for n_ in "${names[@]}"; do
   [ "$n" = 1 ] || fail "$envfile has $n line(s) that set $n_ with a value; the roles need exactly 1"
 done
 
-umask 077 # the proof folder (proof.meta, run.txt, report.txt and the rest) is private to this user
 if [ -z "$cont" ]; then
   # 5. The project and the config.
   project="$work/project"
@@ -286,6 +290,7 @@ if [ -z "$cont" ]; then
   echo "proof-run: the task is $task, suite $suite; the brief is the frozen one (SHA-256 $have)"
   [ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
   # What --continue needs to know about this proof run, one "key value" a line; every value was checked above.
+  private "$work/proof.meta"
   printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
     "$name" "$mode" "$planner" "$implementer" "$reviewer" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
 else
@@ -373,24 +378,24 @@ run_part() {
   if [ "$build" -eq 1 ] && ! stopped; then
     "${build_argv[@]}" &
     bp=$!
-    echo "$bp" >"$work/build.pid"
+    put "$work/build.pid" "$bp"
     if stopped; then kill -s TERM "$bp" 2>/dev/null; fi
-    wait "$bp" || { stopped || { echo 2 >"$work/run.rc"; return 0; }; }
+    wait "$bp" || { stopped || { put "$work/run.rc" 2; return 0; }; }
   fi
   if stopped; then
     echo "proof-run: stopped by a signal; the run was not started"
-    stop_rc >"$work/run.rc"
+    put "$work/run.rc" "$(stop_rc)"
     return 0
   fi
   [ -z "$cont_what" ] || echo "proof-run: continuing run $cont: $cont_what"
   (
-    load_env || { echo 2 >"$work/run.rc"; exit 0; }
+    load_env || { put "$work/run.rc" 2; exit 0; }
     "${timeout_argv[@]}" "${run_argv[@]}" &
     tp=$!
-    echo "$tp" >"$work/run.pid"
+    put "$work/run.pid" "$tp"
     if stopped; then kill -s "$(cat "$work/run.stop")" "$tp" 2>/dev/null; fi
     wait "$tp"
-    echo "$?" >"$work/run.rc"
+    put "$work/run.rc" "$?"
   )
 }
 out="$work/run.txt" # a continuation adds to it
@@ -401,8 +406,8 @@ rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/run.hup" "$work/bui
 # shellcheck disable=SC2329 # called by the traps
 on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build or to timeout (and so to ygg)
   local p f
-  [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop" # the first signal sets the exit code of a stop
-  [ "$1" != HUP ] || : >"$work/run.hup"                     # a hang-up is kept on its own: it can follow a Ctrl-C
+  [ -f "$work/run.stop" ] || put "$work/run.stop" "$1" # the first signal sets the exit code of a stop
+  [ "$1" != HUP ] || put "$work/run.hup" HUP             # a hang-up is kept on its own: it can follow a Ctrl-C
   # The build starts with SIGINT and SIGHUP ignored (an async job, in the pipeline): it gets TERM for any signal.
   p="$(cat "$work/build.pid" 2>/dev/null)" || p=""
   [ -z "$p" ] || kill -s TERM "$p" 2>/dev/null
@@ -413,6 +418,7 @@ on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build o
 trap 'on_signal TERM' TERM
 trap 'on_signal INT' INT
 trap 'on_signal HUP' HUP
+private "$out"
 (trap '' INT HUP; run_part 2>&1 | redact | tee -a "$out") &
 pl=$!
 while kill -0 "$pl" 2>/dev/null; do wait "$pl"; done
@@ -421,7 +427,7 @@ trap '' HUP # the run is over: a hang-up from now on does not cut the report sho
 rm -f "$work/run.pid" "$work/build.pid"
 # After a hang-up (alone, or after a Ctrl-C or TERM) the terminal is gone and every write to it fails: what is still
 # printed is kept in hangup.txt.
-if [ -f "$work/run.hup" ]; then exec >>"$work/hangup.txt" 2>&1; fi
+if [ -f "$work/run.hup" ]; then private "$work/hangup.txt"; exec >>"$work/hangup.txt" 2>&1; fi
 set -e
 rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2
@@ -456,7 +462,7 @@ evidence_part() {
     printf '## ygg metrics --compare\n(not run: the baseline is this run)\n\n'
   elif [ -n "$baseline" ]; then
     # ygg compares two runs of one project, and each proof run has its own: both run folders are linked into one.
-    mkdir -p "$work/compare/.factory/runs"
+    (umask 077 && mkdir -p "$work/compare/.factory/runs")
     ln -sfn "$base_dir" "$work/compare/.factory/runs/$baseline"
     ln -sfn "$project/.factory/runs/$id" "$work/compare/.factory/runs/$id"
     step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$work/compare"
@@ -470,6 +476,7 @@ evidence_part() {
 set +e # nothing after the run may change the run's exit code
 rep_start=0 # a continuation adds its report to report.txt; --clip copies the new one
 [ ! -f "$report" ] || rep_start="$(wc -c <"$report")"
+private "$report"
 evidence_part 2>&1 | redact | tee -a "$report" || true
 if [ "$clip" -eq 1 ]; then
   if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then tail -c +"$((rep_start + 1))" "$report" | clip.exe; echo "proof-run: the report copied to the clipboard"
