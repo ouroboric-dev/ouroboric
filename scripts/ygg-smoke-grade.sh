@@ -2,6 +2,7 @@
 # Run the grader smoke (v0-H16): `ygg run` with scripted agents on a real engine, ending in the grade node, then
 # `ygg grade` again, on the reference solution and on an empty product of the task smoke-notes.
 #   ygg-smoke-grade.sh [--build] [--folder DIR] [--tasks DIR] [--odin DIR] [--limits] [--clip]
+#                      [--task ID --suite-dir DIR --reference DIR [--suite-engine DIR]]
 # The suite is the PUBLIC sample suite of the task (smoke-notes/sample-suite/tests): this script never reads or
 # writes a hidden suite. It copies the public suite into DIR/smoke-grade-<time>/suites/smoke-notes/v1/tests, and
 # that folder is the grader's suite_dir. Needs DIR/factory.yaml (it names the engine; this script never writes
@@ -18,6 +19,18 @@
 # The checks: reward 1 for the reference; reward below 1 for the empty product; no container with the label
 # ygg.grader is left; ygg doctor finds none; no container that is not a grader ever held the suite folder
 # (the engine is polled every second while the run goes); score.json is in the run folder and in no other place.
+# With --suite-dir the script grades the reference solution of another task (--task, e.g. client-gallery-lite)
+# against a suite store that is not the script's, e.g. the hidden one: it points the grader's suite_dir at DIR as it
+# is (layout DIR/<task>/<suite>/tests/{test.sh,manifest.json}) and never copies or reads it. --reference DIR is the
+# task's reference solution (server.mjs, public/, package.json, package-lock.json, start.sh; solve.sh is Harbor's and
+# is not copied). Then the reference case is built on the host: the files go to the PROJECT ROOT (the grader's /app is
+# the committed export of the project, and its own start.sh is what runs), `npm ci --omit=dev` runs there and
+# node_modules is committed too, because the grader has no network. The scripted agents only write a README into
+# the leaf, so the run still ends in the grade node. The empty case is the same project without the files. The
+# engine must see DIR: when it is not under --folder, --suite-engine DIR2 is where the engine sees it (one more
+# sandbox.mounts entry). The engine's own output goes to files in the work folder, not to the screen, and the
+# summary has numbers only (reward, totals, categories as numbers without names): no scenario id or name is printed.
+# Without --suite-dir nothing of this applies and --reference is refused.
 # Exit 0 only when every check passes. The grader runs without a memory or CPU limit (grader.memory: none,
 # cpus: 0), because rootless Podman without cgroup delegation cannot apply them; --limits asks for 4g and 4 CPUs.
 # Defaults: DIR=$HOME/ygg-it. For tests and other machines: YGG_CMD (how ygg runs), YGG_ODIN (the odin folder),
@@ -25,14 +38,18 @@
 # comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="$HOME/ygg-it" tasks="$HERE/../../mimir" limits=0 clip=0 build=0
+dir="$HOME/ygg-it" tasks="$HERE/../../mimir" limits=0 clip=0 build=0 task=smoke-notes suitedir="" reference="" suiteengine=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
-usage() { echo "usage: ygg-smoke-grade.sh [--folder DIR] [--tasks DIR] [--odin DIR] [--build] [--limits] [--clip]" >&2; exit 2; }
+usage() { echo "usage: ygg-smoke-grade.sh [--folder DIR] [--tasks DIR] [--odin DIR] [--build] [--limits] [--clip] [--task ID --suite-dir DIR --reference DIR [--suite-engine DIR]]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --folder) [ $# -ge 2 ] || usage; dir="$2"; shift 2 ;;
     --tasks) [ $# -ge 2 ] || usage; tasks="$2"; shift 2 ;;
     --odin) [ $# -ge 2 ] || usage; odin="$2"; shift 2 ;;
+    --task) [ $# -ge 2 ] || usage; task="$2"; shift 2 ;;
+    --suite-dir) [ $# -ge 2 ] || usage; suitedir="$2"; shift 2 ;;
+    --reference) [ $# -ge 2 ] || usage; reference="$2"; shift 2 ;;
+    --suite-engine) [ $# -ge 2 ] || usage; suiteengine="$2"; shift 2 ;;
     --build) build=1; shift ;;
     --limits) limits=1; shift ;;
     --clip) clip=1; shift ;;
@@ -40,7 +57,6 @@ while [ $# -gt 0 ]; do
   esac
 done
 fail() { echo "smoke-grade: $*" >&2; exit 2; }
-task=smoke-notes
 bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 
 export PATH="$dir/dc/node_modules/.bin:$PATH"
@@ -52,21 +68,55 @@ fi
 engine="$(sed -n 's/^[[:space:]]*engine:[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$dir/factory.yaml" | head -n 1)"
 case "$engine" in unix://*) ;; *) fail "sandbox.engine in $dir/factory.yaml is '${engine:-missing}'; it must be a unix:// URL" ;; esac
 for tool in jq python3 podman git; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
+[ -z "$suitedir" ] || [ -n "$reference" ] || fail "--suite-dir needs --reference (the reference solution of the task)"
+[ -n "$suitedir" ] || [ -z "$reference" ] || fail "--reference needs --suite-dir; without it the reference is the public sample suite's"
+[ -n "$suitedir" ] || [ -z "$suiteengine" ] || fail "--suite-engine needs --suite-dir"
+if [ -n "$suitedir" ]; then
+  for tool in node npm; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed; the reference needs 'npm ci' on the host (the grader has no network)"; done
+fi
 tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no mimir folder at $tasks (--tasks)"
 odin="$(cd "$odin" 2>/dev/null && pwd)" || fail "no odin folder at $odin (--odin)"
 realm="$odin/testdata/smoke-grade"
 public="$tasks/$task/sample-suite"
-for f in "$tasks/$task/task.toml" "$tasks/$task/instruction.md" "$public/tests/manifest.json" "$public/tests/test.sh" "$public/reference/start.sh" "$realm/pack.yaml"; do
+needed=("$tasks/$task/task.toml" "$tasks/$task/instruction.md" "$realm/pack.yaml")
+if [ -z "$suitedir" ]; then needed+=("$public/tests/manifest.json" "$public/tests/test.sh" "$public/reference/start.sh"); fi
+for f in "${needed[@]}"; do
   [ -f "$f" ] || fail "$f is missing"
 done
 suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
 [ -n "$suite" ] || fail "$tasks/$task/task.toml has no metadata.suite"
+suite_cfg="" suite_needle="" # the grader's suite_dir, and how the engine names it (as a container mount source)
+if [ -n "$suitedir" ]; then
+  suitedir="$(cd "$suitedir" 2>/dev/null && pwd)" || fail "no suite folder at $suitedir (--suite-dir)"
+  reference="$(cd "$reference" 2>/dev/null && pwd)" || fail "no reference folder at $reference (--reference)"
+  # Only whether the two files are there; nothing in the suite is read.
+  for f in "$suitedir/$task/$suite/tests/test.sh" "$suitedir/$task/$suite/tests/manifest.json"; do
+    [ -f "$f" ] || fail "$f is missing; the suite folder must be DIR/<task>/<suite>/tests (suite $suite)"
+  done
+  for f in server.mjs package.json package-lock.json start.sh; do
+    [ -f "$reference/$f" ] || fail "$reference/$f is missing (--reference)"
+  done
+  [ -d "$reference/public" ] || fail "$reference/public is missing (--reference)"
+  suite_cfg="$suitedir"
+  case "$suitedir" in
+    "$dir"/*) suite_needle="$bind${suitedir#"$dir"}" ;;
+    *)
+      [ -n "$suiteengine" ] || fail "the engine sees only $dir (as $bind); say where it sees $suitedir with --suite-engine DIR (a bind mount of it, like $bind)"
+      suite_needle="$suiteengine" ;;
+  esac
+fi
 
 work="$dir/smoke-grade-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$work/suites/$task/$suite"
-cp -r "$public/tests" "$work/suites/$task/$suite/tests"
+mkdir -p "$work"
 echo "smoke-grade: made $work"
-echo "smoke-grade: the suite is the PUBLIC sample suite $public/tests (suite $suite)"
+if [ -n "$suitedir" ]; then
+  echo "smoke-grade: the suite is the folder $suitedir (suite $suite), used as it is, not copied; the reference is $reference"
+else
+  mkdir -p "$work/suites/$task/$suite"
+  cp -r "$public/tests" "$work/suites/$task/$suite/tests"
+  suite_cfg="$work/suites" suite_needle="$(basename "$work")/suites"
+  echo "smoke-grade: the suite is the PUBLIC sample suite $public/tests (suite $suite)"
+fi
 
 ygg="${YGG_CMD:-}"
 if [ -z "$ygg" ]; then
@@ -99,7 +149,10 @@ PY
 
 # config CASE: the factory.yaml of a case, on stdout.
 config() {
-  local memory=none cpus=0
+  local memory=none cpus=0 more=""
+  # A suite folder the engine does not see through the first mount has a mount of its own.
+  case "$suite_cfg" in "$dir"/*) ;; *) more="
+    - { host: $suite_cfg, engine: $suiteengine }" ;; esac
   [ "$limits" -eq 0 ] || { memory=4g cpus=4; }
   cat <<EOF
 mode: unattended
@@ -113,10 +166,10 @@ budget:
 sandbox:
   engine: $engine
   mounts:
-    - { host: $dir, engine: $bind }
+    - { host: $dir, engine: $bind }$more
 grader:
   tasks_dir: $tasks
-  suite_dir: $work/suites
+  suite_dir: $suite_cfg
   timeout: 10m
   memory: $memory
   cpus: $cpus
@@ -158,19 +211,59 @@ watch() {
   done
 }
 
+# project_from_reference CASE PROJECT: the project (umbrella.yaml is there) is committed with, for the reference case,
+# the reference solution at its root: the grader's /app is the committed export of the project, and the
+# reference's own start.sh is what it runs. Test-project hack for this smoke (open question B-118 for real
+# products): the grader has no network, so `npm ci` runs here on the host and node_modules is committed as well.
+project_from_reference() {
+  local c="$1" project="$2" entry name paths=(umbrella.yaml)
+  if [ "$c" = reference ]; then
+    # Everything but solve.sh, which is Harbor's (hidden files too).
+    for entry in "$reference"/* "$reference"/.[!.]*; do
+      [ -e "$entry" ] || continue
+      name="$(basename "$entry")"
+      [ "$name" != solve.sh ] || continue
+      cp -R "$entry" "$project/$name"
+      paths+=("$name")
+    done
+    chmod +x "$project/start.sh"
+    (cd "$project" && npm ci --omit=dev --no-audit --no-fund) >"$project/../npm-ci.txt" 2>&1 \
+      || { sed 's/^/  | /' "$project/../npm-ci.txt" >&2; fail "npm ci failed in $project (the reference needs it; see $project/../npm-ci.txt)"; }
+    paths+=(node_modules)
+  fi
+  # -f: a .gitignore of the reference must not hide node_modules from the grader's export.
+  git -C "$project" add -f -- "${paths[@]}"
+  git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the grader smoke project"
+}
+
+# numbers FILE: the totals of a score.json as numbers only. The suite may be hidden: no scenario id or name
+# (not even a category name) is ever printed.
+numbers() {
+  jq -r '
+    def n: if type == "number" then tostring else "?" end;
+    "fail-to-pass \(.fail_to_pass.passed | n)/\(.fail_to_pass.total | n), pass-to-pass \(.pass_to_pass.passed | n)/\(.pass_to_pass.total | n)",
+    ((.categories // {}) | to_entries | sort_by(.key) | to_entries[]
+      | "category \(.key + 1): \(.value.value.passed | n)/\(.value.value.total | n), weight \(.value.value.weight | n)")' "$1" 2>/dev/null || true
+}
+
 oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   local c="$1" v="$work/$1" project id rc
   project="$v/project"
   mkdir -p "$project"
   git -C "$project" init -q -b main
   printf 'root: true\nowner: ouroboric-dev\nvisibility: private\n' >"$project/umbrella.yaml"
-  # The grader's /app is the project. The product is the leaf's; this file starts it.
-  # shellcheck disable=SC2016
-  printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec ./start.sh\n' >"$project/start.sh"
-  chmod +x "$project/start.sh"
-  git -C "$project" add umbrella.yaml start.sh
-  git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the grader smoke project"
-  script "$c" "$v/script.yaml"
+  if [ -n "$suitedir" ]; then
+    project_from_reference "$c" "$project"
+    script empty "$v/script.yaml"
+  else
+    # The grader's /app is the project. The product is the leaf's; this file starts it.
+    # shellcheck disable=SC2016
+    printf '#!/bin/sh\ncd "$(dirname "$0")/repos/notes" && exec ./start.sh\n' >"$project/start.sh"
+    chmod +x "$project/start.sh"
+    git -C "$project" add umbrella.yaml start.sh
+    git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the grader smoke project"
+    script "$c" "$v/script.yaml"
+  fi
   config "$c" >"$v/factory.yaml"
   : >"$v/mounts.log"
   watch "$v/mounts.log" &
@@ -178,15 +271,29 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   # An interrupt or an early exit must not leave the poller running.
   trap 'touch "$watchlog.stop"; kill "$watcher" 2>/dev/null || true' EXIT
   set +e
-  eval "$ygg run --project '$project' --config '$v/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'" 2>&1 | tee "$v/run.txt"
-  rc="${PIPESTATUS[0]}"
+  if [ -n "$suitedir" ]; then
+    # The suite may be hidden: what the engine prints stays in a file (it can name a scenario).
+    eval "$ygg run --project '$project' --config '$v/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'" >"$v/run.txt" 2>&1
+    rc=$?
+    echo "smoke-grade: $c: ygg run exited $rc; its output is in $v/run.txt (it may name scenarios: do not paste it)"
+  else
+    eval "$ygg run --project '$project' --config '$v/factory.yaml' --graph '$realm' --brief '$tasks/$task/instruction.md'" 2>&1 | tee "$v/run.txt"
+    rc="${PIPESTATUS[0]}"
+  fi
   set -e
   id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
   check "$c: ygg run ended done (exit $rc, run ${id:-none})" is_done "$rc" "$id"
   if [ -n "$id" ]; then
     set +e
-    eval "$ygg grade '$id' --project '$project'" 2>&1 | tee "$v/grade.txt"
-    local grc="${PIPESTATUS[0]}"
+    local grc
+    if [ -n "$suitedir" ]; then
+      eval "$ygg grade '$id' --project '$project'" >"$v/grade.txt" 2>&1
+      grc=$?
+      echo "smoke-grade: $c: ygg grade exited $grc; its output is in $v/grade.txt (do not paste it)"
+    else
+      eval "$ygg grade '$id' --project '$project'" 2>&1 | tee "$v/grade.txt"
+      grc="${PIPESTATUS[0]}"
+    fi
     eval "$ygg doctor --project '$project' --config '$v/factory.yaml'" >"$v/doctor.txt" 2>&1
     set -e
     check "$c: ygg grade of the finished run exited 0" is_zero "$grc"
@@ -197,6 +304,7 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   local score="$project/.factory/runs/${id:-none}/score.json" reward=none
   [ -f "$score" ] && reward="$(jq -r '.reward' "$score")"
   echo "smoke-grade: $c reward $reward"
+  [ -z "$suitedir" ] || [ ! -f "$score" ] || numbers "$score" | sed "s/^/smoke-grade: $c: /"
   if [ "$c" = reference ]; then
     check "reference: reward is 1" jq -e '.reward == 1' "$score"
   else
@@ -205,8 +313,7 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
   check "$c: the ledger has grade_finished twice (the node, then the command)" is_count "$project/.factory/runs/${id:-none}/ledger.jsonl" '"event": ?"grade_finished"' 2
   check "$c: no container with the label ygg.grader is left" is_empty "$(podman ps -a -q --filter label=ygg.grader 2>/dev/null || true)"
   check "$c: ygg doctor finds 0 grader containers" grep -q ' 0 grader container' "$v/doctor.txt"
-  local needle
-  needle="$(basename "$work")/suites"
+  local needle="$suite_needle"
   check "$c: the watch saw $(seen_agents "$v/mounts.log" "$(basename "$work")/$c/") agent container(s) of this run, and none held the suite folder" \
     not_held "$v/mounts.log" "$needle" "$(basename "$work")/$c/"
   if held "$v/mounts.log" "$needle"; then
@@ -215,7 +322,7 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
     echo "NOTE  $c: the watch did not catch the grader container while it ran (a 1 second poll can miss it)"
   fi
   local found
-  found="$(find "$v" -name 'score.json' | sort)"
+  found="$(find "$v" -name 'score.json' -not -path '*/node_modules/*' | sort)"
   check "$c: score.json is in the run folder and nowhere else" is_same "$found" "$score"
 }
 

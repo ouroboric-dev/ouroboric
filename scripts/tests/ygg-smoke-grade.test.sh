@@ -74,8 +74,9 @@ case "$FAKE_VERB" in
     script="$(grep -o 'script: [^ ,}]*' "$cfg" | head -n 1 | sed 's/^script: //')"
     reward=0
     [ -z "$script" ] || ! grep -q 'server.js' "$script" || reward=1
+    [ ! -f "$proj/server.mjs" ] || reward=1 # a product at the project root (the hidden-suite case)
     [ -z "${FAKE_REWARD:-}" ] || reward="$FAKE_REWARD"
-    printf '{"schema":"ygg.score/v1","reward":%s,"task":"smoke-notes","task_version":"1.0.0","fail_to_pass":{"passed":6,"total":6},"pass_to_pass":{"passed":1,"total":1}}\n' "$reward" >"$proj/.factory/runs/$id/score.json"
+    printf '{"schema":"ygg.score/v1","reward":%s,"task":"smoke-notes","task_version":"1.0.0","fail_to_pass":{"passed":6,"total":6},"pass_to_pass":{"passed":1,"total":1},"categories":{"SECRET-CAT-NAME":{"passed":4,"total":4,"weight":0.75},"other-secret":{"passed":2,"total":2,"weight":0.25}},"scenarios":[{"id":"SECRET-SCN-ID","category":"SECRET-CAT-NAME","status":"passed"}]}\n' "$reward" >"$proj/.factory/runs/$id/score.json"
     [ -z "${FAKE_LEAK:-}" ] || cp "$proj/.factory/runs/$id/score.json" "$proj/score.json"
     {
       echo '{"seq":1,"event":"node_finished","ygg.node.id":"build","gen_ai.usage.input_tokens":1000,"gen_ai.usage.output_tokens":200,"gen_ai.usage.cache_read.input_tokens":5000,"ygg.usage.turns":3,"ygg.usage.cost_usd":0.25}'
@@ -84,11 +85,13 @@ case "$FAKE_VERB" in
       echo '{"seq":4,"event":"run_finished","gen_ai.usage.input_tokens":1500,"gen_ai.usage.output_tokens":300,"ygg.usage.turns":5,"ygg.usage.cost_usd":0.375}'
     } >"$proj/.factory/runs/$id/ledger.jsonl"
     [ -z "${FAKE_LEDGER_UNREADABLE:-}" ] || chmod 000 "$proj/.factory/runs/$id/ledger.jsonl"
+    [ -z "${FAKE_PRINT_ID:-}" ] || echo "scenario SECRET-SCN-ID failed"
     echo "Run $id is done."
     exit "${FAKE_RUN_RC:-0}" ;;
   grade)
     id="$(ls -1 "$proj/.factory/runs" | tail -n 1)"
     echo '{"seq":9,"event":"grade_finished"}' >>"$proj/.factory/runs/$id/ledger.jsonl"
+    [ -z "${FAKE_PRINT_ID:-}" ] || echo "scenario SECRET-SCN-ID failed"
     echo "Graded run $id: smoke-notes 1.0.0 against suite v1." ;;
 esac
 EOF
@@ -104,7 +107,7 @@ case "$1" in
     [ -z "$w" ] || {
       echo "ygg_reference_work_1 - $w/reference/project/repos/notes"
       echo "ygg_empty_work_1 - $w/empty/project/repos/notes"
-      echo "ygg-grader-run-smoke-notes $FAKE_RUN $w/suites/smoke-notes/v1/tests"
+      echo "ygg-grader-run-smoke-notes $FAKE_RUN ${FAKE_SUITE_SRC:-$w/suites/smoke-notes/v1/tests}"
       [ -z "${FAKE_SUITE_LEAK:-}" ] || echo "ygg_leaky_work_1 - $w/suites/smoke-notes"
     } ;;
 esac
@@ -218,6 +221,110 @@ pkill -f 'sleep 31337' 2>/dev/null
 wait "$gpid" 2>/dev/null
 sleep 3
 check "a smoke that is killed leaves no poller of the engine behind" test -z "$(pgrep -f "ygg-smoke-grade.sh --folder $D" || true)"
+
+# --- ygg-smoke-grade.sh against a suite folder that is not the script's (--suite-dir, --reference).
+# Stand-ins: a task, a suite store with a recognisable scenario id, a reference solution and a fake npm.
+mkdir -p "$M/client-gallery-lite"
+printf '[metadata]\nsuite = "v2"\n' >"$M/client-gallery-lite/task.toml"
+printf '# gallery brief\n' >"$M/client-gallery-lite/instruction.md"
+H="$T/hidden"; mkdir -p "$H/client-gallery-lite/v2/tests"
+printf '#!/bin/bash\n' >"$H/client-gallery-lite/v2/tests/test.sh"
+printf '{"schema":"ygg.suite/v1","scenarios":[{"id":"SECRET-SCN-ID"}]}\n' >"$H/client-gallery-lite/v2/tests/manifest.json"
+R="$T/ref"; mkdir -p "$R/public"
+printf 'console.log("gallery");\n' >"$R/server.mjs"
+printf '<h1>gallery</h1>\n' >"$R/public/index.html"
+printf '{"name":"gallery","version":"1.0.0","private":true}\n' >"$R/package.json"
+printf '{"lockfileVersion":3}\n' >"$R/package-lock.json"
+printf '#!/bin/sh\nexec node server.mjs\n' >"$R/start.sh"
+printf 'node_modules\n' >"$R/.gitignore" # a reference that hides node_modules must not hide it from the grader
+printf '#!/bin/bash\necho harbor\n' >"$R/solve.sh"
+chmod 644 "$R/start.sh" # the script makes it executable
+# A fake npm that installs one native-looking module; a fake node. FAKE_NPM_FAIL makes ci fail.
+mkdir -p "$T/npmbin"
+cat >"$T/npmbin/npm" <<'EOF'
+#!/usr/bin/env bash
+echo "$PWD npm $*" >>"${FAKE_NPM_LOG:-/dev/null}"
+[ -z "${FAKE_NPM_FAIL:-}" ] || { echo "npm ERR! offline" >&2; exit 1; }
+mkdir -p node_modules/sharp node_modules/.bin
+echo 'module.exports = {};' >node_modules/sharp/index.js
+EOF
+printf '#!/usr/bin/env bash\necho v24.0.0\n' >"$T/npmbin/node"
+chmod +x "$T/npmbin/npm" "$T/npmbin/node"
+hsum() { (cd "$1" && find . -type f -exec cksum {} + | sort | cksum; find "$1" | sort | cksum); }
+hargs=("${gargs[@]}" --task client-gallery-lite --suite-dir "$H" --reference "$R" --suite-engine /engine/suites)
+PATH="$T/npmbin:$PATH"
+sleep 1
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --task client-gallery-lite --suite-dir "$H"
+check "--suite-dir without --reference is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --reference "$R"
+check "--reference without --suite-dir is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --task client-gallery-lite --suite-dir "$T/nowhere" --reference "$R" --suite-engine /engine/suites
+check "a suite folder that is missing is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --task client-gallery-lite --suite-dir "$H" --reference "$T/nowhere" --suite-engine /engine/suites
+check "a reference folder that is missing is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --task client-gallery-lite --suite-dir "$H" --reference "$R"
+check "a suite folder outside the work folder with no --suite-engine is refused" test "$rc" -eq 2
+check "and the refusal says what the engine needs" has "--suite-engine"
+hbefore="$(hsum "$H")"
+sleep 1
+FAKE_PRINT_ID=1 FAKE_NPM_LOG="$T/npm.log" FAKE_SUITE_SRC=/engine/suites/client-gallery-lite/v2/tests run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
+check "a run against a suite folder passes and exits 0" test "$rc" -eq 0
+w="$(newest "smoke-grade-*")"
+check "the output says the suite folder is used as it is" has "not copied"
+check "the suite store is untouched" test "$(hsum "$H")" = "$hbefore"
+check "the work folder holds no copy of the suite" test -z "$(find "$w" -name manifest.json -not -path '*/node_modules/*' -o -name test.sh -not -path '*/node_modules/*' -o -type d -name suites | head -n 1)"
+check "the grader's suite_dir is the store, as it is" grep -q "suite_dir: $H\$" "$w/reference/factory.yaml"
+check "and the engine is told where it sees the store" grep -q "{ host: $H, engine: /engine/suites }" "$w/reference/factory.yaml"
+P="$w/reference/project"
+check "the reference files are at the project root" test -f "$P/server.mjs" -a -f "$P/public/index.html" -a -f "$P/package.json" -a -f "$P/package-lock.json" -a -f "$P/start.sh"
+check "solve.sh is not copied" test ! -e "$P/solve.sh"
+check "the root start.sh is the reference's own" grep -q 'node server.mjs' "$P/start.sh"
+check "start.sh is committed executable" bash -c "git -C '$P' ls-files -s start.sh | grep -q '^100755'"
+check "node_modules is committed although the reference ignores it" bash -c "git -C '$P' ls-files | grep -q '^node_modules/sharp/index.js'"
+check "the reference files are committed" bash -c "git -C '$P' ls-files | grep -q '^public/index.html' && git -C '$P' ls-files | grep -q '^server.mjs'"
+check "the project tree is clean after the commit" test -z "$(git -C "$P" status --porcelain --ignored | grep -v -e '^!! .factory' -e '^?? .factory' -e '^ . .factory')"
+check "npm ci ran in the project root, offline-safe flags" grep -q "^$P npm ci --omit=dev --no-audit --no-fund\$" "$T/npm.log"
+check "npm ci ran once (the empty case needs none)" test "$(grep -c . "$T/npm.log")" -eq 1
+E="$w/empty/project"
+check "the empty project has no start.sh and no product" test ! -e "$E/start.sh" -a ! -e "$E/server.mjs" -a ! -e "$E/node_modules"
+check "both cases script only a README" test -z "$(grep -l 'server' "$w/reference/script.yaml" "$w/empty/script.yaml")"
+check "the scripted implementer writes the README" grep -q 'path: README.md' "$w/reference/script.yaml"
+check "the reference case grades 1 (suite folder)" has "smoke-grade: reference reward 1"
+check "the empty case grades 0 (suite folder)" has "smoke-grade: empty reward 0"
+check "the totals are printed as numbers" has "fail-to-pass 6/6, pass-to-pass 1/1"
+check "the categories are printed as numbers, in the order of their names, without them" has "category 1: 4/4, weight 0.75"
+check "and the second" has "category 2: 2/2, weight 0.25"
+check "and every check passed" hasnt "FAIL"
+check "the output holds no scenario id" hasnt "SECRET-SCN-ID"
+check "nor a category name" hasnt "SECRET-CAT-NAME"
+check "the report holds none" test -z "$(grep -F -e SECRET-SCN-ID -e SECRET-CAT-NAME "$w/report.txt")"
+check "the engine's own output went to files, not to the screen" grep -q SECRET-SCN-ID "$w/reference/run.txt" "$w/reference/grade.txt"
+check "the watch still sees no agent container hold the suite folder" has "none held the suite folder"
+sleep 1
+FAKE_NPM_FAIL=1 run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
+check "an npm ci that fails stops the smoke with exit 2" test "$rc" -eq 2
+check "and the message names npm ci" has "npm ci"
+sleep 1
+mkdir -p "$T/nonpm"
+for tool in bash env sed head tail date mkdir cat cp rm chmod git jq python3 podman grep find sort awk tee wc basename dirname touch ls cut tr uniq sleep mktemp readlink; do
+  p="$(command -v "$tool" 2>/dev/null)" && ln -sf "$p" "$T/nonpm/$tool"
+done
+printf '#!/usr/bin/env bash\necho 0.89.0\n' >"$T/nonpm/devcontainer"; chmod +x "$T/nonpm/devcontainer"
+cp "$T/bin/ygg" "$T/bin/ygg-cmd" "$T/nonpm/"
+env PATH="$T/nonpm" YGG_CMD="$T/nonpm/ygg-cmd" "$S/ygg-smoke-grade.sh" "${hargs[@]}" >"$T/out" 2>&1; rc=$?
+check "a machine with no npm is refused with exit 2" test "$rc" -eq 2
+check "and the message names npm" has "npm"
+sleep 1
+FAKE_REWARD=0.5 run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
+check "a reference that does not grade 1 fails the smoke (suite folder)" has "FAIL  reference: reward is 1"
+sleep 1
+FAKE_REWARD=1 run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
+check "an empty product that grades 1 fails the smoke (suite folder)" has "FAIL  empty: reward is below 1"
+sleep 1
+mkdir -p "$D/inside/client-gallery-lite/v2/tests"; cp "$H/client-gallery-lite/v2/tests/"* "$D/inside/client-gallery-lite/v2/tests/"
+run "$S/ygg-smoke-grade.sh" "${gargs[@]}" --task client-gallery-lite --suite-dir "$D/inside" --reference "$R"
+check "a suite folder under the folder of --folder needs no --suite-engine" test "$rc" -eq 0
+check "and adds no mount" test "$(grep -c 'host:' "$(newest "smoke-grade-*")/reference/factory.yaml")" -eq 1
 
 # --- ygg-smoke-real.sh. The credentials are made-up values; none may appear anywhere in the output.
 MARK_A='sekret-claude-0123456789'
