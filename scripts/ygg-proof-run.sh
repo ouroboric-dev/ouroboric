@@ -217,20 +217,9 @@ if [ "$dry" -eq 1 ]; then
   exit 0
 fi
 
-# 7. The run. The credentials are sourced in this subshell only; nothing prints them, and the filter replaces
-# their exact values in everything that is shown or kept (it reads them from its own environment).
-redact() {
-  python3 -I -u -c '
-import os, re, sys
-name = re.compile(r"TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL", re.I)
-vals = sorted({v for k, v in os.environ.items() if name.search(k) and len(v) >= 8}, key=len, reverse=True)
-for line in sys.stdin:
-    for v in vals:
-        line = line.replace(v, "[REDACTED]")
-    sys.stdout.write(line)
-    sys.stdout.flush()
-'
-}
+# 7. The run. Only `ygg run` starts model sessions, so only it (and the output filter, which needs the exact values
+# to remove them) gets the credentials: each is sourced in its own subshell and nothing is exported by this shell.
+umask 077 # run.txt and report.txt are private to this user
 load_env() { # in a subshell only
   { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
   set -a
@@ -238,23 +227,64 @@ load_env() { # in a subshell only
   . "$envfile"
   set +a
 }
+# The filter works on bytes (any byte survives), replaces the exact values, and if it cannot run it drains its input
+# so the writer is never killed by SIGPIPE: the output is then withheld, not shown unfiltered.
+redact() {
+  (
+    load_env
+    python3 -I -u -c '
+import os, re, sys
+name = re.compile(rb"TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL", re.I)
+vals = sorted({v for k, v in os.environb.items() if name.search(k) and len(v) >= 8}, key=len, reverse=True)
+out = sys.stdout.buffer
+for line in sys.stdin.buffer:
+    for v in vals:
+        line = line.replace(v, b"[REDACTED]")
+    out.write(line)
+    out.flush()
+' || { echo "proof-run: the output filter failed; the output is withheld" >&2; cat >/dev/null; }
+  )
+}
+# The run alone has the credentials. timeout --foreground keeps timeout in this script's process group, so a
+# terminal Ctrl-C reaches it and ygg; timeout runs in the background of its subshell and its pid is kept, so that a
+# TERM or INT sent to this script (which bash would only handle after the pipeline) is passed on to it. On the wall
+# clock timeout sends INT to ygg and, after the grace period, KILL (exit 137).
+run_part() {
+  if [ "$build" -eq 1 ]; then "${build_argv[@]}" || { echo 2 >"$work/run.rc"; return 0; }; fi
+  (
+    load_env
+    timeout --foreground --signal=INT --kill-after=2m "$wall" "${run_argv[@]}" &
+    tp=$!
+    echo "$tp" >"$work/run.pid"
+    wait "$tp"
+    echo "$?" >"$work/run.rc"
+  )
+}
 out="$work/run.txt"
 echo "proof-run: starting the run (wall clock $wall); this costs money"
 set +e
-(
-  load_env
-  {
-    if [ "$build" -eq 1 ]; then "${build_argv[@]}" || exit 2; fi
-    timeout --signal=INT --kill-after=2m "$wall" "${run_argv[@]}"
-    echo "$?" >"$work/run.rc"
-  } 2>&1 | redact
-) | tee "$out"
+rm -f "$work/run.pid" "$work/run.rc"
+# shellcheck disable=SC2329 # called by the traps
+on_signal() { # SIGNAL: pass it to timeout (and so to ygg)
+  local p
+  p="$(cat "$work/run.pid" 2>/dev/null)" || return 0
+  [ -z "$p" ] || kill -s "$1" "$p" 2>/dev/null
+  return 0
+}
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+(run_part 2>&1 | redact | tee "$out") &
+pl=$!
+while kill -0 "$pl" 2>/dev/null; do wait "$pl"; done
+trap - TERM INT
+rm -f "$work/run.pid"
 set -e
 rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2
-echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock)"
+echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock, 130 or 143 ended by INT or TERM, 137 killed after the grace period, 141 SIGPIPE)"
 
-# 8. The grade and the evidence. The run's id is the newest folder in the project's runs.
+# 8. The grade and the evidence. The run's id is the newest folder in the project's runs. None of these needs a
+# credential; the filter removes the exact values anyway, from anything a tool prints.
 id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
 report="$work/report.txt"
 if [ -z "$id" ] || ! [[ $id =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -267,25 +297,23 @@ step() { # TITLE CMD...: a heading, then the command's output; its exit code is 
   "$@" || echo "(exited $?)"
   echo
 }
-(
-  load_env
-  set +e
-  {
-    echo "# proof run $name: run $id, exit code $rc"
-    echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer; brief SHA-256 $have"
-    echo
-    case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
-    step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
-    if [ -n "$baseline" ]; then
-      step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$project"
-    fi
-    step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
-    if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
-      step "cost" "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
-      step "evidence" env YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --output "$out" "$project" "$id"
-    fi
-  } 2>&1 | redact
-) | tee "$report"
+evidence_part() {
+  echo "# proof run $name: run $id, exit code $rc"
+  echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer; brief SHA-256 $have"
+  echo
+  case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
+  step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
+  if [ -n "$baseline" ]; then
+    step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$project"
+  fi
+  step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
+  if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
+    step "cost" "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
+    step "evidence" env YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --output "$out" "$project" "$id"
+  fi
+}
+set +e # nothing after the run may change the run's exit code
+evidence_part 2>&1 | redact | tee "$report" || true
 if [ "$clip" -eq 1 ]; then
   if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then clip.exe <"$report"; echo "proof-run: report.txt copied to the clipboard"
   else echo "proof-run: --clip needs clip.exe (WSL); the report is in $report" >&2; fi

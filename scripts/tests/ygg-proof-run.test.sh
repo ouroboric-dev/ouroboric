@@ -65,6 +65,8 @@ case "$1" in
     echo '{"pending":"ship-gate","pending_gate":"soft"}' >"$d/run.json"
     echo "the run runs"
     [ -z "${FAKE_PLANT:-}" ] || echo "run saw $FAKE_PLANT"
+    [ -z "${FAKE_BAD:-}" ] || printf 'bad \377 byte %s\n' "${FAKE_PLANT:-}"
+    if [ -n "${FAKE_SLEEP:-}" ]; then echo $$ >"$FAKE_DIR/run.pid"; exec sleep "$FAKE_SLEEP"; fi
     exit "${FAKE_RUN_RC:-0}" ;;
   grade | metrics | report | status)
     echo "$1 output"
@@ -267,6 +269,43 @@ check "the shimmed full run exits 0" test "$rc" -eq 0
 check "the shimmed full run called the readers" test -s "$T/shim.log"
 check "the full run called no reader with the suites folder" bash -c '! grep -q -F -- "$1" "$2"' _ "$SU" "$T/shim.log"
 check "the full run called no reader with a folder inside the suites folder" bash -c '! grep -q -F -- "tiny-task/v7" "$1"' _ "$T/shim.log"
+
+# --- v0-T291 review: least privilege, any byte, the run's exit code, signals, umask
+runit 0
+check "least privilege: only run has the credentials" bash -c 'grep -q -x "run: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && ! grep -E "^(grade|metrics|report|status|doctor): ." "$1"' _ "$T/ygg.env"
+check "least privilege: grade, metrics, report and status ran without them" bash -c 'for s in grade metrics report status; do grep -q -x "$s: " "$1" || exit 1; done' _ "$T/ygg.env"
+runit 0 --build --baseline OLD-RUN
+check "least privilege: sandbox build and metrics --compare ran without them" bash -c 'grep -q -x "sandbox: " "$1" && ! grep -E "^(sandbox|metrics): ." "$1"' _ "$T/ygg.env"
+fresh
+LC_ALL=C.UTF-8 FAKE_BAD=1 FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=3 run proof --name go
+check "an invalid UTF-8 byte does not stop the run: its exit code 3 is kept" test "$rc" -eq 3
+check "an invalid byte: the planted value is gone from run.txt" bash -c '! grep -a -q -F fake-claude-VALUE-1 "$1"' _ "$(RUND)/run.txt"
+check "an invalid byte: the byte survives in run.txt" python3 -I -c 'import sys; sys.exit(0 if b"bad \xff byte [REDACTED]" in open(sys.argv[1],"rb").read() else 1)' "$(RUND)/run.txt"
+check "an invalid byte: the report is still made" grep -q 'metrics output' "$(RUND)/report.txt"
+# A filter that fails: the run's exit code and the hint stay.
+FP="$T/failpy"; mkdir -p "$FP"; REALPY="$(command -v python3)"
+printf '#!/bin/sh\ncase "$*" in *"-u -c"*) exit 1 ;; esac\nexec "%s" "$@"\n' "$REALPY" >"$FP/python3"; chmod +x "$FP/python3"
+fresh
+PATH="$FP:$PATH" FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=3 run proof --name go
+check "a failing output filter: the script still exits with the run's code 3" test "$rc" -eq 3
+check "a failing output filter: the output ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "approve RUN-1"' _ "$T/out"
+check "a failing output filter: no credential value is printed" hasnt "fake-claude-VALUE-1"
+check "a failing output filter: the metrics call still happened" grep -q '^metrics ' "$T/ygg.calls"
+# Signals: TERM to the script reaches the run.
+fresh; rm -f "$T/run.pid"
+sleep 1
+FAKE_SLEEP=20 FAKE_RUN_RC=0 "$SCRIPT" "${BASE[@]}" --name go >"$T/out" 2>&1 &
+spid=$!
+for _ in $(seq 1 50); do [ -s "$T/run.pid" ] && break; sleep 0.1; done
+rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"
+check "the fake run is running before the signal" kill -0 "$rpid"
+kill -TERM "$spid" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
+check "TERM to the script ends the script" bash -c '! kill -0 "$1" 2>/dev/null' _ "$spid"
+check "TERM to the script ends the run too" bash -c '! kill -0 "$1" 2>/dev/null' _ "$rpid"
+kill -KILL "$spid" "$rpid" 2>/dev/null; wait "$spid" 2>/dev/null
+check "the run's files are private (umask 077)" bash -c '[ "$(stat -c %a "$1")" = 600 ]' _ "$(RUND)/run.txt"
+check "the exit line labels 137 and 141" bash -c 'grep -q "137" "$1" && grep -q "141" "$1"' _ "$SCRIPT"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
