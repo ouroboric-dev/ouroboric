@@ -24,7 +24,7 @@
 # is (layout DIR/<task>/<suite>/tests/{test.sh,manifest.json}) and never copies or reads it. --reference DIR is the
 # task's reference solution (server.mjs, public/, package.json, package-lock.json, start.sh; solve.sh is Harbor's and
 # is not copied). Then the reference case is built on the host: the files go to the PROJECT ROOT (the grader's /app is
-# the committed export of the project, and its own start.sh is what runs), `npm ci --omit=dev` runs there and
+# the committed export of the project, and its own start.sh is what runs), `npm ci --omit=dev --no-bin-links` runs there and
 # node_modules is committed too, because the grader has no network. The scripted agents only write a README into
 # the leaf, so the run still ends in the grade node. The empty case is the same project without the files. The
 # engine must see DIR: when it is not under --folder, --suite-engine DIR2 is where the engine sees it (one more
@@ -227,8 +227,12 @@ project_from_reference() {
       paths+=("$name")
     done
     chmod +x "$project/start.sh"
-    (cd "$project" && npm ci --omit=dev --no-audit --no-fund) >"$project/../npm-ci.txt" 2>&1 \
+    # --no-bin-links: node_modules/.bin would be symlinks, and the grader's export of the project refuses
+    # anything that is not a regular file. The reference starts with `node server.mjs`, so it needs none.
+    (cd "$project" && npm ci --omit=dev --no-audit --no-fund --no-bin-links) >"$project/../npm-ci.txt" 2>&1 \
       || { sed 's/^/  | /' "$project/../npm-ci.txt" >&2; fail "npm ci failed in $project (the reference needs it; see $project/../npm-ci.txt)"; }
+    link="$(find "$project/node_modules" -type l -print -quit)"
+    [ -z "$link" ] || fail "npm ci left a symlink in node_modules (${link#"$project"/}); the grader's export refuses links, so the project cannot be graded"
     paths+=(node_modules)
   fi
   # -f: a .gitignore of the reference must not hide node_modules from the grader's export.

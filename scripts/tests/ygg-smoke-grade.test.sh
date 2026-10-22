@@ -246,6 +246,8 @@ cat >"$T/npmbin/npm" <<'EOF'
 echo "$PWD npm $*" >>"${FAKE_NPM_LOG:-/dev/null}"
 [ -z "${FAKE_NPM_FAIL:-}" ] || { echo "npm ERR! offline" >&2; exit 1; }
 mkdir -p node_modules/sharp node_modules/.bin
+case " $* " in *" --no-bin-links "*) ;; *) ln -s ../sharp/index.js node_modules/.bin/sharp ;; esac
+[ -z "${FAKE_NPM_LINK:-}" ] || ln -s ../sharp/index.js node_modules/stray-link
 echo 'module.exports = {};' >node_modules/sharp/index.js
 EOF
 printf '#!/usr/bin/env bash\necho v24.0.0\n' >"$T/npmbin/node"
@@ -283,7 +285,7 @@ check "start.sh is committed executable" bash -c "git -C '$P' ls-files -s start.
 check "node_modules is committed although the reference ignores it" bash -c "git -C '$P' ls-files | grep -q '^node_modules/sharp/index.js'"
 check "the reference files are committed" bash -c "git -C '$P' ls-files | grep -q '^public/index.html' && git -C '$P' ls-files | grep -q '^server.mjs'"
 check "the project tree is clean after the commit" test -z "$(git -C "$P" status --porcelain --ignored | grep -v -e '^!! .factory' -e '^?? .factory' -e '^ . .factory')"
-check "npm ci ran in the project root, offline-safe flags" grep -q "^$P npm ci --omit=dev --no-audit --no-fund\$" "$T/npm.log"
+check "npm ci ran in the project root, offline-safe flags, with no .bin links" grep -q "^$P npm ci --omit=dev --no-audit --no-fund --no-bin-links\$" "$T/npm.log"
 check "npm ci ran once (the empty case needs none)" test "$(grep -c . "$T/npm.log")" -eq 1
 E="$w/empty/project"
 check "the empty project has no start.sh and no product" test ! -e "$E/start.sh" -a ! -e "$E/server.mjs" -a ! -e "$E/node_modules"
@@ -304,6 +306,10 @@ sleep 1
 FAKE_NPM_FAIL=1 run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
 check "an npm ci that fails stops the smoke with exit 2" test "$rc" -eq 2
 check "and the message names npm ci" has "npm ci"
+sleep 1
+FAKE_NPM_LINK=1 run "$S/ygg-smoke-grade.sh" "${hargs[@]}"
+check "a symlink left in node_modules stops the smoke with exit 2 (the grader's export refuses links)" test "$rc" -eq 2
+check "and the message names the link" has "stray-link"
 sleep 1
 mkdir -p "$T/nonpm"
 for tool in bash env sed head tail date mkdir cat cp rm chmod git jq python3 podman grep find sort awk tee wc basename dirname touch ls cut tr uniq sleep mktemp readlink; do
