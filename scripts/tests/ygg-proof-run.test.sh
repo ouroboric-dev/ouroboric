@@ -364,10 +364,16 @@ for _ in $(seq 1 50); do [ -s "$T/build.pid" ] && break; sleep 0.1; done
 bpid="$(cat "$T/build.pid" 2>/dev/null || echo 0)"
 check "the fake build is running before INT" kill -0 "$bpid"
 kill -INT "$spid" 2>/dev/null
+# The build must stop because of the signal, within 5 s (the fake build sleeps 20 s and ignores INT).
+for _ in $(seq 1 50); do kill -0 "$bpid" 2>/dev/null || break; sleep 0.1; done
+check "INT during the build: the build is gone within 5 s" bash -c '! kill -0 "$1" 2>/dev/null' _ "$bpid"
 for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
+check "INT during the build: the script is gone within 10 s" bash -c '! kill -0 "$1" 2>/dev/null' _ "$spid"
+kill -KILL "$bpid" 2>/dev/null
 wait "$spid" 2>/dev/null; rc=$?
 check "INT during the build: the script exits 130" test "$rc" -eq 130
 check "INT during the build: ygg run is never called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
+check "INT during the build: the output says the run was not started" has "not started"
 check "INT during the build: the build is gone" bash -c '! kill -0 "$1" 2>/dev/null' _ "$bpid"
 kill -KILL "$spid" "$bpid" 2>/dev/null
 
