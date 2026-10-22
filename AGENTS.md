@@ -48,6 +48,7 @@ folder.
 | Write the licence files or the base CI into a folder | `scripts/add-licences.sh`, `scripts/add-ci.sh`. Founder only |
 | Push the prepared `base-ci` branches of existing repos and open their PRs, then require `lint` after the merge | `scripts/rollout-ci.sh --org <org> push\|protect <repo>...`. Founder only |
 | Prove that a Markdown change is formatting only, such as `markdownlint-cli2 --fix` output | `scripts/md-same-text.sh <base-ref> <head-ref>` |
+| Check the journal against spec §10.5 and design criterion 6: front matter, sections, the index, evidence once resolved, a `factory-change` entry citing `ygg metrics --compare` | `scripts/journal-check.sh [DIR]` |
 | Scaffold a new Go component | `scripts/scaffold-component.sh` |
 | Render and check diagrams | `scripts/diagrams.sh` |
 
