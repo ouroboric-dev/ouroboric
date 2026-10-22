@@ -3,7 +3,8 @@
 # and the suites folder that is never read.   scripts/tests/ygg-proof-run.test.sh
 # Each case uses a fake `ygg` (it records its arguments and answers doctor), a fake `devcontainer`, a tiny task, a
 # tiny suites folder and a fake credentials file: no engine, no model, no network. v0-T291: the fake ygg also
-# answers run, grade, metrics, report and status, and logs the credential names of its environment.
+# answers run, grade, metrics, report and status, and logs the credential names of its environment. The ouroboric
+# review: it also answers approve, resume and metrics --compare (which reads both runs from the one project it gets).
 # shellcheck disable=SC2329,SC2016 # check calls has and hasnt by name; the $ in the patterns is literal
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,6 +55,7 @@ cat >"$FB/ygg" <<'EOF3'
 #!/bin/sh
 # Fake ygg (v0-T291): records its arguments and the credential NAMES in its environment, answers each subcommand.
 # FAKE_RUN_RC is the exit code of `run`; FAKE_PLANT is a value it prints from run, metrics, report, grade and status.
+# FAKE_CONT_RC is the exit code of `approve` and `resume`.
 echo "$*" >>"$FAKE_DIR/ygg.calls"
 printf '%s: %s\n' "$1" "$(env | grep -E '^(CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=' | cut -d= -f1 | sort | tr '\n' ' ')" >>"$FAKE_DIR/ygg.env"
 proj="" prev=""
@@ -66,9 +68,37 @@ case "$1" in
     echo "the run runs"
     [ -z "${FAKE_PLANT:-}" ] || echo "run saw $FAKE_PLANT"
     [ -z "${FAKE_BAD:-}" ] || printf 'bad \377 byte %s\n' "${FAKE_PLANT:-}"
+    # FAKE_CHILD: the run starts a child (SIGINT at its default, as a real tool's) that must not outlive it.
+    if [ -n "${FAKE_CHILD:-}" ]; then
+      python3 -I -c 'import os, signal, sys, time; signal.signal(signal.SIGINT, signal.SIG_DFL); open(sys.argv[1], "w").write(str(os.getpid())); time.sleep(20)' "$FAKE_DIR/child.pid" &
+    fi
     if [ -n "${FAKE_SLEEP:-}" ]; then echo $$ >"$FAKE_DIR/run.pid"; exec sleep "$FAKE_SLEEP"; fi
+    # FAKE_TRAP: the run shuts down on INT, HUP or TERM as ygg does: it prints for a second, then ends stopped (3).
+    if [ -n "${FAKE_TRAP:-}" ]; then
+      for s in INT HUP TERM; do
+        trap "echo 'the run got $s; shutting down'; i=0; while [ \$i -lt 5 ]; do echo \"shutdown line \$i\"; sleep 0.2; i=\$((i+1)); done; echo 'the run shut down'; exit 3" "$s"
+      done
+      echo $$ >"$FAKE_DIR/run.pid"
+      while :; do sleep 0.2; done
+    fi
     exit "${FAKE_RUN_RC:-0}" ;;
-  grade | metrics | report | status)
+  approve | resume)
+    echo "$1 runs"
+    [ -z "${FAKE_PLANT:-}" ] || echo "$1 saw $FAKE_PLANT"
+    exit "${FAKE_CONT_RC:-0}" ;;
+  metrics)
+    # The comparison reads both runs from the one project it is given, as ygg does.
+    if [ "$2" = --compare ]; then
+      for r in "$3" "$4"; do
+        [ -f "$proj/.factory/runs/$r/run.json" ] && [ -f "$proj/.factory/runs/$r/ledger.jsonl" ] || { echo "ygg: project $proj has no run $r" >&2; exit 2; }
+      done
+      echo "compare $3 to $4: $(cat "$proj/.factory/runs/$3/run.json")"
+      exit 0
+    fi
+    echo "$1 output"
+    [ -z "${FAKE_PLANT:-}" ] || echo "$1 leaked $FAKE_PLANT"
+    exit 0 ;;
+  grade | report | status)
     echo "$1 output"
     [ -z "${FAKE_PLANT:-}" ] || echo "$1 leaked $FAKE_PLANT"
     exit 0 ;;
@@ -234,14 +264,19 @@ check "exit 5: doctor, run, grade, metrics, report" test "$(calls)" = "doctor,ru
 for c in 1 3 4 124; do
   runit "$c"
   check "exit $c: the script exits $c" test "$rc" -eq "$c"
-  check "exit $c: no grade, but metrics and report" test "$(calls)" = "doctor,run,metrics,report"
+  case "$c" in
+    3 | 4) check "exit $c: no grade, but metrics and report" test "$(calls)" = "doctor,run,metrics,report" ;;
+    *) check "exit $c: no grade; doctor after the abnormal end, then metrics and report" test "$(calls)" = "doctor,run,doctor,metrics,report" ;;
+  esac
   check "exit $c: the exit code is printed" has "exit code $c"
 done
 runit 3
-check "exit 3: the output ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-engine.sh run" && tail -n 1 "$1" | grep -q -F "approve RUN-1 ship-gate"' _ "$T/out"
-check "exit 3: the approve command names the project" bash -c 'tail -n 1 "$1" | grep -q -F -- "--project"' _ "$T/out"
+check "exit 3: the output ends with the script's own --continue --approve command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-proof-run.sh --continue RUN-1 --approve ship-gate"' _ "$T/out"
+check "exit 3: the --continue command names the folder and the credentials file" bash -c 'tail -n 1 "$1" | grep -q -F -- "--folder $2" && tail -n 1 "$1" | grep -q -F -- "--env $3"' _ "$T/out" "$D" "$ENVF"
+check "exit 3: the raw approve command is still there, as a fallback" bash -c 'grep -F "ygg-engine.sh run" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
 runit 4
-check "exit 4: the output says how to resume" bash -c 'tail -n 1 "$1" | grep -q -F "resume RUN-1"' _ "$T/out"
+check "exit 4: the output ends with the script's own --continue --resume command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-proof-run.sh --continue RUN-1 --resume"' _ "$T/out"
+check "exit 4: the raw resume command is still there, as a fallback" bash -c 'grep -F "ygg-engine.sh run" "$1" | grep -q -F "resume RUN-1 --project"' _ "$T/out"
 runit 0 --mode unattended
 RL="$(grep '^run ' "$T/ygg.calls")"
 check "run gets the task's instruction.md as the brief" bash -c 'grep -q -F -- "--brief $1/tiny-task/instruction.md" <<<"$2"' _ "$TK" "$RL"
@@ -251,11 +286,20 @@ check "run gets the filled config and the project" bash -c 'grep -q -E -- "--con
 check "no credential value is in any argument" bash -c '! grep -q VALUE "$1"' _ "$T/ygg.calls"
 check "run has both credentials in its environment" grep -q -x 'run: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY ' "$T/ygg.env"
 check "doctor (the script's own shell) has no credential" grep -q -x 'doctor: ' "$T/ygg.env"
-runit 0 --baseline OLD-RUN
-check "--baseline: metrics --compare follows metrics" test "$(grep -E '^metrics' "$T/ygg.calls" | paste -sd'|' -)" = "metrics RUN-1 --project $(RUND)/project|metrics --compare OLD-RUN RUN-1 --project $(RUND)/project"
+# A baseline is a run of an earlier proof run, in its own proof folder and so its own project.
+OLD=20200101-000000-abcdef
+plant_base() { # [ID [FOLDER]]: a finished run in another proof folder
+  local b="$D/${2:-proof-old-20200101-000000}/project/.factory/runs/${1:-$OLD}"
+  mkdir -p "$b"
+  echo '{"pending":"","marker":"BASELINE-MARK"}' >"$b/run.json"
+  echo '{"event": "run_started"}' >"$b/ledger.jsonl"
+}
+fresh; plant_base; FAKE_RUN_RC=0 run proof --name go --baseline "$OLD"
+check "--baseline: metrics --compare follows metrics, on a project that holds both runs" test "$(grep -E '^metrics' "$T/ygg.calls" | paste -sd'|' -)" = "metrics RUN-1 --project $(RUND)/project|metrics --compare $OLD RUN-1 --project $(RUND)/compare"
+check "--baseline: the baseline in another proof folder is found and compared" grep -q -F "compare $OLD to RUN-1: {\"pending\":\"\",\"marker\":\"BASELINE-MARK\"}" "$(RUND)/report.txt"
 check "--baseline: the comparison is printed as given, with no verdict of the script" bash -c '! grep -q -i -E "better|worse|improv|verdict" "$1"' _ "$T/out"
-runit 3 --baseline OLD-RUN
-check "--baseline with exit 3: the output still ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "approve RUN-1"' _ "$T/out"
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"
+check "--baseline with exit 3: the output still ends with the --continue command" bash -c 'tail -n 1 "$1" | grep -q -F -- "--continue RUN-1 --approve ship-gate"' _ "$T/out"
 fresh
 FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=0 run proof --name go
 check "a planted credential value is not in the printed output" hasnt "fake-claude-VALUE-1"
@@ -280,7 +324,7 @@ check "the full run called no reader with a folder inside the suites folder" bas
 runit 0
 check "least privilege: only run has the credentials" bash -c 'grep -q -x "run: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && ! grep -E "^(grade|metrics|report|status|doctor): ." "$1"' _ "$T/ygg.env"
 check "least privilege: grade, metrics, report and status ran without them" bash -c 'for s in grade metrics report status; do grep -q -x "$s: " "$1" || exit 1; done' _ "$T/ygg.env"
-runit 0 --build --baseline OLD-RUN
+fresh; plant_base; FAKE_RUN_RC=0 run proof --name go --build --baseline "$OLD"
 check "least privilege: sandbox build and metrics --compare ran without them" bash -c 'grep -q -x "sandbox: " "$1" && ! grep -E "^(sandbox|metrics): ." "$1"' _ "$T/ygg.env"
 fresh
 LC_ALL=C.UTF-8 FAKE_BAD=1 FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=3 run proof --name go
@@ -294,7 +338,7 @@ printf '#!/bin/sh\ncase "$*" in *"-u -c"*) exit 1 ;; esac\nexec "%s" "$@"\n' "$R
 fresh
 PATH="$FP:$PATH" FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=3 run proof --name go
 check "a failing output filter: the script still exits with the run's code 3" test "$rc" -eq 3
-check "a failing output filter: the output ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "approve RUN-1"' _ "$T/out"
+check "a failing output filter: the output ends with the --continue command" bash -c 'tail -n 1 "$1" | grep -q -F -- "--continue RUN-1 --approve ship-gate"' _ "$T/out"
 check "a failing output filter: no credential value is printed" hasnt "fake-claude-VALUE-1"
 check "a failing output filter: the metrics call still happened" grep -q '^metrics ' "$T/ygg.calls"
 # Signals: TERM to the script reaches the run.
@@ -332,6 +376,7 @@ bpid="$(cat "$T/build.pid" 2>/dev/null || echo 0)"
 check "the fake build is running before the signal" kill -0 "$bpid"
 kill -TERM "$spid" 2>/dev/null
 for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
+kill -KILL "$spid" 2>/dev/null || true # never wait without a bound
 wait "$spid" 2>/dev/null; rc=$?
 check "TERM during the build: the script exits 143" test "$rc" -eq 143
 check "TERM during the build: ygg run is never called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
@@ -377,6 +422,152 @@ check "INT during the build: ygg run is never called" bash -c '! grep -q "^run "
 check "INT during the build: the output says the run was not started" has "not started"
 check "INT during the build: the build is gone" bash -c '! kill -0 "$1" 2>/dev/null' _ "$bpid"
 kill -KILL "$spid" "$bpid" 2>/dev/null
+
+# --- the ouroboric review (C1): a terminal's Ctrl-C and hang-up reach the script's whole process group
+# The script is started as a terminal starts it: in its own process group, with SIGINT and SIGHUP at their defaults.
+startg() { # ARGS...: the script in the background; spid is its pid and its process group
+  python3 -I -c 'import os, signal, sys; os.setpgid(0, 0); signal.signal(signal.SIGINT, signal.SIG_DFL); signal.signal(signal.SIGHUP, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' "$SCRIPT" "${BASE[@]}" "$@" >"$T/out" 2>&1 &
+  spid=$!
+}
+waitfor() { for _ in $(seq 1 50); do [ -s "$1" ] && break; sleep 0.1; done; } # FILE: at most 5 s
+gone() { for _ in $(seq 1 150); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.1; done; return 1; } # PID: at most 15 s
+pgid_of() { ps -o pgid= -p "$1" 2>/dev/null | tr -d ' '; }
+reap() { # what a failing case leaves: the script's group and the fake run's group (timeout's)
+  kill -KILL -- "-$spid" 2>/dev/null; [ -z "${rpg:-}" ] || kill -KILL -- "-$rpg" 2>/dev/null
+  kill -KILL "$spid" 2>/dev/null || true # never wait without a bound
+  wait "$spid" 2>/dev/null
+}
+for sig in INT HUP; do
+  fresh; rm -f "$T/run.pid"; sleep 1
+  FAKE_TRAP=1 startg --name go
+  waitfor "$T/run.pid"; rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"; rpg="$(pgid_of "$rpid")"
+  check "$sig to the group: the fake run is running before the signal" kill -0 "$rpid"
+  sleep 0.5
+  kill -s "$sig" -- "-$spid" 2>/dev/null
+  run_alive=1 rc=999
+  if gone "$spid"; then
+    kill -0 "$rpid" 2>/dev/null || run_alive=0 # the moment the script has ended, the run must be over
+    wait "$spid" 2>/dev/null; rc=$?
+  fi
+  check "$sig to the group: the script ends (within 15 s)" test "$rc" -ne 999
+  check "$sig to the group: the script does not end before the run" test "$run_alive" -eq 0
+  check "$sig to the group: the script's exit code is the run's (3)" test "$rc" -eq 3
+  check "$sig to the group: the run's shutdown lines are in run.txt" bash -c 'grep -q "shutdown line 4" "$1" && grep -q "the run shut down" "$1"' _ "$(RUND)/run.txt"
+  check "$sig to the group: the run got the signal once" test "$(grep -c "the run got" "$(RUND)/run.txt")" = 1
+  check "$sig to the group: report.txt is made after the run" grep -q 'metrics output' "$(RUND)/report.txt"
+  reap
+done
+# A terminal that closes: the kernel hangs up the session (the script leads it here), and every later write to the
+# terminal fails. The script must still stop the run, keep its exit code and make the report.
+fresh; rm -f "$T/run.pid"; sleep 1
+FAKE_TRAP=1 timeout 60 python3 -I - "$T/run.pid" "$SCRIPT" "${BASE[@]}" --name go >"$T/pty.out" 2>&1 <<'PY2'
+import os, pty, select, signal, sys, time
+ready, argv = sys.argv[1], sys.argv[2:]
+pid, fd = pty.fork()
+if pid == 0:
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGHUP, signal.SIG_DFL)
+    os.execv(argv[0], argv)
+def drain(secs):
+    end = time.time() + secs
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try:
+                os.read(fd, 4096)
+            except OSError:
+                return
+end = time.time() + 5
+while time.time() < end and not os.path.exists(ready):
+    drain(0.1)
+drain(0.5)
+os.close(fd)  # the terminal closes
+end = time.time() + 15
+while time.time() < end:
+    p, status = os.waitpid(pid, os.WNOHANG)
+    if p:
+        print("rc=%d" % os.waitstatus_to_exitcode(status))
+        sys.exit(0)
+    time.sleep(0.1)
+os.kill(pid, signal.SIGKILL)
+os.waitpid(pid, 0)
+print("rc=still-running")
+PY2
+rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"; rpg="$(pgid_of "$rpid")"
+check "a closed terminal: the script ends with the run's exit code (3)" grep -q -x 'rc=3' "$T/pty.out"
+check "a closed terminal: the run is stopped" bash -c '! kill -0 "$1" 2>/dev/null' _ "$rpid"
+check "a closed terminal: the run's shutdown lines are in run.txt" grep -q "the run shut down" "$(RUND)/run.txt"
+check "a closed terminal: report.txt is made" grep -q 'metrics output' "$(RUND)/report.txt"
+check "a closed terminal: what the script prints after it is kept in hangup.txt" bash -c 'grep -q "exit code 3" "$1" && grep -q -F -- "--continue RUN-1" "$1"' _ "$(RUND)/hangup.txt"
+[ -z "$rpg" ] || kill -KILL -- "-$rpg" 2>/dev/null
+
+# --- the ouroboric review (T2): the real wall clock ends the run and what it started
+fresh; rm -f "$T/run.pid" "$T/child.pid"; sleep 1
+FAKE_SLEEP=20 FAKE_CHILD=1 timeout 60 "$SCRIPT" "${BASE[@]}" --name go --wall 2s >"$T/out" 2>&1; rc=$?
+rpid="$(cat "$T/run.pid" 2>/dev/null || echo 0)"; cpid="$(cat "$T/child.pid" 2>/dev/null || echo 0)"
+check "--wall 2s: the script exits 124" test "$rc" -eq 124
+check "--wall 2s: the fake run is gone" bash -c '[ "$1" != 0 ] && ! kill -0 "$1" 2>/dev/null' _ "$rpid"
+check "--wall 2s: the child the run started is gone" bash -c '[ "$1" != 0 ] && ! kill -0 "$1" 2>/dev/null' _ "$cpid"
+kill -KILL "$rpid" "$cpid" 2>/dev/null
+
+# --- the ouroboric review (I2): after an abnormal end, ygg doctor stops what the run left
+runit 137
+check "exit 137: the script exits 137" test "$rc" -eq 137
+check "exit 137: doctor runs after the run, before the evidence" test "$(calls)" = "doctor,run,doctor,metrics,report"
+check "exit 137: that doctor gets the project and the config" bash -c 'sed -n 3p "$1" | grep -q -E -- "^doctor --project [^ ]*/proof-go-[0-9-]+/project --config [^ ]*/proof-go-[0-9-]+/factory.yaml$"' _ "$T/ygg.calls"
+check "exit 137: that doctor has no credential" test "$(grep -c -x 'doctor: ' "$T/ygg.env")" = 2
+check "exit 137: the doctor's output is in report.txt" grep -q -F '## ygg doctor' "$(RUND)/report.txt"
+runit 0
+check "exit 0: no doctor after the run" test "$(calls)" = "doctor,run,grade,metrics,report"
+
+# --- the ouroboric review (C2): a baseline is found in its own proof folder, or refused before anything starts
+nothing_started() { [ "$rc" -eq 2 ] && [ ! -s "$T/ygg.calls" ] && [ -z "$(find "$D" -maxdepth 1 -name 'proof-go-*')" ]; }
+fresh; plant_base; run proof --name go --baseline 20200101-000000-ffffff
+check "a baseline no proof folder holds: exit 2, nothing started, no folder made" nothing_started
+check "a baseline no proof folder holds: it says so" has "no proof folder under"
+fresh; plant_base; plant_base "$OLD" proof-old2-20200102-000000; run proof --name go --baseline "$OLD"
+check "a baseline two proof folders hold: exit 2, nothing started, no folder made" nothing_started
+check "a baseline two proof folders hold: it says so" has "2 proof folders under"
+fresh; plant_base; run proof --name go --dry-run --baseline "$OLD"
+check "the dry run names the baseline it found and its folder" bash -c 'grep -F "baseline run $2" "$1" | grep -q -F "proof-old-20200101-000000"' _ "$T/out" "$OLD"
+
+# --- the ouroboric review (I1): --continue continues a stopped or paused run inside the script
+CBASE=(--folder "$D" --env "$ENVF")
+cont() { "$SCRIPT" "${CBASE[@]}" "$@"; }
+runc() { "$@" >"$T/out" 2>&1; rc=$?; } # a continuation makes no folder: no wait
+clearlogs() { rm -f "$T/ygg.calls" "$T/ygg.env" "$T/timeout.args"; }
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
+FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --approve ship-gate --note 'looks right'
+check "--continue --approve after 3: exit 0, the continuation's code" test "$rc" -eq 0
+check "--continue --approve: doctor, approve, grade, metrics, the compare, report" test "$(calls)" = "doctor,approve,grade,metrics,metrics,report"
+check "--continue --approve: approve gets the run, the gate, the project and the note" grep -q -x -F "approve RUN-1 ship-gate --project $W/project --note looks right" "$T/ygg.calls"
+check "--continue --approve: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 approve RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
+check "--continue: only approve has the credentials" bash -c 'grep -q -x "approve: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^approve: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
+check "--continue: the output is added to the folder's run.txt" bash -c 'grep -q "the run runs" "$1" && grep -q "approve runs" "$1"' _ "$W/run.txt"
+check "--continue: a planted value is filtered from run.txt and the output" bash -c '! grep -q -F fake-claude-VALUE-1 "$1" && ! grep -q -F fake-claude-VALUE-1 "$2" && grep -q REDACTED "$1"' _ "$W/run.txt" "$T/out"
+check "--continue: the recorded baseline is compared" grep -q -x -F "metrics --compare $OLD RUN-1 --project $W/compare" "$T/ygg.calls"
+check "--continue: the report is added to report.txt" bash -c '[ "$(grep -c "^# proof run go: run RUN-1" "$1")" = 2 ] && grep -q "^## ygg grade" "$1"' _ "$W/report.txt"
+check "--continue: no new proof folder" test "$(find "$D" -maxdepth 1 -name 'proof-go-*' | wc -l)" = 1
+fresh; FAKE_RUN_RC=4 run proof --name go; W="$(RUND)"; clearlogs
+FAKE_CONT_RC=3 runc cont --continue RUN-1 --resume
+check "--continue --resume after 4: resume gets the run and the project" grep -q -x -F "resume RUN-1 --project $W/project" "$T/ygg.calls"
+check "--continue --resume ending 3: no grade, metrics and report" test "$(calls)" = "doctor,resume,metrics,report"
+check "--continue --resume ending 3: the exit code is 3" test "$rc" -eq 3
+check "--continue --resume ending 3: the output ends with the next --continue command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-proof-run.sh --continue RUN-1 --approve ship-gate"' _ "$T/out"
+clearlogs; FAKE_CONT_RC=0 runc cont --continue RUN-1 --resume
+check "--continue --resume ending 0: doctor, resume, grade, metrics, report" test "$(calls)" = "doctor,resume,grade,metrics,report"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --dry-run
+check "--continue --dry-run: exit 0, approve never called" bash -c '[ "$1" -eq 0 ] && ! grep -q "^approve" "$2"' _ "$rc" "$T/ygg.calls"
+check "--continue --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
+refusesc() { [ "$rc" -eq 2 ] && has "$1" && [ ! -s "$T/ygg.calls" ]; } # exit 2, the reason, nothing started
+clearlogs; runc cont --continue NOPE-RUN --resume;                  check "--continue with no such run: refused before anything starts" refusesc "no proof folder under"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --resume; check "--continue with --approve and --resume: refused" refusesc "not both"
+clearlogs; runc cont --continue RUN-1;                              check "--continue with neither --approve nor --resume: refused" refusesc "--approve GATE or --resume"
+clearlogs; runc cont --approve ship-gate;                           check "--approve without --continue: refused" refusesc "go with --continue"
+clearlogs; runc cont --continue RUN-1 --resume --note hi;           check "--note without --approve: refused" refusesc "--note goes with --approve"
+clearlogs; runc cont --continue RUN-1 --resume --name other;        check "--continue with a setup flag: refused" refusesc "keeps the config"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --note $'a\nb'; check "--note with a control character: refused" refusesc "control character"
+clearlogs; runc cont --continue .. --resume;                        check "--continue .. is not a run id" refusesc "not a run id"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"

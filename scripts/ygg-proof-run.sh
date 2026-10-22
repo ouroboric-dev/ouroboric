@@ -8,6 +8,8 @@
 #                    [--run-usd N] [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run]
 #                    [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR]
 #                    [--wall TIME] [--clip]
+#   ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --resume) [--baseline RUN_ID] [--dry-run]
+#                    [--folder DIR] [--env FILE] [--wall TIME] [--clip]
 # AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>; a MODEL has only A-Za-z0-9._/:-
 # because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
 # opencode:openrouter/qwen/qwen3.8-27b; a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000 turns, 24,000,000
@@ -32,30 +34,54 @@
 #   7. with --build runs `ygg sandbox build --all --config C`; runs `ygg run --project P --config C --graph software
 #      --brief <task>/instruction.md --mode M` under `timeout --signal=INT --kill-after=2m WALL`, with the credentials
 #      loaded in that subshell only (never exported by this shell, never in an argument), its output (credential
-#      values removed) shown as it comes and kept in DIR/proof-NAME-TIME/run.txt;
+#      values removed) shown as it comes and kept in DIR/proof-NAME-TIME/run.txt. A Ctrl-C, a closed terminal (HUP)
+#      or a TERM stops the run through timeout, once, and the script waits for it to end; after a hang-up what the
+#      script still prints goes to DIR/proof-NAME-TIME/hangup.txt;
 #   8. prints the exit code (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall
-#      clock) and, after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`
-#      (with --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN`, printed as the CLI gives it: this script
-#      judges nothing), `ygg report RUN`, ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a
-#      filter that replaces the credentials' exact values, and is kept in DIR/proof-NAME-TIME/report.txt (--clip
-#      copies it to the Windows clipboard);
-#   9. for a run that stopped (3) or paused (4), ends with the command that continues it (`ygg approve`, run under
-#      ygg-engine.sh, or `ygg resume`). A stopped or paused run is not graded. The exit code is the run's.
+#      clock); after an abnormal end (any code but 0, 3, 4 and 5) runs `ygg doctor`, which stops the sandboxes a run
+#      left; after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`, with
+#      --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN` (printed as the CLI gives it: this script judges
+#      nothing; each proof run has its own project, so the two run folders are linked into DIR/proof-NAME-TIME/compare
+#      for it), `ygg report RUN`, ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that
+#      replaces the credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this
+#      report to the Windows clipboard);
+#   9. for a run that stopped (3) or paused (4), ends with this script's command that continues it. A stopped or
+#      paused run is not graded. The exit code is the run's.
+# --baseline RUN_ID names a run of an earlier proof run: exactly one DIR/proof-*/project/.factory/runs/RUN_ID must
+# hold it, or the script refuses before it makes anything.
+# --continue RUN_ID continues a run that stopped or paused, in the proof folder under DIR that holds it (the setup
+# flags are refused: the run keeps its config). It checks the credentials and runs `ygg doctor`, then `ygg approve
+# RUN_ID GATE --project P [--note TEXT]` or `ygg resume RUN_ID --project P` as step 7 runs `ygg run` (the same timeout,
+# the credentials in that subshell only, the filter, the output added to run.txt), then steps 8 and 9, with the
+# baseline the proof run recorded unless --baseline names another. The raw `ygg approve` and `ygg resume` commands are
+# printed too, as a fallback: they run without the wall clock, the filter or the report.
 # For tests and other machines: YGG_CMD (how ygg runs), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind).
 set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-usage() { echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2; exit 2; }
+usage() {
+  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
+  echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --resume) [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
+  exit 2
+}
 fail() { echo "proof-run: $*" >&2; exit 2; }
 name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
+cont="" gate_in="" note="" note_set=0 resume=0 setup_flags="" # --continue; the setup flags given (a continued run keeps its config)
 planner=claude-code:sonnet implementer=claude-code:sonnet reviewer=opencode:openrouter/qwen/qwen3.8-27b
 run_turns=1500 run_tokens=12000000 run_usd=5 day_turns=2000 day_tokens=24000000 day_usd=10
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir"
 suites="$HOME/ygg-it/hidden-suites" ygg_dir="$HERE/../../yggdrasil"
 while [ $# -gt 0 ]; do
   case "$1" in
+    --name | --mode | --planner | --implementer | --reviewer | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
+  esac
+  case "$1" in
     --dry-run) dry=1; shift ;;
     --build) build=1; shift ;;
+    --resume) resume=1; shift ;;
+    --continue) [ $# -ge 2 ] || usage; cont="$2"; shift 2 ;;
+    --approve) [ $# -ge 2 ] || usage; gate_in="$2"; shift 2 ;;
+    --note) [ $# -ge 2 ] || usage; note="$2"; note_set=1; shift 2 ;;
     --clip) clip=1; shift ;;
     --name) [ $# -ge 2 ] || usage; name="$2"; shift 2 ;;
     --mode) [ $# -ge 2 ] || usage; mode="$2"; shift 2 ;;
@@ -80,17 +106,29 @@ while [ $# -gt 0 ]; do
 done
 
 # 1. The flags.
-[ -n "$name" ] || fail "--name is needed: the run's name, such as baseline-1"
-[[ $name =~ ^[a-z0-9-]+$ ]] || fail "--name '$name' has characters outside a-z0-9-"
-case "$mode" in key-points | unattended | step-by-step) ;; *) fail "--mode is key-points, unattended or step-by-step, not '$mode'" ;; esac
+run_id_re='^[A-Za-z0-9][A-Za-z0-9._-]*$' # a run id is a folder name: never . or ..
+if [ -n "$cont" ]; then
+  [[ $cont =~ $run_id_re ]] || fail "--continue '$cont' is not a run id"
+  [ -z "$setup_flags" ] || fail "--continue keeps the config of the run's proof folder; it takes none of$setup_flags"
+  if [ -n "$gate_in" ] && [ "$resume" -eq 1 ]; then fail "--continue takes --approve GATE or --resume, not both"; fi
+  if [ -z "$gate_in" ] && [ "$resume" -eq 0 ]; then fail "--continue takes --approve GATE or --resume"; fi
+  if [ -n "$gate_in" ] && ! [[ $gate_in =~ $run_id_re ]]; then fail "--approve '$gate_in' is not a gate name"; fi
+  if [ "$note_set" -eq 1 ] && [ -z "$gate_in" ]; then fail "--note goes with --approve"; fi
+  if [[ $note == *[[:cntrl:]]* ]]; then fail "--note has a control character; a note is one line of text"; fi
+else
+  if [ -n "$gate_in" ] || [ "$resume" -eq 1 ] || [ "$note_set" -eq 1 ]; then fail "--approve, --resume and --note go with --continue RUN_ID"; fi
+  [ -n "$name" ] || fail "--name is needed: the run's name, such as baseline-1"
+  [[ $name =~ ^[a-z0-9-]+$ ]] || fail "--name '$name' has characters outside a-z0-9-"
+  case "$mode" in key-points | unattended | step-by-step) ;; *) fail "--mode is key-points, unattended or step-by-step, not '$mode'" ;; esac
+  for pair in run-turns:"$run_turns" run-tokens:"$run_tokens" day-turns:"$day_turns" day-tokens:"$day_tokens"; do
+    [[ ${pair#*:} =~ ^[1-9][0-9]*$ ]] || fail "--${pair%%:*} is a whole number above 0, not '${pair#*:}'"
+  done
+  for pair in run-usd:"$run_usd" day-usd:"$day_usd"; do
+    [[ ${pair#*:} =~ ^[0-9]+(\.[0-9]+)?$ ]] || fail "--${pair%%:*} is a number of dollars such as 5 or 2.5, not '${pair#*:}'"
+  done
+fi
 [[ $wall =~ ^[1-9][0-9]*[smh]$ ]] || fail "--wall is a number and s, m or h, such as 8h"
-for pair in run-turns:"$run_turns" run-tokens:"$run_tokens" day-turns:"$day_turns" day-tokens:"$day_tokens"; do
-  [[ ${pair#*:} =~ ^[1-9][0-9]*$ ]] || fail "--${pair%%:*} is a whole number above 0, not '${pair#*:}'"
-done
-for pair in run-usd:"$run_usd" day-usd:"$day_usd"; do
-  [[ ${pair#*:} =~ ^[0-9]+(\.[0-9]+)?$ ]] || fail "--${pair%%:*} is a number of dollars such as 5 or 2.5, not '${pair#*:}'"
-done
-if [ -n "$baseline" ]; then [[ $baseline =~ ^[A-Za-z0-9._-]+$ ]] || fail "--baseline '$baseline' is not a run id"; fi
+if [ -n "$baseline" ]; then [[ $baseline =~ $run_id_re ]] || fail "--baseline '$baseline' is not a run id"; fi
 # Folders go into factory.yaml as they are, so their characters cannot change how a YAML line parses.
 safe_path() { # FLAG VALUE
   [[ $2 =~ ^[A-Za-z0-9._/@+-]+$ ]] || fail "$1 '$2' has a character outside A-Za-z0-9._/@+- (no spaces); it goes into factory.yaml"
@@ -109,11 +147,14 @@ role_ok() { # FLAG VALUE: sets agent_of and model_of
     *) fail "$flag is AGENT:MODEL, with AGENT claude-code or opencode, not '$agent'" ;;
   esac
 }
-role_ok --planner "$planner"; role_ok --implementer "$implementer"; role_ok --reviewer "$reviewer"
-paid=0 need_claude=0 need_router=0
-for r in "$planner" "$implementer" "$reviewer"; do
-  case "${r%%:*}" in claude-code) need_claude=1 ;; opencode) need_router=1; paid=1 ;; esac
-done
+roles_ok() { # sets paid, need_claude and need_router
+  role_ok --planner "$planner"; role_ok --implementer "$implementer"; role_ok --reviewer "$reviewer"
+  paid=0 need_claude=0 need_router=0
+  for r in "$planner" "$implementer" "$reviewer"; do
+    case "${r%%:*}" in claude-code) need_claude=1 ;; opencode) need_router=1; paid=1 ;; esac
+  done
+}
+[ -n "$cont" ] || roles_ok
 
 # The engine, the tools.
 export PATH="$dir/dc/node_modules/.bin:$PATH"
@@ -130,33 +171,80 @@ ygg="${YGG_CMD:-ygg}"
 read -r -a ygg_arr <<<"$ygg"
 command -v -- "${ygg_arr[0]:-ygg}" >/dev/null 2>&1 || fail "no ygg on the path (YGG_CMD names how it runs)"
 
-# 2. The task, and that its brief is the frozen one.
-task="${YGG_PROOF_TASK:-client-gallery-lite}"
-tasks="$(cd -P -- "$tasks" 2>/dev/null && pwd -P)" || fail "no task folder at $tasks (--tasks)"
-ygg_dir="$(cd -P -- "$ygg_dir" 2>/dev/null && pwd -P)" || fail "no yggdrasil folder at $ygg_dir (--yggdrasil)"
-for f in "$tasks/$task/task.toml" "$tasks/$task/instruction.md"; do [ -f "$f" ] || fail "no task: $f is missing"; done
-suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
-[ -n "$suite" ] || fail "$tasks/$task/task.toml has no suite key"
-[[ $suite =~ ^[a-z0-9][a-z0-9._-]*$ ]] || fail "the suite '$suite' of $task is not a suite version"
-frozen="$(sed -n 's/^brief_sha256[[:space:]]*=[[:space:]]*"\([0-9a-f]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
-have="$(sha256sum "$tasks/$task/instruction.md" | cut -d' ' -f1)"
-[ -n "$frozen" ] && [ "$have" = "$frozen" ] || fail "$tasks/$task/instruction.md is not the frozen brief: its SHA-256 is $have and task.toml says '${frozen:-nothing}'; a changed brief is another task"
+# A run of an earlier proof run, by its id: exactly one proof folder under DIR may hold it. Each proof run has its
+# own project, so a run is found by its folder name and nothing else; no run folder is read here.
+find_run() { # FLAG RUN_ID: sets hit to that run's folder, or sets why and returns 1
+  local h
+  local -a hits=()
+  for h in "$dir_abs"/proof-*/project/.factory/runs/"$2"; do [ -d "$h" ] && hits+=("$h"); done
+  hit="${hits[0]:-}"
+  case "${#hits[@]}" in
+    1) return 0 ;;
+    0) why="$1: no proof folder under $dir_abs holds a run $2" ;;
+    *) why="$1: ${#hits[@]} proof folders under $dir_abs hold a run $2 (${hits[*]%/project/.factory/runs/*}); a run id must name one run" ;;
+  esac
+  return 1
+}
+baseline_recorded=0
+if [ -z "$cont" ]; then
+  # 2. The task, and that its brief is the frozen one.
+  task="${YGG_PROOF_TASK:-client-gallery-lite}"
+  tasks="$(cd -P -- "$tasks" 2>/dev/null && pwd -P)" || fail "no task folder at $tasks (--tasks)"
+  ygg_dir="$(cd -P -- "$ygg_dir" 2>/dev/null && pwd -P)" || fail "no yggdrasil folder at $ygg_dir (--yggdrasil)"
+  for f in "$tasks/$task/task.toml" "$tasks/$task/instruction.md"; do [ -f "$f" ] || fail "no task: $f is missing"; done
+  suite="$(sed -n 's/^suite[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
+  [ -n "$suite" ] || fail "$tasks/$task/task.toml has no suite key"
+  [[ $suite =~ ^[a-z0-9][a-z0-9._-]*$ ]] || fail "the suite '$suite' of $task is not a suite version"
+  frozen="$(sed -n 's/^brief_sha256[[:space:]]*=[[:space:]]*"\([0-9a-f]*\)".*/\1/p' "$tasks/$task/task.toml" | head -n 1)"
+  have="$(sha256sum "$tasks/$task/instruction.md" | cut -d' ' -f1)"
+  [ -n "$frozen" ] && [ "$have" = "$frozen" ] || fail "$tasks/$task/instruction.md is not the frozen brief: its SHA-256 is $have and task.toml says '${frozen:-nothing}'; a changed brief is another task"
 
-# 3. The suites folder: one test -d, never listed or read.
-# readlink -f resolves the links of the path without entering or listing the suites folder.
-suites_raw="$suites"
-suites="$(readlink -f -- "$suites" 2>/dev/null)" && [ -n "$suites" ] || fail "no suites folder at $suites_raw for $task/$suite (--suites)"
-test -d "$suites/$task/$suite" || fail "the suites folder $suites has no $task/$suite (--suites)"
-work="$dir/proof-$name-$(date +%Y%m%d-%H%M%S)"
-dir_abs="$(cd -P -- "$dir" && pwd -P)"
-work="$dir_abs/${work##*/}"
-for pair in tasks:"$tasks" suites:"$suites" yggdrasil:"$ygg_dir" folder:"$dir_abs"; do safe_path "--${pair%%:*} (resolved)" "${pair#*:}"; done
-inside() { case "$1/" in "$2"/*) return 0 ;; esac; return 1; } # inside A B: A is B or below B
-if inside "$suites" "$tasks"; then fail "the suites folder $suites is inside the tasks folder $tasks"; fi
-if inside "$tasks" "$suites"; then fail "the tasks folder $tasks is inside the suites folder $suites"; fi
-for f in "$tasks" "$suites"; do
-  if inside "$f" "$work"; then fail "$f is inside the project folder $work"; fi
-done
+  # 3. The suites folder: one test -d, never listed or read.
+  # readlink -f resolves the links of the path without entering or listing the suites folder.
+  suites_raw="$suites"
+  suites="$(readlink -f -- "$suites" 2>/dev/null)" && [ -n "$suites" ] || fail "no suites folder at $suites_raw for $task/$suite (--suites)"
+  test -d "$suites/$task/$suite" || fail "the suites folder $suites has no $task/$suite (--suites)"
+  work="$dir/proof-$name-$(date +%Y%m%d-%H%M%S)"
+  dir_abs="$(cd -P -- "$dir" && pwd -P)"
+  work="$dir_abs/${work##*/}"
+  for pair in tasks:"$tasks" suites:"$suites" yggdrasil:"$ygg_dir" folder:"$dir_abs"; do safe_path "--${pair%%:*} (resolved)" "${pair#*:}"; done
+  inside() { case "$1/" in "$2"/*) return 0 ;; esac; return 1; } # inside A B: A is B or below B
+  if inside "$suites" "$tasks"; then fail "the suites folder $suites is inside the tasks folder $tasks"; fi
+  if inside "$tasks" "$suites"; then fail "the tasks folder $tasks is inside the suites folder $suites"; fi
+  for f in "$tasks" "$suites"; do
+    if inside "$f" "$work"; then fail "$f is inside the project folder $work"; fi
+  done
+else
+  # 2. and 3. for --continue: the proof folder that holds the run, and what its setup recorded. The task, the suites
+  # and the config were checked when the run was set up; the config stays as it was.
+  dir_abs="$(cd -P -- "$dir" 2>/dev/null && pwd -P)" || fail "no folder at $dir (--folder)"
+  safe_path "--folder (resolved)" "$dir_abs"
+  find_run --continue "$cont" || fail "$why"
+  work="${hit%/project/.factory/runs/*}"
+  [[ ${work##*/} =~ ^proof-[a-z0-9-]+-[0-9]{8}-[0-9]{6}$ ]] || fail "$work is not a proof folder (proof-NAME-TIME)"
+  [ -f "$work/factory.yaml" ] && [ -f "$work/proof.meta" ] || fail "$work has no factory.yaml or proof.meta: this script did not set it up"
+  meta() { sed -n "s/^$1 //p" "$work/proof.meta" | head -n 1; } # a key's value; each is checked below as a flag is
+  name="$(meta name)" mode="$(meta mode)" planner="$(meta planner)" implementer="$(meta implementer)" reviewer="$(meta reviewer)"
+  task="$(meta task)" suite="$(meta suite)" have="$(meta brief)"
+  [[ $name =~ ^[a-z0-9-]+$ ]] || fail "$work/proof.meta has no proof run name"
+  case "$mode" in key-points | unattended | step-by-step) ;; *) fail "$work/proof.meta has no mode" ;; esac
+  roles_ok
+  [[ $task =~ ^[A-Za-z0-9._-]+$ && $suite =~ ^[a-z0-9][a-z0-9._-]*$ && $have =~ ^[0-9a-f]{64}$ ]] || fail "$work/proof.meta has no task, suite or brief SHA-256"
+  if [ -z "$baseline" ]; then
+    baseline="$(meta baseline)" baseline_recorded=1
+    if [ -n "$baseline" ] && ! [[ $baseline =~ $run_id_re ]]; then fail "$work/proof.meta records a baseline that is not a run id"; fi
+  fi
+  if [ "$baseline" = "$cont" ]; then fail "--baseline $baseline is the run being continued; a run is not its own baseline"; fi
+fi
+# The baseline, found before anything is made or started: a bad one costs nothing. A baseline the proof run recorded
+# that is gone now only drops the comparison, so that the run can still be continued.
+base_dir=""
+if [ -n "$baseline" ]; then
+  if find_run --baseline "$baseline"; then base_dir="$hit"
+  elif [ "$baseline_recorded" -eq 1 ]; then echo "proof-run: $why; the comparison is left out" >&2; baseline=""
+  else fail "$why"
+  fi
+fi
 
 # 4. The credentials, by name. grep -c prints a count and nothing else; no line is shown, stored or compared.
 [ -f "$envfile" ] || fail "the credentials file $envfile is missing"
@@ -168,40 +256,59 @@ for n_ in "${names[@]}"; do
   [ "$n" = 1 ] || fail "$envfile has $n line(s) that set $n_ with a value; the roles need exactly 1"
 done
 
-# 5. The project and the config.
-project="$work/project"
-mkdir -p "$project"
-git -C "$project" init -q -b main
-printf 'root: true\nowner: ouroboric-dev\nvisibility: private\n' >"$project/umbrella.yaml"
-git -C "$project" add umbrella.yaml
-git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the proof run project"
-example="$HERE/testdata/proof/factory.proof.example.yaml"
-[ -f "$example" ] || fail "$example is missing"
-usd_run="" usd_day=""
-if [ "$paid" -eq 1 ]; then usd_run=", usd: $run_usd" usd_day=", usd: $day_usd"; fi
-text="$(<"$example")"
-fill() { text="${text//@$1@/$2}"; }
-fill MODE "$mode"
-fill PLANNER_AGENT "${planner%%:*}"; fill PLANNER_MODEL "${planner#*:}"
-fill IMPLEMENTER_AGENT "${implementer%%:*}"; fill IMPLEMENTER_MODEL "${implementer#*:}"
-fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"
-fill RUN_TOKENS "$run_tokens"; fill RUN_TURNS "$run_turns"; fill RUN_USD "$usd_run"
-fill DAY_TOKENS "$day_tokens"; fill DAY_TURNS "$day_turns"; fill DAY_USD "$usd_day"
-fill ENGINE "$engine"; fill FOLDER "$dir_abs"; fill BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
-fill REALMS "$ygg_dir"; fill GRAPHS "$ygg_dir/voluspa"
-fill TASKS "$tasks"; fill SUITES "$suites"
-printf '%s\n' "$text" >"$work/factory.yaml"
-if grep -q '@[A-Z_]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z_]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
-echo "proof-run: made $work"
-echo "proof-run: the task is $task, suite $suite; the brief is the frozen one (SHA-256 $have)"
-[ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
+if [ -z "$cont" ]; then
+  # 5. The project and the config.
+  project="$work/project"
+  mkdir -p "$project"
+  git -C "$project" init -q -b main
+  printf 'root: true\nowner: ouroboric-dev\nvisibility: private\n' >"$project/umbrella.yaml"
+  git -C "$project" add umbrella.yaml
+  git -C "$project" -c user.name=ygg -c user.email=ygg@example.invalid commit -q -m "the proof run project"
+  example="$HERE/testdata/proof/factory.proof.example.yaml"
+  [ -f "$example" ] || fail "$example is missing"
+  usd_run="" usd_day=""
+  if [ "$paid" -eq 1 ]; then usd_run=", usd: $run_usd" usd_day=", usd: $day_usd"; fi
+  text="$(<"$example")"
+  fill() { text="${text//@$1@/$2}"; }
+  fill MODE "$mode"
+  fill PLANNER_AGENT "${planner%%:*}"; fill PLANNER_MODEL "${planner#*:}"
+  fill IMPLEMENTER_AGENT "${implementer%%:*}"; fill IMPLEMENTER_MODEL "${implementer#*:}"
+  fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"
+  fill RUN_TOKENS "$run_tokens"; fill RUN_TURNS "$run_turns"; fill RUN_USD "$usd_run"
+  fill DAY_TOKENS "$day_tokens"; fill DAY_TURNS "$day_turns"; fill DAY_USD "$usd_day"
+  fill ENGINE "$engine"; fill FOLDER "$dir_abs"; fill BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
+  fill REALMS "$ygg_dir"; fill GRAPHS "$ygg_dir/voluspa"
+  fill TASKS "$tasks"; fill SUITES "$suites"
+  printf '%s\n' "$text" >"$work/factory.yaml"
+  if grep -q '@[A-Z_]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z_]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
+  echo "proof-run: made $work"
+  echo "proof-run: the task is $task, suite $suite; the brief is the frozen one (SHA-256 $have)"
+  [ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
+  # What --continue needs to know about this proof run, one "key value" a line; every value was checked above.
+  printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
+    "$name" "$mode" "$planner" "$implementer" "$reviewer" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
+else
+  project="$work/project"
+  echo "proof-run: continuing run $cont of the proof run $name in $work"
+  echo "proof-run: the task is $task, suite $suite; the brief's SHA-256 was $have"
+fi
 
 # 6. doctor, and the plan.
 echo "proof-run: ygg doctor on that config"
 if ! "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml"; then fail "ygg doctor refused the config; nothing was spent"; fi
 # Commands are printed with %q and never run through eval.
 q() { printf '%q ' "$@"; }
-run_argv=("${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml" --graph software --brief "$tasks/$task/instruction.md" --mode "$mode")
+cont_what="" # for --continue: what the continuation does
+if [ -z "$cont" ]; then
+  run_argv=("${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml" --graph software --brief "$tasks/$task/instruction.md" --mode "$mode")
+elif [ -n "$gate_in" ]; then
+  run_argv=("${ygg_arr[@]}" approve "$cont" "$gate_in" --project "$project")
+  [ "$note_set" -eq 0 ] || run_argv+=(--note "$note")
+  cont_what="approve $gate_in"
+else
+  run_argv=("${ygg_arr[@]}" resume "$cont" --project "$project")
+  cont_what="resume"
+fi
 build_argv=("${ygg_arr[@]}" sandbox build --all --config "$work/factory.yaml")
 run_cmd="$(q "${run_argv[@]}")"
 build_cmd="$(q "${build_argv[@]}")"
@@ -209,7 +316,8 @@ timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
 echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
-[ -z "$baseline" ] || echo "proof-run: after the run: compare with the baseline run $baseline"
+[ -z "$cont_what" ] || echo "proof-run: the continuation: $cont_what"
+[ -z "$baseline" ] || echo "proof-run: after the run: compare with the baseline run $baseline, in ${base_dir%/.factory/runs/*}"
 [ "$clip" -eq 0 ] || echo "proof-run: after the run: the report is copied to the clipboard"
 if [ "$dry" -eq 1 ]; then
   [ "$build" -eq 0 ] || echo "proof-run: would run: $build_cmd"
@@ -250,15 +358,18 @@ for line in sys.stdin.buffer:
   )
 }
 # The run alone has the credentials. timeout is not --foreground: it gets its own process group and, at the wall clock
-# (INT, then KILL after the grace period) or when it is signalled, relays the signal to that whole group, so ygg's
-# sandboxes and model sessions do not outlive it. A terminal Ctrl-C goes to this script's group, not to timeout's,
-# so only the trap's forward reaches ygg, once. timeout runs in the background of its subshell and its pid is kept,
-# so that a TERM or INT sent to this script (which bash would only handle after the pipeline) is passed on to it.
-# The trap also leaves a stop flag: a signal that comes before the pid exists (during the build) is not lost, the
-# build is stopped and no run is started.
+# (INT, then KILL after the grace period) or when it is signalled, relays the signal to that whole group: ygg and the
+# model sessions it starts. The sandboxes are not in that group: they run under the container engine (conmon), and
+# ygg stops them on a clean stop; after an abnormal end (the wall clock, a kill) step 8 runs `ygg doctor`, which finds
+# and stops what is left. A terminal's Ctrl-C (INT) or hang-up (HUP) goes to this script's whole process group, not
+# to timeout's: the pipeline below ignores both, so the filter and tee keep reading until the run ends, and only the
+# trap's forward reaches ygg, once. timeout runs in the background of its subshell and its pid is kept, so that a
+# signal to this script (which bash would only handle after the pipeline) is passed on to it. timeout sets its own
+# handlers, so ygg starts with INT and HUP at their defaults. The trap also leaves a stop flag: a signal that comes
+# before the pid exists (during the build) is not lost, the build is stopped and no run is started.
 run_part() {
   stopped() { [ -f "$work/run.stop" ]; }
-  stop_rc() { if [ "$(cat "$work/run.stop")" = INT ]; then echo 130; else echo 143; fi; }
+  stop_rc() { case "$(cat "$work/run.stop")" in INT) echo 130 ;; HUP) echo 129 ;; *) echo 143 ;; esac; }
   if [ "$build" -eq 1 ] && ! stopped; then
     "${build_argv[@]}" &
     bp=$!
@@ -271,6 +382,7 @@ run_part() {
     stop_rc >"$work/run.rc"
     return 0
   fi
+  [ -z "$cont_what" ] || echo "proof-run: continuing run $cont: $cont_what"
   (
     load_env || { echo 2 >"$work/run.rc"; exit 0; }
     "${timeout_argv[@]}" "${run_argv[@]}" &
@@ -281,15 +393,16 @@ run_part() {
     echo "$?" >"$work/run.rc"
   )
 }
-out="$work/run.txt"
-echo "proof-run: starting the run (wall clock $wall); this costs money"
+out="$work/run.txt" # a continuation adds to it
+if [ -z "$cont" ]; then echo "proof-run: starting the run (wall clock $wall); this costs money"
+else echo "proof-run: continuing the run (wall clock $wall); this costs money"; fi
 set +e
 rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/build.pid"
 # shellcheck disable=SC2329 # called by the traps
 on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build or to timeout (and so to ygg)
   local p f
   [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop"
-  # The build is an async job, which bash starts with SIGINT ignored: it gets TERM for either signal.
+  # The build starts with SIGINT and SIGHUP ignored (an async job, in the pipeline): it gets TERM for any signal.
   p="$(cat "$work/build.pid" 2>/dev/null)" || p=""
   [ -z "$p" ] || kill -s TERM "$p" 2>/dev/null
   p="$(cat "$work/run.pid" 2>/dev/null)" || p=""
@@ -298,19 +411,24 @@ on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build o
 }
 trap 'on_signal TERM' TERM
 trap 'on_signal INT' INT
-(run_part 2>&1 | redact | tee "$out") &
+trap 'on_signal HUP' HUP
+(trap '' INT HUP; run_part 2>&1 | redact | tee -a "$out") &
 pl=$!
 while kill -0 "$pl" 2>/dev/null; do wait "$pl"; done
 trap - TERM INT
+trap '' HUP # the run is over: a hang-up from now on does not cut the report short
 rm -f "$work/run.pid" "$work/build.pid"
+# After a hang-up the terminal is gone and every write to it fails: what is still printed is kept in hangup.txt.
+if [ "$(cat "$work/run.stop" 2>/dev/null)" = HUP ]; then exec >>"$work/hangup.txt" 2>&1; fi
 set -e
 rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2
-echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock, 130 or 143 ended by INT or TERM, 137 killed after the grace period, 141 SIGPIPE)"
+echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 2 refused, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock, 129, 130 or 143 ended by HUP, INT or TERM, 137 killed after the grace period, 141 SIGPIPE)"
 
-# 8. The grade and the evidence. The run's id is the newest folder in the project's runs. None of these needs a
-# credential; the filter removes the exact values anyway, from anything a tool prints.
-id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
+# 8. The grade and the evidence. The run's id is the one continued, or the newest folder in the project's runs. None
+# of these needs a credential; the filter removes the exact values anyway, from anything a tool prints.
+if [ -n "$cont" ]; then id="$cont"
+else id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"; fi
 report="$work/report.txt"
 if [ -z "$id" ] || ! [[ $id =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to grade or report" >&2
@@ -323,13 +441,23 @@ step() { # TITLE CMD...: a heading, then the command's output; its exit code is 
   echo
 }
 evidence_part() {
-  echo "# proof run $name: run $id, exit code $rc"
+  echo "# proof run $name: run $id, exit code $rc${cont_what:+ (continued: $cont_what)}"
   echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer; brief SHA-256 $have"
   echo
+  case "$rc" in
+    0 | 3 | 4 | 5) ;;
+    *) step "ygg doctor (an abnormal end: it finds and stops what the run left)" "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml" ;;
+  esac
   case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
   step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
-  if [ -n "$baseline" ]; then
-    step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$project"
+  if [ -n "$baseline" ] && [ "$baseline" = "$id" ]; then
+    printf '## ygg metrics --compare\n(not run: the baseline is this run)\n\n'
+  elif [ -n "$baseline" ]; then
+    # ygg compares two runs of one project, and each proof run has its own: both run folders are linked into one.
+    mkdir -p "$work/compare/.factory/runs"
+    ln -sfn "$base_dir" "$work/compare/.factory/runs/$baseline"
+    ln -sfn "$project/.factory/runs/$id" "$work/compare/.factory/runs/$id"
+    step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$work/compare"
   fi
   step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
   if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
@@ -338,14 +466,19 @@ evidence_part() {
   fi
 }
 set +e # nothing after the run may change the run's exit code
-evidence_part 2>&1 | redact | tee "$report" || true
+rep_start=0 # a continuation adds its report to report.txt; --clip copies the new one
+[ ! -f "$report" ] || rep_start="$(wc -c <"$report")"
+evidence_part 2>&1 | redact | tee -a "$report" || true
 if [ "$clip" -eq 1 ]; then
-  if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then clip.exe <"$report"; echo "proof-run: report.txt copied to the clipboard"
+  if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then tail -c +"$((rep_start + 1))" "$report" | clip.exe; echo "proof-run: the report copied to the clipboard"
   else echo "proof-run: --clip needs clip.exe (WSL); the report is in $report" >&2; fi
 fi
 echo "proof-run: the folder is $work"
 
-# 9. How to continue a run that stopped or paused. This is the last thing printed.
+# 9. How to continue a run that stopped or paused: this script's --continue, which keeps the wall clock, the filter,
+# run.txt and the report. The raw ygg command is printed first, as a fallback. The last line is the --continue command.
+self=("$HERE/ygg-proof-run.sh" --continue "$id")
+by_hand="proof-run: or by hand, outside this script (no wall clock, no filter, no run.txt or report; load the credentials in that shell first):"
 case "$rc" in
   3)
     gate="$(python3 -I - "$project/.factory/runs/$id/run.json" 2>/dev/null <<'PY' || true
@@ -357,12 +490,16 @@ except Exception:
 PY
 )"
     [[ $gate =~ ^[A-Za-z0-9._-]+$ ]] || gate="<gate>"
-    echo "proof-run: the run stopped at an approval point; to continue it (load the credentials in that shell first), run:"
+    echo "$by_hand"
     echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" approve "$id" "$gate" --project "$project")"
+    echo "proof-run: the run stopped at the approval point $gate; read its gates folder, then continue it (add --note TEXT if you like):"
+    echo "  $(q "${self[@]}" --approve "$gate" --folder "$dir_abs" --env "$envfile")"
     ;;
   4)
-    echo "proof-run: the run paused (the provider's quota); once it is back, run:"
+    echo "$by_hand"
     echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" resume "$id" --project "$project")"
+    echo "proof-run: the run paused (the provider's quota); once it is back, continue it:"
+    echo "  $(q "${self[@]}" --resume --folder "$dir_abs" --env "$envfile")"
     ;;
 esac
 exit "$rc"
