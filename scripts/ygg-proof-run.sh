@@ -205,6 +205,7 @@ run_argv=("${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml"
 build_argv=("${ygg_arr[@]}" sandbox build --all --config "$work/factory.yaml")
 run_cmd="$(q "${run_argv[@]}")"
 build_cmd="$(q "${build_argv[@]}")"
+timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
 echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
@@ -212,7 +213,7 @@ echo "proof-run: the caps in $work/factory.yaml:"
 [ "$clip" -eq 0 ] || echo "proof-run: after the run: the report is copied to the clipboard"
 if [ "$dry" -eq 1 ]; then
   [ "$build" -eq 0 ] || echo "proof-run: would run: $build_cmd"
-  echo "proof-run: would run: timeout --signal=INT --kill-after=2m $wall $run_cmd"
+  echo "proof-run: would run: $(q "${timeout_argv[@]}")$run_cmd"
   echo "proof-run: dry run: nothing was started and the credentials were not loaded"
   exit 0
 fi
@@ -224,38 +225,57 @@ load_env() { # in a subshell only
   { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
   set -a
   # shellcheck source=/dev/null
-  . "$envfile"
+  . "$envfile" || return 1
   set +a
 }
 # The filter works on bytes (any byte survives), replaces the exact values, and if it cannot run it drains its input
 # so the writer is never killed by SIGPIPE: the output is then withheld, not shown unfiltered.
 redact() {
   (
-    load_env
-    python3 -I -u -c '
+    # shellcheck disable=SC2015 # the fallback is for both: the load failing and the filter failing
+    load_env && python3 -I -u -c '
 import os, re, sys
 name = re.compile(rb"TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL", re.I)
 vals = sorted({v for k, v in os.environb.items() if name.search(k) and len(v) >= 8}, key=len, reverse=True)
+if not vals:
+    sys.exit(1)  # no value to remove: fail closed
 out = sys.stdout.buffer
 for line in sys.stdin.buffer:
     for v in vals:
         line = line.replace(v, b"[REDACTED]")
     out.write(line)
     out.flush()
-' || { echo "proof-run: the output filter failed; the output is withheld" >&2; cat >/dev/null; }
+' || { echo "proof-run: the output filter failed or the credentials could not be loaded; the output is withheld" >&2; cat >/dev/null; }
   )
 }
-# The run alone has the credentials. timeout --foreground keeps timeout in this script's process group, so a
-# terminal Ctrl-C reaches it and ygg; timeout runs in the background of its subshell and its pid is kept, so that a
-# TERM or INT sent to this script (which bash would only handle after the pipeline) is passed on to it. On the wall
-# clock timeout sends INT to ygg and, after the grace period, KILL (exit 137).
+# The run alone has the credentials. timeout is not --foreground: it gets its own process group and, at the wall clock
+# (INT, then KILL after the grace period) or when it is signalled, relays the signal to that whole group, so ygg's
+# sandboxes and model sessions do not outlive it. A terminal Ctrl-C goes to this script's group, not to timeout's,
+# so only the trap's forward reaches ygg, once. timeout runs in the background of its subshell and its pid is kept,
+# so that a TERM or INT sent to this script (which bash would only handle after the pipeline) is passed on to it.
+# The trap also leaves a stop flag: a signal that comes before the pid exists (during the build) is not lost, the
+# build is stopped and no run is started.
 run_part() {
-  if [ "$build" -eq 1 ]; then "${build_argv[@]}" || { echo 2 >"$work/run.rc"; return 0; }; fi
+  stopped() { [ -f "$work/run.stop" ]; }
+  stop_rc() { if [ "$(cat "$work/run.stop")" = INT ]; then echo 130; else echo 143; fi; }
+  if [ "$build" -eq 1 ] && ! stopped; then
+    "${build_argv[@]}" &
+    bp=$!
+    echo "$bp" >"$work/build.pid"
+    if stopped; then kill -s TERM "$bp" 2>/dev/null; fi
+    wait "$bp" || { stopped || { echo 2 >"$work/run.rc"; return 0; }; }
+  fi
+  if stopped; then
+    echo "proof-run: stopped by a signal; the run was not started"
+    stop_rc >"$work/run.rc"
+    return 0
+  fi
   (
-    load_env
-    timeout --foreground --signal=INT --kill-after=2m "$wall" "${run_argv[@]}" &
+    load_env || { echo 2 >"$work/run.rc"; exit 0; }
+    "${timeout_argv[@]}" "${run_argv[@]}" &
     tp=$!
     echo "$tp" >"$work/run.pid"
+    if stopped; then kill -s "$(cat "$work/run.stop")" "$tp" 2>/dev/null; fi
     wait "$tp"
     echo "$?" >"$work/run.rc"
   )
@@ -263,12 +283,15 @@ run_part() {
 out="$work/run.txt"
 echo "proof-run: starting the run (wall clock $wall); this costs money"
 set +e
-rm -f "$work/run.pid" "$work/run.rc"
+rm -f "$work/run.pid" "$work/run.rc" "$work/run.stop" "$work/build.pid"
 # shellcheck disable=SC2329 # called by the traps
-on_signal() { # SIGNAL: pass it to timeout (and so to ygg)
-  local p
-  p="$(cat "$work/run.pid" 2>/dev/null)" || return 0
-  [ -z "$p" ] || kill -s "$1" "$p" 2>/dev/null
+on_signal() { # SIGNAL: leave the stop flag, then pass the signal to the build or to timeout (and so to ygg)
+  local p f
+  [ -f "$work/run.stop" ] || echo "$1" >"$work/run.stop"
+  for f in build.pid run.pid; do
+    p="$(cat "$work/$f" 2>/dev/null)" || continue
+    [ -z "$p" ] || kill -s "$1" "$p" 2>/dev/null
+  done
   return 0
 }
 trap 'on_signal TERM' TERM
@@ -277,7 +300,7 @@ trap 'on_signal INT' INT
 pl=$!
 while kill -0 "$pl" 2>/dev/null; do wait "$pl"; done
 trap - TERM INT
-rm -f "$work/run.pid"
+rm -f "$work/run.pid" "$work/build.pid"
 set -e
 rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2

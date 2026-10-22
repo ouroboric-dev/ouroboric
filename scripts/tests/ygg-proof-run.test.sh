@@ -72,9 +72,15 @@ case "$1" in
     echo "$1 output"
     [ -z "${FAKE_PLANT:-}" ] || echo "$1 leaked $FAKE_PLANT"
     exit 0 ;;
+  sandbox)
+    if [ -n "${FAKE_BUILD_SLEEP:-}" ]; then echo $$ >"$FAKE_DIR/build.pid"; exec sleep "$FAKE_BUILD_SLEEP"; fi
+    exit 0 ;;
   *) exit 0 ;;
 esac
 EOF3
+REALTIMEOUT="$(command -v timeout)"
+printf '#!/bin/sh\necho "$*" >>"%s/timeout.args"\nexec "%s" "$@"\n' "$T" "$REALTIMEOUT" >"$FB/timeout"
+chmod +x "$FB/timeout"
 printf '#!/bin/sh\necho 0.89.0\n' >"$FB/devcontainer"
 chmod +x "$FB/ygg" "$FB/devcontainer"
 export YGG_CMD="$FB/ygg" PATH="$FB:$PATH"
@@ -306,6 +312,41 @@ check "TERM to the script ends the run too" bash -c '! kill -0 "$1" 2>/dev/null'
 kill -KILL "$spid" "$rpid" 2>/dev/null; wait "$spid" 2>/dev/null
 check "the run's files are private (umask 077)" bash -c '[ "$(stat -c %a "$1")" = 600 ]' _ "$(RUND)/run.txt"
 check "the exit line labels 137 and 141" bash -c 'grep -q "137" "$1" && grep -q "141" "$1"' _ "$SCRIPT"
+
+# --- v0-T291 review round 2: the process group, a stop before the run, a filter that fails closed
+rm -f "$T/timeout.args"; fresh
+FAKE_RUN_RC=0 run proof --name go --dry-run
+DRYL="$(grep 'would run: timeout' "$T/out" | head -n 1)"
+check "the dry run shows the timeout command without --foreground" bash -c '[[ $1 == *"timeout --signal=INT --kill-after=2m 8h "* && $1 != *foreground* ]]' _ "$DRYL"
+fresh
+FAKE_RUN_RC=0 run proof --name go
+check "the timeout that ran is the one the dry run showed" test "$(head -n 1 "$T/timeout.args" | cut -d' ' -f1-3)" = "--signal=INT --kill-after=2m 8h"
+check "timeout runs without --foreground (it gets its own process group)" bash -c '! grep -q foreground "$1"' _ "$T/timeout.args"
+check "the script header shows the same timeout command" bash -c 'grep -q -F "timeout --signal=INT --kill-after=2m WALL" "$1" && ! grep -q "timeout --foreground" "$1"' _ "$SCRIPT"
+# TERM while the sandbox build sleeps: the run is never started.
+fresh; rm -f "$T/build.pid" "$T/run.pid"; sleep 1
+FAKE_BUILD_SLEEP=20 FAKE_RUN_RC=0 "$SCRIPT" "${BASE[@]}" --name go --build >"$T/out" 2>&1 &
+spid=$!
+for _ in $(seq 1 50); do [ -s "$T/build.pid" ] && break; sleep 0.1; done
+bpid="$(cat "$T/build.pid" 2>/dev/null || echo 0)"
+check "the fake build is running before the signal" kill -0 "$bpid"
+kill -TERM "$spid" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$spid" 2>/dev/null || break; sleep 0.1; done
+wait "$spid" 2>/dev/null; rc=$?
+check "TERM during the build: the script exits 143" test "$rc" -eq 143
+check "TERM during the build: ygg run is never called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
+check "TERM during the build: the output says the run was not started" has "not started"
+check "TERM during the build: the build is gone" bash -c '! kill -0 "$1" 2>/dev/null' _ "$bpid"
+kill -KILL "$spid" "$bpid" 2>/dev/null
+# An env file that cannot be loaded: the filter withholds, the run is not started, no value is shown.
+printf 'CLAUDE_CODE_OAUTH_TOKEN=fake-claude-VALUE-1\nOPENROUTER_API_KEY=fake-router-VALUE-2\nif then (\n' >"$T/env-broken"
+fresh
+FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=0 run proof --name go --env "$T/env-broken"
+check "an env file that cannot be sourced: no credential value is printed" bash -c '! grep -q VALUE "$1"' _ "$T/out"
+check "an env file that cannot be sourced: the output is withheld, and it says so" has "withheld"
+check "an env file that cannot be sourced: ygg run is not called" bash -c '! grep -q "^run " "$1"' _ "$T/ygg.calls"
+check "an env file that cannot be sourced: the exit code is not 0" test "$rc" -ne 0
+check "an env file that cannot be sourced: no credential value in the kept files" bash -c '! grep -r -a -q VALUE "$1"' _ "$(RUND)"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
