@@ -2,7 +2,8 @@
 # Tests for ygg-proof-run.sh (v0-T290): the refusals, the filled factory.yaml, the dry run, the credentials by name
 # and the suites folder that is never read.   scripts/tests/ygg-proof-run.test.sh
 # Each case uses a fake `ygg` (it records its arguments and answers doctor), a fake `devcontainer`, a tiny task, a
-# tiny suites folder and a fake credentials file: no engine, no model, no network, never `ygg run`.
+# tiny suites folder and a fake credentials file: no engine, no model, no network. v0-T291: the fake ygg also
+# answers run, grade, metrics, report and status, and logs the credential names of its environment.
 # shellcheck disable=SC2329,SC2016 # check calls has and hasnt by name; the $ in the patterns is literal
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +49,30 @@ ENVF="$T/factory.env"
 printf 'CLAUDE_CODE_OAUTH_TOKEN=fake-claude-VALUE-1\nOPENROUTER_API_KEY=fake-router-VALUE-2\n' >"$ENVF"
 # Fakes: ygg records its arguments, doctor exits 0; devcontainer answers a version.
 FB="$T/fakebin"; mkdir -p "$FB"
-printf '#!/bin/sh\necho "$*" >>"%s/ygg.calls"\nexit 0\n' "$T" >"$FB/ygg"
+export FAKE_DIR="$T"
+cat >"$FB/ygg" <<'EOF3'
+#!/bin/sh
+# Fake ygg (v0-T291): records its arguments and the credential NAMES in its environment, answers each subcommand.
+# FAKE_RUN_RC is the exit code of `run`; FAKE_PLANT is a value it prints from run, metrics, report, grade and status.
+echo "$*" >>"$FAKE_DIR/ygg.calls"
+printf '%s: %s\n' "$1" "$(env | grep -E '^(CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=' | cut -d= -f1 | sort | tr '\n' ' ')" >>"$FAKE_DIR/ygg.env"
+proj="" prev=""
+for a in "$@"; do [ "$prev" = --project ] && proj="$a"; prev="$a"; done
+case "$1" in
+  run)
+    d="$proj/.factory/runs/RUN-1"; mkdir -p "$d"
+    echo '{"event": "run_started"}' >"$d/ledger.jsonl"
+    echo '{"pending":"ship-gate","pending_gate":"soft"}' >"$d/run.json"
+    echo "the run runs"
+    [ -z "${FAKE_PLANT:-}" ] || echo "run saw $FAKE_PLANT"
+    exit "${FAKE_RUN_RC:-0}" ;;
+  grade | metrics | report | status)
+    echo "$1 output"
+    [ -z "${FAKE_PLANT:-}" ] || echo "$1 leaked $FAKE_PLANT"
+    exit 0 ;;
+  *) exit 0 ;;
+esac
+EOF3
 printf '#!/bin/sh\necho 0.89.0\n' >"$FB/devcontainer"
 chmod +x "$FB/ygg" "$FB/devcontainer"
 export YGG_CMD="$FB/ygg" PATH="$FB:$PATH"
@@ -183,6 +207,66 @@ check "the shimmed dry run exits 0" test "$rc" -eq 0
 check "the shims were called" test -s "$T/shim.log"
 check "no reader was called with the suites folder" bash -c '! grep -q -F -- "$1" "$2"' _ "$SU" "$T/shim.log"
 check "no reader was called with a folder inside the suites folder" bash -c '! grep -q -F -- "tiny-task/v7" "$1"' _ "$T/shim.log"
+
+# --- v0-T291: the run, the grade and the evidence
+calls() { grep -v '^status ' "$T/ygg.calls" | cut -d' ' -f1 | paste -sd, -; }
+fresh() { rm -rf "$D"/proof-* "$T/ygg.calls" "$T/ygg.env"; }
+runit() { fresh; FAKE_RUN_RC="$1" run proof --name go "${@:2}"; }
+RUND() { find "$D" -maxdepth 1 -name 'proof-go-*' | head -n 1; }
+runit 0
+check "exit 0: the script exits 0" test "$rc" -eq 0
+check "exit 0: doctor, run, grade, metrics, report in that order" test "$(calls)" = "doctor,run,grade,metrics,report"
+check "run.txt holds the run's output" grep -q 'the run runs' "$(RUND)/run.txt"
+check "report.txt holds the metrics and the report" bash -c 'grep -q "metrics output" "$1" && grep -q "report output" "$1"' _ "$(RUND)/report.txt"
+check "the run's output was shown" has "the run runs"
+check "the exit code is printed" has "exit code 0"
+runit 5
+check "exit 5: the script exits 5" test "$rc" -eq 5
+check "exit 5: doctor, run, grade, metrics, report" test "$(calls)" = "doctor,run,grade,metrics,report"
+for c in 1 3 4 124; do
+  runit "$c"
+  check "exit $c: the script exits $c" test "$rc" -eq "$c"
+  check "exit $c: no grade, but metrics and report" test "$(calls)" = "doctor,run,metrics,report"
+  check "exit $c: the exit code is printed" has "exit code $c"
+done
+runit 3
+check "exit 3: the output ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-engine.sh run" && tail -n 1 "$1" | grep -q -F "approve RUN-1 ship-gate"' _ "$T/out"
+check "exit 3: the approve command names the project" bash -c 'tail -n 1 "$1" | grep -q -F -- "--project"' _ "$T/out"
+runit 4
+check "exit 4: the output says how to resume" bash -c 'tail -n 1 "$1" | grep -q -F "resume RUN-1"' _ "$T/out"
+runit 0 --mode unattended
+RL="$(grep '^run ' "$T/ygg.calls")"
+check "run gets the task's instruction.md as the brief" bash -c 'grep -q -F -- "--brief $1/tiny-task/instruction.md" <<<"$2"' _ "$TK" "$RL"
+check "run gets --graph software" bash -c 'grep -q -F -- "--graph software" <<<"$1"' _ "$RL"
+check "run gets the mode asked for" bash -c 'grep -q -F -- "--mode unattended" <<<"$1"' _ "$RL"
+check "run gets the filled config and the project" bash -c 'grep -q -E -- "--config [^ ]*/proof-go-[0-9-]+/factory.yaml" <<<"$1" && grep -q -E -- "--project [^ ]*/project" <<<"$1"' _ "$RL"
+check "no credential value is in any argument" bash -c '! grep -q VALUE "$1"' _ "$T/ygg.calls"
+check "run has both credentials in its environment" grep -q -x 'run: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY ' "$T/ygg.env"
+check "doctor (the script's own shell) has no credential" grep -q -x 'doctor: ' "$T/ygg.env"
+runit 0 --baseline OLD-RUN
+check "--baseline: metrics --compare follows metrics" test "$(grep -E '^metrics' "$T/ygg.calls" | paste -sd'|' -)" = "metrics RUN-1 --project $(RUND)/project|metrics --compare OLD-RUN RUN-1 --project $(RUND)/project"
+check "--baseline: the comparison is printed as given, with no verdict of the script" bash -c '! grep -q -i -E "better|worse|improv|verdict" "$1"' _ "$T/out"
+runit 3 --baseline OLD-RUN
+check "--baseline with exit 3: the output still ends with the approve command" bash -c 'tail -n 1 "$1" | grep -q -F "approve RUN-1"' _ "$T/out"
+fresh
+FAKE_PLANT=fake-claude-VALUE-1 FAKE_RUN_RC=0 run proof --name go
+check "a planted credential value is not in the printed output" hasnt "fake-claude-VALUE-1"
+check "a planted credential value is not in report.txt" bash -c '! grep -q -F fake-claude-VALUE-1 "$1"' _ "$(RUND)/report.txt"
+check "a planted credential value is not in run.txt" bash -c '! grep -q -F fake-claude-VALUE-1 "$1"' _ "$(RUND)/run.txt"
+check "the planted value was replaced, not dropped" grep -q 'REDACTED' "$(RUND)/report.txt"
+fresh
+FAKE_RUN_RC=0 run proof --name go --build
+check "--build: sandbox build --all --config runs after doctor and before the run" test "$(calls)" = "doctor,sandbox,run,grade,metrics,report"
+check "--build: the build call has --all and --config" grep -q -E '^sandbox build --all --config [^ ]*/factory.yaml$' "$T/ygg.calls"
+fresh
+FAKE_RUN_RC=0 run proof --name go --dry-run
+check "dry run: run and the build still never run" bash -c '! grep -q "^run\|^grade" "$1"' _ "$T/ygg.calls"
+fresh
+PATH="$SH:$PATH" FAKE_RUN_RC=0 run proof --name go --build
+check "the shimmed full run exits 0" test "$rc" -eq 0
+check "the shimmed full run called the readers" test -s "$T/shim.log"
+check "the full run called no reader with the suites folder" bash -c '! grep -q -F -- "$1" "$2"' _ "$SU" "$T/shim.log"
+check "the full run called no reader with a folder inside the suites folder" bash -c '! grep -q -F -- "tiny-task/v7" "$1"' _ "$T/shim.log"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"

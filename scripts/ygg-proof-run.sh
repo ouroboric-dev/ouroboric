@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, three roles
 # the operator names and caps the operator sets. Every proof run is set up the same way, so that `ygg metrics
-# --compare` compares two factories and not two setups. IT WILL COST MONEY when the run exists (v0-T291 adds it):
-# this part makes the project and the config and stops; --dry-run is the only way to finish today.
+# --compare` compares two factories and not two setups. IT WILL COST MONEY (without --dry-run):
+# the script makes the project and the config, runs the factory, grades the run and prints the evidence.
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
 #                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL] [--run-turns N] [--run-tokens N]
 #                    [--run-usd N] [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run]
@@ -28,7 +28,19 @@
 #      DIR/proof-NAME-TIME/factory.yaml, filled from scripts/testdata/proof/factory.proof.example.yaml (a "usd"
 #      line only when a role is an opencode role, which pays per token);
 #   6. runs `ygg doctor` on that config and prints the plan: what would run.
-# --dry-run stops there with exit 0. Without it the script stops with exit 2 until v0-T291 adds the run.
+# --dry-run stops there with exit 0. Without it (v0-T291) the script then
+#   7. with --build runs `ygg sandbox build --all --config C`; runs `ygg run --project P --config C --graph software
+#      --brief <task>/instruction.md --mode M` under `timeout --signal=INT --kill-after=2m WALL`, with the credentials
+#      loaded in that subshell only (never exported by this shell, never in an argument), its output (credential
+#      values removed) shown as it comes and kept in DIR/proof-NAME-TIME/run.txt;
+#   8. prints the exit code (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall
+#      clock) and, after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`
+#      (with --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN`, printed as the CLI gives it: this script
+#      judges nothing), `ygg report RUN`, ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a
+#      filter that replaces the credentials' exact values, and is kept in DIR/proof-NAME-TIME/report.txt (--clip
+#      copies it to the Windows clipboard);
+#   9. for a run that stopped (3) or paused (4), ends with the command that continues it (`ygg approve`, run under
+#      ygg-engine.sh, or `ygg resume`). A stopped or paused run is not graded. The exit code is the run's.
 # For tests and other machines: YGG_CMD (how ygg runs), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind).
 set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
@@ -189,8 +201,10 @@ echo "proof-run: ygg doctor on that config"
 if ! "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml"; then fail "ygg doctor refused the config; nothing was spent"; fi
 # Commands are printed with %q and never run through eval.
 q() { printf '%q ' "$@"; }
-run_cmd="$(q "${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml" --graph software --brief "$tasks/$task/instruction.md")"
-build_cmd="$(q "${ygg_arr[@]}" sandbox build --config "$work/factory.yaml" --realm "$ygg_dir")"
+run_argv=("${ygg_arr[@]}" run --project "$project" --config "$work/factory.yaml" --graph software --brief "$tasks/$task/instruction.md" --mode "$mode")
+build_argv=("${ygg_arr[@]}" sandbox build --all --config "$work/factory.yaml")
+run_cmd="$(q "${run_argv[@]}")"
+build_cmd="$(q "${build_argv[@]}")"
 echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
@@ -202,4 +216,100 @@ if [ "$dry" -eq 1 ]; then
   echo "proof-run: dry run: nothing was started and the credentials were not loaded"
   exit 0
 fi
-fail "the run itself is not in this script yet (v0-T291); use --dry-run. The project is $project"
+
+# 7. The run. The credentials are sourced in this subshell only; nothing prints them, and the filter replaces
+# their exact values in everything that is shown or kept (it reads them from its own environment).
+redact() {
+  python3 -I -u -c '
+import os, re, sys
+name = re.compile(r"TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL", re.I)
+vals = sorted({v for k, v in os.environ.items() if name.search(k) and len(v) >= 8}, key=len, reverse=True)
+for line in sys.stdin:
+    for v in vals:
+        line = line.replace(v, "[REDACTED]")
+    sys.stdout.write(line)
+    sys.stdout.flush()
+'
+}
+load_env() { # in a subshell only
+  { set +x; } 2>/dev/null # no trace of the sourced assignments, even under bash -x or SHELLOPTS=xtrace
+  set -a
+  # shellcheck source=/dev/null
+  . "$envfile"
+  set +a
+}
+out="$work/run.txt"
+echo "proof-run: starting the run (wall clock $wall); this costs money"
+set +e
+(
+  load_env
+  {
+    if [ "$build" -eq 1 ]; then "${build_argv[@]}" || exit 2; fi
+    timeout --signal=INT --kill-after=2m "$wall" "${run_argv[@]}"
+    echo "$?" >"$work/run.rc"
+  } 2>&1 | redact
+) | tee "$out"
+set -e
+rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
+[[ $rc =~ ^[0-9]+$ ]] || rc=2
+echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock)"
+
+# 8. The grade and the evidence. The run's id is the newest folder in the project's runs.
+id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
+report="$work/report.txt"
+if [ -z "$id" ] || ! [[ $id =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to grade or report" >&2
+  echo "proof-run: the folder is $work"
+  exit "$rc"
+fi
+step() { # TITLE CMD...: a heading, then the command's output; its exit code is noted, never fatal
+  echo "## $1"; shift
+  "$@" || echo "(exited $?)"
+  echo
+}
+(
+  load_env
+  set +e
+  {
+    echo "# proof run $name: run $id, exit code $rc"
+    echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer; brief SHA-256 $have"
+    echo
+    case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
+    step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
+    if [ -n "$baseline" ]; then
+      step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$project"
+    fi
+    step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
+    if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
+      step "cost" "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
+      step "evidence" env YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --output "$out" "$project" "$id"
+    fi
+  } 2>&1 | redact
+) | tee "$report"
+if [ "$clip" -eq 1 ]; then
+  if command -v clip.exe >/dev/null 2>&1 && [ -f "$report" ]; then clip.exe <"$report"; echo "proof-run: report.txt copied to the clipboard"
+  else echo "proof-run: --clip needs clip.exe (WSL); the report is in $report" >&2; fi
+fi
+echo "proof-run: the folder is $work"
+
+# 9. How to continue a run that stopped or paused. This is the last thing printed.
+case "$rc" in
+  3)
+    gate="$(python3 -I - "$project/.factory/runs/$id/run.json" 2>/dev/null <<'PY' || true
+import json, sys
+try:
+    print(json.load(open(sys.argv[1])).get("pending", ""))
+except Exception:
+    pass
+PY
+)"
+    [[ $gate =~ ^[A-Za-z0-9._-]+$ ]] || gate="<gate>"
+    echo "proof-run: the run stopped at an approval point; to continue it (load the credentials in that shell first), run:"
+    echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" approve "$id" "$gate" --project "$project")"
+    ;;
+  4)
+    echo "proof-run: the run paused (the provider's quota); once it is back, run:"
+    echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" resume "$id" --project "$project")"
+    ;;
+esac
+exit "$rc"
