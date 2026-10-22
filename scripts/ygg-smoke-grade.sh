@@ -326,7 +326,9 @@ oneCase() { # oneCase CASE: build the project, run it to its end, grade it again
     echo "NOTE  $c: the watch did not catch the grader container while it ran (a 1 second poll can miss it)"
   fi
   local found
-  found="$(find "$v" -name 'score.json' -not -path '*/node_modules/*' | sort)"
+  # grade/logs-*/ is the folder the grader keeps in the run folder for the suite's own logs: a suite's reporter
+  # may write its own score.json there (it is not Odin's, and no agent sees it).
+  found="$(find "$v" -name 'score.json' -not -path '*/node_modules/*' -not -path '*/grade/logs-*/*' | sort)"
   check "$c: score.json is in the run folder and nowhere else" is_same "$found" "$score"
 }
 
