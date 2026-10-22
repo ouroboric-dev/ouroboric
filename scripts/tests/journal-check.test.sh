@@ -150,6 +150,19 @@ fresh ledgerind; entry 2026-10-23-a.md open no "x" "" '  {"schema":"ygg.ledger/v
 bad "an indented raw ledger line fails" "a raw ledger line"
 fresh ledgersp; entry 2026-10-23-a.md open no "x" "" '{"schema": "ygg.ledger/v1","seq":1}'; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | open | no |"
 bad "a raw ledger line with a space after the colon fails" "a raw ledger line"
+FRONT_BARE_TAG=$'date: 2026-10-23\ntags: factory-change\nstatus: resolved\npost-candidate: yes\nevidence: ["run 20261023-090000-a1b2c3"]'
+FRONT_BARE_TAGS=$'date: 2026-10-23\ntags: a, factory-change\nstatus: resolved\npost-candidate: yes\nevidence: ["run 20261023-090000-a1b2c3"]'
+FRONT_BARE_EVID=$'date: 2026-10-23\ntags: [x]\nstatus: resolved\npost-candidate: no\nevidence: run-x'
+
+fresh btagbare; write_entry 2026-10-23-a.md "$FRONT_BARE_TAG" "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | resolved | yes |"
+bad "a bare-scalar factory-change tag still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh btagtwo; write_entry 2026-10-23-a.md "$FRONT_BARE_TAGS" "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | a, factory-change | resolved | yes |"
+bad "a comma-separated scalar tag list with factory-change still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh tagcase; entry 2026-10-23-a.md resolved yes "Factory-Change" '"run 20261023-090000-a1b2c3"' "It got better."; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | resolved | yes |"
+bad "a Factory-Change tag in another case still needs the comparison" "factory-change but its Result does not cite ygg metrics --compare"
+fresh evscalar; write_entry 2026-10-23-a.md "$FRONT_BARE_EVID" "Measured: fine."; index "| 2026-10-23 | [a](2026-10-23-a.md) | x | resolved | no |"
+run "$S/journal-check.sh" "$J"
+check "a scalar evidence value counts as evidence" test "$rc" -eq 0
 
 fresh ok2; entry 2026-10-23-a.md open no "factory-change" "" "pending"; index "| 2026-10-23 | [a](2026-10-23-a.md) | factory-change | open | no |"
 run "$S/journal-check.sh" "$J"

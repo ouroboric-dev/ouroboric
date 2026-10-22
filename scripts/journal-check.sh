@@ -55,10 +55,13 @@ def parse_front(text):
 
 
 def items(fm, lists, key):
-    # A list in flow style ([a, "b"]) or block style; quotes and spaces are stripped from each item.
+    # A list in flow style ([a, "b"]), a bare comma-separated scalar (a, b) or block style; quotes and spaces are
+    # stripped from each item.
     v = fm.get(key, "")
     if v.startswith("["):
         raw = v[1:].rsplit("]", 1)[0].split(",")
+    elif v:
+        raw = v.split(",")
     else:
         raw = lists.get(key, [])
     return [c for c in (clean(x) for x in raw) if c]
@@ -119,7 +122,7 @@ for f in entries:
     if status == "resolved" and result.lower().rstrip(".") == "pending":
         bad(f, "resolved but its Result is pending")
     tags = items(fm, lists, "tags")
-    if "factory-change" in tags and status in ("resolved", "abandoned"):
+    if "factory-change" in [t.lower() for t in tags] and status in ("resolved", "abandoned"):
         if "ygg metrics --compare" not in result:
             bad(f, "tagged factory-change but its Result does not cite ygg metrics --compare")
         elif len(set(RUN.findall(result))) < 2:
