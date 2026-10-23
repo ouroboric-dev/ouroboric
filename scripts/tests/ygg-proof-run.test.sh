@@ -57,7 +57,7 @@ cat >"$FB/ygg" <<'EOF3'
 #!/bin/sh
 # Fake ygg (v0-T291): records its arguments and the credential NAMES in its environment, answers each subcommand.
 # FAKE_RUN_RC is the exit code of `run`; FAKE_PLANT is a value it prints from run, metrics, report, grade and status.
-# FAKE_CONT_RC is the exit code of `approve` and `resume`.
+# FAKE_CONT_RC is the exit code of `approve`, `resume` and `reject`.
 echo "$*" >>"$FAKE_DIR/ygg.calls"
 printf '%s: %s\n' "$1" "$(env | grep -E '^(CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=' | cut -d= -f1 | sort | tr '\n' ' ')" >>"$FAKE_DIR/ygg.env"
 proj="" prev=""
@@ -84,7 +84,7 @@ case "$1" in
       while :; do sleep 0.2; done
     fi
     exit "${FAKE_RUN_RC:-0}" ;;
-  approve | resume)
+  approve | resume | reject)
     echo "$1 runs"
     [ -z "${FAKE_PLANT:-}" ] || echo "$1 saw $FAKE_PLANT"
     exit "${FAKE_CONT_RC:-0}" ;;
@@ -206,7 +206,7 @@ check "the umbrella.yaml sets root: true" grep -q '^root: true$' "$P/project/umb
 check "the project folder is DIR/proof-<name>-<time>/project" bash -c '[[ $1 =~ /proof-first-[0-9]{8}-[0-9]{6}$ ]]' _ "$P"
 check "the config has the default mode" grep -q '^mode: key-points$' "$FY"
 check "the config has the planner" grep -q 'planner: { agent: claude-code, model: sonnet }' "$FY"
-check "the config has the reviewer" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b }' "$FY"
+check "the config has the reviewer" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$FY"
 check "the config has the run caps with usd" grep -q 'per_run: { tokens: 12000000, turns: 1500, usd: 5 }' "$FY"
 check "the config has the day caps with usd" grep -q 'per_day: { tokens: 24000000, turns: 2000, usd: 10 }' "$FY"
 check "the config has the tasks folder" grep -q -x "  tasks_dir: $TK" "$FY"
@@ -225,7 +225,28 @@ check "the mode asked for is in the config" grep -q '^mode: unattended$' "$FY"
 check "the caps asked for are in the config" grep -q 'per_run: { tokens: 20, turns: 10 }' "$FY"
 check "the day caps asked for are in the config" grep -q 'per_day: { tokens: 40, turns: 30 }' "$FY"
 check "no usd line when no role is paid" bash -c '! grep -q "usd:" "$1"' _ "$FY"
-check "the reviewer asked for is in the config" grep -q 'reviewer: { agent: claude-code, model: opus }' "$FY"
+check "the reviewer asked for is in the config" grep -q 'reviewer: { agent: claude-code, model: opus, reasoning: medium }' "$FY"
+
+# --- gallery-runtime T28: the reviewer's reasoning effort (F2)
+rm -rf "$D"/proof-* "$T/ygg.calls"
+run proof --name reason --dry-run
+P="$(made)"; FY="$P/factory.yaml"
+check "the reviewer role asks for reasoning medium by default" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$FY"
+check "the planner and the implementer have no reasoning" bash -c '! grep -E "^  (planner|implementer):" "$1" | grep -q reasoning' _ "$FY"
+check "the plan says reviewer AGENT:MODEL (reasoning medium)" has "reviewer opencode:openrouter/qwen/qwen3.8-27b (reasoning medium)"
+check "the config with reasoning passes ygg doctor" grep -q -- "^doctor --project .*/project --config $FY\$" "$T/ygg.calls"
+check "the config has no place left to fill" bash -c '! grep -q "@[A-Z_]*@" "$1"' _ "$FY"
+rm -rf "$D"/proof-*
+run proof --name reasonoff --dry-run --reviewer-reasoning off "${AC[@]}"
+P="$(made)"
+check "--reviewer-reasoning off writes off, for a claude-code reviewer too" grep -q 'reviewer: { agent: claude-code, model: opus, reasoning: off }' "$P/factory.yaml"
+check "--reviewer-reasoning off shows in the plan" has "(reasoning off)"
+for v in low high; do
+  rm -rf "$D"/proof-*; run proof --name reasonv --dry-run --reviewer-reasoning "$v"
+  check "--reviewer-reasoning $v writes $v" grep -q "reasoning: $v }" "$(made)/factory.yaml"
+done
+runq proof --name ok --reviewer-reasoning extreme;    check "a reasoning outside low, medium, high and off is refused" refuses "--reviewer-reasoning"
+runq proof --name ok --reviewer-reasoning 'low }';    check "a reasoning with YAML characters is refused" refuses "--reviewer-reasoning"
 
 # --- the dry run
 rm -rf "$D"/proof-* "$T/ygg.calls"
@@ -585,13 +606,55 @@ check "--continue --dry-run: exit 0, approve never called" bash -c '[ "$1" -eq 0
 check "--continue --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
 refusesc() { [ "$rc" -eq 2 ] && has "$1" && [ ! -s "$T/ygg.calls" ]; } # exit 2, the reason, nothing started
 clearlogs; runc cont --continue NOPE-RUN --resume;                  check "--continue with no such run: refused before anything starts" refusesc "no proof folder under"
-clearlogs; runc cont --continue RUN-1 --approve ship-gate --resume; check "--continue with --approve and --resume: refused" refusesc "not both"
-clearlogs; runc cont --continue RUN-1;                              check "--continue with neither --approve nor --resume: refused" refusesc "--approve GATE or --resume"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --resume; check "--continue with --approve and --resume: refused" refusesc "only one"
+clearlogs; runc cont --continue RUN-1;                              check "--continue with no action: refused" refusesc "--approve GATE, --reject GATE --reason TEXT or --resume"
 clearlogs; runc cont --approve ship-gate;                           check "--approve without --continue: refused" refusesc "go with --continue"
 clearlogs; runc cont --continue RUN-1 --resume --note hi;           check "--note without --approve: refused" refusesc "--note goes with --approve"
 clearlogs; runc cont --continue RUN-1 --resume --name other;        check "--continue with a setup flag: refused" refusesc "keeps the config"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --note $'a\nb'; check "--note with a control character: refused" refusesc "control character"
 clearlogs; runc cont --continue .. --resume;                        check "--continue .. is not a run id" refusesc "not a run id"
+clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "--continue refuses --reviewer-reasoning as a setup flag" refusesc "keeps the config"
+# --- gallery-runtime T29: --reject (F3), run as --approve is run
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
+FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --reject ship-gate --reason 'the gallery has no empty state'
+check "--reject after 3: exit 0, the continuation's code" test "$rc" -eq 0
+check "--reject: doctor, reject, grade, metrics, the compare, report" test "$(calls)" = "doctor,reject,grade,metrics,metrics,report"
+check "--reject: ygg reject runs once, with the run, the gate, the reason and the project" bash -c '[ "$(grep -c "^reject " "$1")" = 1 ] && grep -q -x -F "reject RUN-1 ship-gate --reason the gallery has no empty state --project $2/project" "$1"' _ "$T/ygg.calls" "$W"
+check "--reject: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 reject RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
+check "--reject: only reject has the credentials" bash -c 'grep -q -x "reject: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^reject: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
+check "--reject: the output is added to the folder's run.txt" bash -c 'grep -q "the run runs" "$1" && grep -q "reject runs" "$1"' _ "$W/run.txt"
+check "--reject: a planted value is filtered from run.txt and the output" bash -c '! grep -q -F fake-claude-VALUE-1 "$1" && ! grep -q -F fake-claude-VALUE-1 "$2" && grep -q REDACTED "$1"' _ "$W/run.txt" "$T/out"
+check "--reject: the report header records the reviewer's reasoning" grep -q "reviewer opencode:openrouter/qwen/qwen3.8-27b (reasoning medium); brief SHA-256" "$W/report.txt"
+check "--reject: the report says what was continued" bash -c 'grep -q "(continued: reject ship-gate)" "$1"' _ "$W/report.txt"
+clearlogs; FAKE_CONT_RC=3 runc cont --continue RUN-1 --reject ship-gate --reason 'again'
+check "--reject ending 3: the exit code is 3, with no grade" bash -c '[ "$1" -eq 3 ] && [ "$2" = "doctor,reject,metrics,metrics,report" ]' _ "$rc" "$(calls)"
+check "--reject ending 3: step 9 prints the --reject form beside the --approve one" bash -c 'grep -F -- "--continue RUN-1 --reject ship-gate --reason \"...\"" "$1" | grep -q -F -- "--folder $2" && tail -n 1 "$1" | grep -q -F -- "--continue RUN-1 --approve ship-gate"' _ "$T/out" "$D"
+check "--reject ending 3: step 9 words the rejection as conditional" has "If ygg offered a rejection above"
+check "--reject ending 3: the raw fallback names ygg reject" bash -c 'grep -F "ygg-engine.sh run" "$1" | grep -q -F "reject RUN-1 ship-gate --reason"' _ "$T/out"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason 'no' --dry-run
+check "--reject --dry-run: exit 0, reject never called" bash -c '[ "$1" -eq 0 ] && ! grep -q "^reject" "$2"' _ "$rc" "$T/ygg.calls"
+check "--reject --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "reject RUN-1 ship-gate --reason no --project"' _ "$T/out"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate;                                   check "--reject without --reason: refused" refusesc "--reject needs --reason"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --reason why;                     check "--reason without --reject: refused" refusesc "--reason goes with --reject"
+clearlogs; runc cont --continue RUN-1 --resume --reason why;                                check "--reason with --resume: refused" refusesc "--reason goes with --reject"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --approve ship-gate --reason why; check "--reject with --approve: refused" refusesc "only one"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --resume --reason why;             check "--reject with --resume: refused" refusesc "only one"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason why --note hi;            check "--note with --reject: refused" refusesc "--note goes with --approve"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason '   ';                    check "--reject with a blank reason: refused" refusesc "--reason is blank"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason $'a\nb';                  check "--reject with a control character in the reason: refused" refusesc "control character"
+clearlogs; runc cont --continue RUN-1 --reject 'a b' --reason why;                         check "--reject with a bad gate name: refused" refusesc "not a gate name"
+clearlogs; runc cont --reject ship-gate --reason why;                                       check "--reject without --continue: refused" refusesc "go with --continue"
+clearlogs; runc cont --reason why;                                                          check "--reason without --continue: refused" refusesc "go with --continue"
+fresh; FAKE_RUN_RC=4 run proof --name go; W="$(RUND)"; clearlogs
+cp "$W/proof.meta" "$T/meta.keep"
+grep -v '^reviewer_reasoning ' "$T/meta.keep" >"$W/proof.meta"
+clearlogs; runc cont --continue RUN-1 --resume --dry-run
+check "--continue on a proof.meta without reviewer_reasoning goes on (exit 0)" test "$rc" -eq 0
+check "--continue on such a folder prints the unset form" has "(reasoning unset: a folder from before --reviewer-reasoning)"
+sed 's/^reviewer_reasoning .*/reviewer_reasoning extreme/' "$T/meta.keep" >"$W/proof.meta"
+clearlogs; runc cont --continue RUN-1 --resume --dry-run
+check "--continue on a proof.meta with a bad reviewer_reasoning is refused" refusesc "reviewer reasoning"
+cp "$T/meta.keep" "$W/proof.meta"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"

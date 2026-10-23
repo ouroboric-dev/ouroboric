@@ -1,13 +1,14 @@
 # The factory.yaml of a proof run (v0-H19 to v0-H23), with the places between two at signs that
 # scripts/ygg-proof-run.sh fills from its flags. It never writes your factory.yaml. The credentials come from the
 # environment, never from this file. A "usd" line is written only when a role pays per token (an opencode role):
-# the caps then count what the API billed, not the cost figure of a subscription's sessions.
+# the caps then count what the API billed, not the cost figure of a subscription's sessions. The reviewer's
+# "reasoning" is the effort it asks for (a claude-code agent ignores it).
 mode: @MODE@
 privacy: strict
 roles:
   planner: { agent: @PLANNER_AGENT@, model: @PLANNER_MODEL@ }
   implementer: { agent: @IMPLEMENTER_AGENT@, model: @IMPLEMENTER_MODEL@ }
-  reviewer: { agent: @REVIEWER_AGENT@, model: @REVIEWER_MODEL@ }
+  reviewer: { agent: @REVIEWER_AGENT@, model: @REVIEWER_MODEL@, reasoning: @REVIEWER_REASONING@ }
 budget:
   per_run: { tokens: @RUN_TOKENS@, turns: @RUN_TURNS@@RUN_USD@ }
   per_day: { tokens: @DAY_TOKENS@, turns: @DAY_TURNS@@DAY_USD@ }
