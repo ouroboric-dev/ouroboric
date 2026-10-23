@@ -106,7 +106,7 @@ check_services() { # once per call: the three copies of the services' versions; 
   for f in "$pack" "$ci" "$df"; do [ -f "$f" ] || { bad niflheim-local services "$f is missing"; return; }; done
   local pg s3 cipg weed pkg
   pg="$(svc_image "$pack" postgres)"; s3="$(svc_image "$pack" s3)"; cipg="$(svc_image "$ci" postgres)"
-  weed="$(sed -n 's/^FROM[[:space:]]\{1,\}\([^[:space:]]\{1,\}\)[[:space:]]\{1,\}AS[[:space:]]\{1,\}weed[[:space:]]*$/\1/p' "$df" | head -1)"
+  weed="$(sed -nE 's/^FROM([[:space:]]+--[^[:space:]]+)*[[:space:]]+([^[:space:]]+)[[:space:]]+AS[[:space:]]+weed[[:space:]]*$/\2/Ip' "$df" | head -1)"
   pkg="$(grep -o 'postgresql-[0-9]\{1,\}\(=[^[:space:]\\]\{1,\}\)\{0,1\}' "$df" | head -1)"
   [ -n "$pg" ] || { bad niflheim-local services "$pack has no postgres image"; return; }
   [ -n "$s3" ] || { bad niflheim-local services "$pack has no s3 image"; return; }
@@ -122,6 +122,7 @@ check_services() { # once per call: the three copies of the services' versions; 
   pkgmajor="${pkg#postgresql-}"; pkgmajor="${pkgmajor%%=*}"
   [ "$pkgmajor" = "$major" ] || { bad niflheim-local services "$df: ${pkg%%=*} is major $pkgmajor, the pack's postgres is major $major"; return; }
   [[ "$pkg" == *=* ]] || { bad niflheim-local services "$df: ${pkg} is not pinned to a version (postgresql-$major=<version>)"; return; }
+  [[ "$pkg" != *'$'* ]] || { bad niflheim-local services "$df: ${pkg} holds a variable; pin the literal version (postgresql-$major=<version>)"; return; }
   pkgminor="${pkg#*=}"; pkgminor="${pkgminor%%-*}"
   if [ "$pkgminor" = "$imgminor" ]; then ok niflheim-local services "postgres minor $imgminor (image) and $pkgminor (package)"
   else ok niflheim-local services "postgres minors differ, allowed: $imgminor (image) and $pkgminor (package)"; fi

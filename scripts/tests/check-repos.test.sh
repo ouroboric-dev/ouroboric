@@ -91,8 +91,8 @@ check "agents, voluspa is a leaf under yggdrasil: PASS" [ "$(CHECK_REPOS_ROOT="$
 PGIMG=docker.io/library/postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382
 SWD=sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
 services_root() {
-  local d seaweed="$SWD" pgci="$PGIMG" pgpkg="postgresql-18=18.4-1.pgdg120+1" shape=folded drop="" a
-  for a in "$@"; do case "$a" in seaweed=*) seaweed="${a#*=}" ;; pgci=*) pgci="${a#*=}" ;; pgpkg=*) pgpkg="${a#*=}" ;; shape=*) shape="${a#*=}" ;; drop=*) drop="${a#*=}" ;; esac; done
+  local d seaweed="$SWD" pgci="$PGIMG" pgpkg="postgresql-18=18.4-1.pgdg120+1" shape=folded drop="" weedfmt=plain a
+  for a in "$@"; do case "$a" in seaweed=*) seaweed="${a#*=}" ;; pgci=*) pgci="${a#*=}" ;; pgpkg=*) pgpkg="${a#*=}" ;; shape=*) shape="${a#*=}" ;; drop=*) drop="${a#*=}" ;; weedfmt=*) weedfmt="${a#*=}" ;; esac; done
   d="$(mktemp -d -p "$T")"
   mkdir -p "$d/yggdrasil/niflheim-local" "$d/yggdrasil/helheim-go/templates/api/.github/workflows" "$d/mimir/client-gallery-lite/environment"
   { printf 'services:\n  postgres:\n'
@@ -101,7 +101,10 @@ services_root() {
   } > "$d/yggdrasil/niflheim-local/pack.yaml"
   { printf 'jobs:\n  test:\n    services:\n      postgres:\n        image: >-\n          %s\n        env:\n          POSTGRES_DB: app\n' "$pgci"
   } > "$d/yggdrasil/helheim-go/templates/api/.github/workflows/ci.yml"
-  { printf 'FROM docker.io/chrislusf/seaweedfs:4.45@%s AS weed\nFROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff1\n' "$seaweed"
+  local from=FROM as=AS flag=""
+  [ "$weedfmt" != lower ] || { from=from; as=as; }
+  [ "$weedfmt" != flag ] || flag="--platform=linux/amd64 "
+  { printf '%s %sdocker.io/chrislusf/seaweedfs:4.45@%s %s weed\nFROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff1\n' "$from" "$flag" "$seaweed" "$as"
     if [ "$shape" = nopkg ]; then printf 'RUN apt-get install -y postgresql-18\n'; else printf 'RUN apt-get install -y --no-install-recommends \\\n    %s \\\n    git\n' "$pgpkg"; fi
   } > "$d/mimir/client-gallery-lite/environment/Dockerfile"
   case "$drop" in mimir) rm -rf "$d/mimir" ;; helheim-go|niflheim-local) rm -rf "$d/yggdrasil/$drop" ;; esac
@@ -127,6 +130,13 @@ check "services, another major: FAIL naming the Dockerfile and both majors" matc
 r="$(services_root shape=nopkg)"
 out="$(services "$r")"
 check "services, an unpinned package: FAIL" matches "$out" "*FAIL*Dockerfile*pinned*"
+r="$(services_root weedfmt=lower)"
+check "services, a lower-case as: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+r="$(services_root weedfmt=flag)"
+check "services, FROM --platform=... IMAGE AS weed: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+r="$(services_root pgpkg="postgresql-18=\${PGV}")"
+out="$(services "$r")"
+check "services, an ARG-based pin: FAIL, pin the literal version" matches "$out" "*FAIL*Dockerfile*pin the literal version*" 
 r="$(services_root pgpkg=postgresql-18=18.5-1.pgdg120+1)"
 out="$(services "$r"; echo "exit $?")"
 check "services, another minor: PASS with a line that says so" matches "$out" "*minor*18.4*18.5*exit 0" && ! matches "$out" "*FAIL*"
