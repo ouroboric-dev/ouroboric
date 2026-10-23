@@ -17,7 +17,8 @@
 # setting, and the line is written for every agent); a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000
 # turns, 24,000,000 tokens, $10; --wall 8h; DIR $HOME/ygg-it; FILE $HOME/.config/ouroboric/factory.env;
 # --tasks ../mimir; --suites $HOME/ygg-it/hidden-suites; --yggdrasil the umbrella beside this repo.
-# The task is client-gallery-lite (YGG_PROOF_TASK names another, for tests); its suite is the `suite` key of its task.toml.
+# The task is client-gallery-lite (YGG_PROOF_TASK names another, for tests); its suite is the `suite` key of its
+# task.toml.
 # In order, it
 #   1. checks the flags (exit 2 on the first bad one), the engine (ygg-engine.sh; YGG_ENGINE_CHECK=0 skips it)
 #      and the tools (git, python3, timeout, sha256sum);
@@ -65,7 +66,8 @@ shopt -u patsub_replacement 2>/dev/null || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
-  echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --reject GATE --reason TEXT | --resume) [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
+  echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --reject GATE --reason TEXT | --resume)" >&2
+  echo "                        [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
   exit 2
 }
 fail() { echo "proof-run: $*" >&2; exit 2; }
@@ -75,7 +77,8 @@ fail() { echo "proof-run: $*" >&2; exit 2; }
 private() { (umask 077 && : >>"$1") && chmod 600 "$1"; } # FILE: made private; what it holds stays
 put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small control file, private
 name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
-cont="" gate_in="" reject_in="" reason="" reason_set=0 note="" note_set=0 resume=0 setup_flags="" # --continue; the setup flags given (a continued run keeps its config)
+# --continue; setup_flags are the setup flags given (a continued run keeps its config)
+cont="" gate_in="" reject_in="" reason="" reason_set=0 note="" note_set=0 resume=0 setup_flags=""
 planner=claude-code:sonnet implementer=claude-code:sonnet reviewer=opencode:openrouter/qwen/qwen3.8-27b
 reviewer_reasoning=medium
 run_turns=1500 run_tokens=12000000 run_usd=5 day_turns=2000 day_tokens=24000000 day_usd=10
@@ -127,7 +130,7 @@ if [ -n "$cont" ]; then
   [ -z "$gate_in" ] || actions=$((actions + 1))
   [ -z "$reject_in" ] || actions=$((actions + 1))
   [ "$resume" -eq 0 ] || actions=$((actions + 1))
-  if [ "$actions" -gt 1 ]; then fail "--continue takes --approve GATE, --reject GATE --reason TEXT or --resume, not both"; fi
+  if [ "$actions" -gt 1 ]; then fail "--continue takes --approve GATE, --reject GATE --reason TEXT or --resume, only one"; fi
   if [ "$actions" -eq 0 ]; then fail "--continue takes --approve GATE, --reject GATE --reason TEXT or --resume"; fi
   if [ -n "$gate_in" ] && ! [[ $gate_in =~ $run_id_re ]]; then fail "--approve '$gate_in' is not a gate name"; fi
   if [ -n "$reject_in" ] && ! [[ $reject_in =~ $run_id_re ]]; then fail "--reject '$reject_in' is not a gate name"; fi
@@ -480,7 +483,7 @@ step() { # TITLE CMD...: a heading, then the command's output; its exit code is 
 }
 evidence_part() {
   echo "# proof run $name: run $id, exit code $rc${cont_what:+ (continued: $cont_what)}"
-  echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer; brief SHA-256 $have"
+  echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning); brief SHA-256 $have"
   echo
   case "$rc" in
     0 | 3 | 4 | 5) ;;
@@ -532,9 +535,9 @@ PY
     echo "$by_hand"
     echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" approve "$id" "$gate" --project "$project")"
     echo "  $(qt "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" reject "$id" "$gate") --reason \"...\" $(q --project "$project")"
-    echo "proof-run: the run stopped at the approval point $gate; read its gates folder, then reject it with a reason:"
+    echo "proof-run: the run stopped at $gate; read its gates folder. If ygg offered a rejection above, reject it with a reason:"
     echo "  $(qt "${self[@]}" --reject "$gate") --reason \"...\" $(q --folder "$dir_abs" --env "$envfile")"
-    echo "proof-run: or approve it (add --note TEXT if you like):"
+    echo "proof-run: or approve it (add --note TEXT if you like; some stops take no rejection or no approval):"
     echo "  $(q "${self[@]}" --approve "$gate" --folder "$dir_abs" --env "$envfile")"
     ;;
   4)

@@ -606,7 +606,7 @@ check "--continue --dry-run: exit 0, approve never called" bash -c '[ "$1" -eq 0
 check "--continue --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
 refusesc() { [ "$rc" -eq 2 ] && has "$1" && [ ! -s "$T/ygg.calls" ]; } # exit 2, the reason, nothing started
 clearlogs; runc cont --continue NOPE-RUN --resume;                  check "--continue with no such run: refused before anything starts" refusesc "no proof folder under"
-clearlogs; runc cont --continue RUN-1 --approve ship-gate --resume; check "--continue with --approve and --resume: refused" refusesc "not both"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --resume; check "--continue with --approve and --resume: refused" refusesc "only one"
 clearlogs; runc cont --continue RUN-1;                              check "--continue with no action: refused" refusesc "--approve GATE, --reject GATE --reason TEXT or --resume"
 clearlogs; runc cont --approve ship-gate;                           check "--approve without --continue: refused" refusesc "go with --continue"
 clearlogs; runc cont --continue RUN-1 --resume --note hi;           check "--note without --approve: refused" refusesc "--note goes with --approve"
@@ -624,10 +624,12 @@ check "--reject: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep 
 check "--reject: only reject has the credentials" bash -c 'grep -q -x "reject: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^reject: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
 check "--reject: the output is added to the folder's run.txt" bash -c 'grep -q "the run runs" "$1" && grep -q "reject runs" "$1"' _ "$W/run.txt"
 check "--reject: a planted value is filtered from run.txt and the output" bash -c '! grep -q -F fake-claude-VALUE-1 "$1" && ! grep -q -F fake-claude-VALUE-1 "$2" && grep -q REDACTED "$1"' _ "$W/run.txt" "$T/out"
+check "--reject: the report header records the reviewer's reasoning" grep -q "reviewer opencode:openrouter/qwen/qwen3.8-27b (reasoning medium); brief SHA-256" "$W/report.txt"
 check "--reject: the report says what was continued" bash -c 'grep -q "(continued: reject ship-gate)" "$1"' _ "$W/report.txt"
 clearlogs; FAKE_CONT_RC=3 runc cont --continue RUN-1 --reject ship-gate --reason 'again'
 check "--reject ending 3: the exit code is 3, with no grade" bash -c '[ "$1" -eq 3 ] && [ "$2" = "doctor,reject,metrics,metrics,report" ]' _ "$rc" "$(calls)"
 check "--reject ending 3: step 9 prints the --reject form beside the --approve one" bash -c 'grep -F -- "--continue RUN-1 --reject ship-gate --reason \"...\"" "$1" | grep -q -F -- "--folder $2" && tail -n 1 "$1" | grep -q -F -- "--continue RUN-1 --approve ship-gate"' _ "$T/out" "$D"
+check "--reject ending 3: step 9 words the rejection as conditional" has "If ygg offered a rejection above"
 check "--reject ending 3: the raw fallback names ygg reject" bash -c 'grep -F "ygg-engine.sh run" "$1" | grep -q -F "reject RUN-1 ship-gate --reason"' _ "$T/out"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason 'no' --dry-run
 check "--reject --dry-run: exit 0, reject never called" bash -c '[ "$1" -eq 0 ] && ! grep -q "^reject" "$2"' _ "$rc" "$T/ygg.calls"
@@ -635,8 +637,8 @@ check "--reject --dry-run: it shows the command under the timeout" bash -c 'grep
 clearlogs; runc cont --continue RUN-1 --reject ship-gate;                                   check "--reject without --reason: refused" refusesc "--reject needs --reason"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --reason why;                     check "--reason without --reject: refused" refusesc "--reason goes with --reject"
 clearlogs; runc cont --continue RUN-1 --resume --reason why;                                check "--reason with --resume: refused" refusesc "--reason goes with --reject"
-clearlogs; runc cont --continue RUN-1 --reject ship-gate --approve ship-gate --reason why; check "--reject with --approve: refused" refusesc "not both"
-clearlogs; runc cont --continue RUN-1 --reject ship-gate --resume --reason why;             check "--reject with --resume: refused" refusesc "not both"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --approve ship-gate --reason why; check "--reject with --approve: refused" refusesc "only one"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --resume --reason why;             check "--reject with --resume: refused" refusesc "only one"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason why --note hi;            check "--note with --reject: refused" refusesc "--note goes with --approve"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason '   ';                    check "--reject with a blank reason: refused" refusesc "--reason is blank"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason $'a\nb';                  check "--reject with a control character in the reason: refused" refusesc "control character"
