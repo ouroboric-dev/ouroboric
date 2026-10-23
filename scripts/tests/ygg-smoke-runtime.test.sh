@@ -51,7 +51,12 @@ echo "podman loaded=${FAKE_ENGINE_LOADED:-0} $*" >>"$FAKE_CALLS"
 a="$*"
 case "$1" in
   image) [ "$FAKE_NO_IMAGE" = "${3:-}" ] && exit 1; exit 0 ;;
-  images) echo "localhost/ygg-stack-x:abc" ;;
+  images)
+    # The real engine lists every stack image, newest first, and dies of SIGPIPE when the reader has gone.
+    if [ "${FAKE_MANY_IMAGES:-}" = 1 ]; then
+      echo "localhost/ygg-stack-${3#reference=localhost/ygg-stack-}:newest"; sleep 0.3
+      for i in 1 2 3 4 5 6 7 8; do echo "localhost/ygg-stack-x:old$i" 2>/dev/null || exit 141; done
+    else echo "localhost/ygg-stack-x:abc"; fi ;;
   inspect) echo "10.89.0.7" ;;
   logs) echo "start: weed stopped" ;;
   run)
@@ -146,6 +151,14 @@ check "both containers go in one rm -f -v (anonymous volumes go too), product fi
 check "the key is read as app" bash -c "grep -Eq 'exec --user app smoke-runtime-product-[0-9]+ cat /app/.data/seaweed-identity.json' '$T/calls'"
 check "signed requests send the unsigned-payload header" inlog "x-amz-content-sha256: UNSIGNED-PAYLOAD"
 check "no-route has a positive control that connects" bash -c "grep -Eq 'exec smoke-runtime-product-[0-9]+ timeout 5 bash -c .*/dev/tcp/10.89.0.7/3000' '$T/calls'"
+
+# The stack images found by name: the engine lists several, and the newest is taken (the reader must not close the
+# pipe early: under pipefail, podman's SIGPIPE would stop the script before its first line).
+: >"$T/calls"; : >"$T/store"
+FAKE_MANY_IMAGES=1 run "$SCRIPT" --folder "$D" --yggdrasil "$Y" --image task:img
+check "with several stack images and no --api-image, a healthy run exits 0" test "$rc" = 0
+check "... and the api release is built in the newest helheim-go image" inlog "localhost/ygg-stack-helheim-go:newest sh /src/release.sh"
+check "... and the web release in the newest midgard-react image" inlog "localhost/ygg-stack-midgard-react:newest sh /src/release.sh"
 
 # One thing broken at a time.
 FAKE_UNSIGNED_CODE=200 runit; check "an unsigned PUT that is accepted fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  unsigned' '$T/out'"
