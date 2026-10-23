@@ -72,7 +72,7 @@ app="$work/app"
 bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
 eng() { echo "$bind${1#"$dir"}"; }
 cleanup() {
-  podman rm -f "$prod" "$chk" >/dev/null 2>&1 || true
+  podman rm -f -v "$prod" "$chk" >/dev/null 2>&1 || true
   podman network rm -f "$net" >/dev/null 2>&1 || true
   # The files of app belong to a mapped user the host cannot remove: a root container in the engine does it.
   podman run --rm --user root --entrypoint rm -v "$(eng "$work"):/w" "$image" -rf /w/app >/dev/null 2>&1 || true
@@ -94,6 +94,7 @@ release() { # release LEAF IMAGE SRC: build the template's release into app/.ygg
 release api "$api_image" "$api_src"
 release web "$web_image" "$web_src"
 cp "$start_src" "$app/start.sh"
+cmp -s "$start_src" "$app/start.sh" || fail "start.sh at the root of the app folder is not niflheim-local's templates/product/start.sh"
 chmod 755 "$app/start.sh"
 podman run --rm --user root --entrypoint chown -v "$(eng "$app"):/app" "$image" -R app:app /app
 

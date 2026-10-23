@@ -39,7 +39,7 @@ Y="$T/ygg"
 mkdir -p "$Y/helheim-go/templates/api" "$Y/midgard-react/templates/web" "$Y/niflheim-local/templates/product"
 printf '#!/bin/sh\n' >"$Y/helheim-go/templates/api/release.sh"
 printf '#!/bin/sh\n' >"$Y/midgard-react/templates/web/release.sh"
-printf '#!/bin/bash\n' >"$Y/niflheim-local/templates/product/start.sh"
+printf '#!/bin/bash\n# the product start\n' >"$Y/niflheim-local/templates/product/start.sh"
 mkdir -p "$Y/midgard-react/templates/web/node_modules" "$Y/midgard-react/templates/web/dist"
 
 # The stand-in podman: every call is one line in FAKE_CALLS (with whether the engine environment was loaded). It
@@ -59,7 +59,7 @@ case "$1" in
       *"--entrypoint rm "*)
         for x in "$@"; do case "$x" in *:/w) rm -rf -- "${x%:/w}/app" ;; esac; done ;;
       *"--entrypoint /app/start.sh"*)
-        for x in "$@"; do case "$x" in *:/app) [ -x "${x%:/app}/start.sh" ] || { echo "no start.sh" >&2; exit 126; } ;; esac; done ;;
+        for x in "$@"; do case "$x" in *:/app) { [ -x "${x%:/app}/start.sh" ] && cmp -s "${x%:/app}/start.sh" "$FAKE_START_SRC"; } || { echo "no start.sh" >&2; exit 126; } ;; esac; done ;;
       *release.sh*)
         [ "${FAKE_RELEASE_FAIL:-}" != 1 ] || { echo "go: build failed"; exit 1; }
         for x in "$@"; do case "$x" in *:/out) mkdir -p "${x%:/out}"; printf '#!/bin/sh\n' >"${x%:/out}/run.sh" ;; esac; done ;;
@@ -93,7 +93,7 @@ EOF2
 chmod +x "$T/bin/podman"
 # The engine sees the folder at the bind mount (a link here), as the Podman machine does.
 export YGG_BIND="$T/bind"
-export PATH="$T/bin:$PATH" FAKE_CALLS="$T/calls" FAKE_STORE="$T/store"
+export PATH="$T/bin:$PATH" FAKE_CALLS="$T/calls" FAKE_STORE="$T/store" FAKE_START_SRC="$Y/niflheim-local/templates/product/start.sh"
 D="$T/it"; mkdir -p "$D"; ln -s "$D" "$YGG_BIND"
 runit() { : >"$T/calls"; : >"$T/store"; run "$SCRIPT" --folder "$D" --yggdrasil "$Y" --image task:img --api-image api:img --web-image web:img "$@"; }
 
@@ -129,7 +129,7 @@ check "the checks run from a second container on the same network" bash -c "grep
 check "the checks go to the product's address on port 3000" inlog "http://10.89.0.7:3000/api/healthz"
 check "the signed requests use SigV4 for s3 in us-east-1" inlog "aws:amz:us-east-1:s3"
 check "the product is restarted in the same container" bash -c "grep -Eq 'restart --time 30 smoke-runtime-product-' '$T/calls'"
-check "both containers and the network are removed" bash -c "grep -q 'rm -f smoke-runtime-product-' '$T/calls' && grep -q 'smoke-runtime-check-[0-9]*' '$T/calls' && grep -q 'network rm -f smoke-runtime-' '$T/calls'"
+check "both containers and the network are removed" bash -c "grep -q 'rm -f -v smoke-runtime-product-' '$T/calls' && grep -q 'smoke-runtime-check-[0-9]*' '$T/calls' && grep -q 'network rm -f smoke-runtime-' '$T/calls'"
 check "the key is never printed" bash -c "! grep -q 'FAKESECRET\|AKIAFAKEKEY' '$T/out'"
 check "the key is never in an argument" notinlog "FAKESECRET"
 check "the access key is never in an argument" notinlog "AKIAFAKEKEY"
@@ -142,7 +142,7 @@ check "every curl runs in the checker container" bash -c "! grep -E '^podman loa
 check "the chown of /app is a root run in the task image, on the bind path" bash -c "grep -Eq 'run --rm --user root --entrypoint chown -v $YGG_BIND/smoke-runtime-[0-9-]+/app:/app task:img -R app:app /app' '$T/calls'"
 check "the cleanup removes app in a root container, before the host rm" bash -c "grep -Eq 'run --rm --user root --entrypoint rm -v $YGG_BIND/smoke-runtime-[0-9-]+:/w task:img -rf /w/app' '$T/calls'"
 check "unshare is never used" notinlog "unshare"
-check "both containers go in one rm -f, product first" bash -c "grep -Eq 'rm -f smoke-runtime-product-([0-9]+) smoke-runtime-check-\\1\$' '$T/calls'"
+check "both containers go in one rm -f -v (anonymous volumes go too), product first" bash -c "grep -Eq 'rm -f -v smoke-runtime-product-([0-9]+) smoke-runtime-check-\\1\$' '$T/calls'"
 check "the key is read as app" bash -c "grep -Eq 'exec --user app smoke-runtime-product-[0-9]+ cat /app/.data/seaweed-identity.json' '$T/calls'"
 check "signed requests send the unsigned-payload header" inlog "x-amz-content-sha256: UNSIGNED-PAYLOAD"
 check "no-route has a positive control that connects" bash -c "grep -Eq 'exec smoke-runtime-product-[0-9]+ timeout 5 bash -c .*/dev/tcp/10.89.0.7/3000' '$T/calls'"
@@ -154,7 +154,11 @@ FAKE_LISTEN_ALL=1 runit; check "a listener on 0.0.0.0 that is not 3000 fails, wi
 FAKE_ROUTE=1 runit; check "an outside address that answers fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  no-route' '$T/out'"
 FAKE_INDEX_DIFF=1 runit; check "an index that is not the bundle's fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  index' '$T/out'"
 FAKE_RESTART_LOSE=1 runit; check "an object lost by the restart fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  restart' '$T/out'"
-FAKE_NO_ANSWER=1 YGG_SMOKE_WAIT=2 runit; check "a product that never answers fails after the wait, with every check named" bash -c "[ $rc = 1 ] && grep -q 'FAIL  index' '$T/out' && grep -q 'FAIL  restart' '$T/out'"
+SECONDS=0; : >"$T/calls"; : >"$T/store"
+FAKE_NO_ANSWER=1 YGG_SMOKE_WAIT=2 run timeout 40 "$SCRIPT" --folder "$D" --yggdrasil "$Y" --image task:img --api-image api:img --web-image web:img
+took=$SECONDS
+check "a product that never answers ends within 30 s (the limit is the wait, not a hang)" test "$took" -lt 30
+check "a product that never answers fails after the wait, with every check named" bash -c "[ $rc = 1 ] && grep -q 'FAIL  index' '$T/out' && grep -q 'FAIL  restart' '$T/out'"
 check "... and nothing is left: the network is removed" inlog "network rm -f smoke-runtime-"
 
 [ "$fail" -eq 0 ] || exit 1
