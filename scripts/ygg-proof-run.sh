@@ -4,7 +4,7 @@
 # --compare` compares two factories and not two setups. IT WILL COST MONEY (without --dry-run):
 # the script makes the project and the config, runs the factory, grades the run and prints the evidence.
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
-#                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL] [--run-turns N] [--run-tokens N]
+#                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns N] [--run-tokens N]
 #                    [--run-usd N] [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run]
 #                    [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR]
 #                    [--wall TIME] [--clip]
@@ -12,7 +12,9 @@
 #                    [--folder DIR] [--env FILE] [--wall TIME] [--clip]
 # AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>; a MODEL has only A-Za-z0-9._/:-
 # because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
-# opencode:openrouter/qwen/qwen3.8-27b; a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000 turns, 24,000,000
+# opencode:openrouter/qwen/qwen3.8-27b with --reviewer-reasoning medium (the reviewer role's reasoning effort: a
+# Qwen reviewer at the default high stalled a whole session in the rehearsal; a claude-code agent ignores the
+# setting, and the line is written for every agent); a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000 turns, 24,000,000
 # tokens, $10; --wall 8h; DIR $HOME/ygg-it; FILE $HOME/.config/ouroboric/factory.env; --tasks ../mimir;
 # --suites $HOME/ygg-it/hidden-suites; --yggdrasil the umbrella beside this repo. The task is client-gallery-lite
 # (YGG_PROOF_TASK names another, for tests); its suite is the `suite` key of its task.toml.
@@ -60,7 +62,7 @@ set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
-  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
+  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
   echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --resume) [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
   exit 2
 }
@@ -73,12 +75,13 @@ put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small 
 name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
 cont="" gate_in="" note="" note_set=0 resume=0 setup_flags="" # --continue; the setup flags given (a continued run keeps its config)
 planner=claude-code:sonnet implementer=claude-code:sonnet reviewer=opencode:openrouter/qwen/qwen3.8-27b
+reviewer_reasoning=medium
 run_turns=1500 run_tokens=12000000 run_usd=5 day_turns=2000 day_tokens=24000000 day_usd=10
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir"
 suites="$HOME/ygg-it/hidden-suites" ygg_dir="$HERE/../../yggdrasil"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name | --mode | --planner | --implementer | --reviewer | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
+    --name | --mode | --planner | --implementer | --reviewer | --reviewer-reasoning | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
   esac
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -93,6 +96,7 @@ while [ $# -gt 0 ]; do
     --planner) [ $# -ge 2 ] || usage; planner="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
     --reviewer) [ $# -ge 2 ] || usage; reviewer="$2"; shift 2 ;;
+    --reviewer-reasoning) [ $# -ge 2 ] || usage; reviewer_reasoning="$2"; shift 2 ;;
     --run-turns) [ $# -ge 2 ] || usage; run_turns="$2"; shift 2 ;;
     --run-tokens) [ $# -ge 2 ] || usage; run_tokens="$2"; shift 2 ;;
     --run-usd) [ $# -ge 2 ] || usage; run_usd="$2"; shift 2 ;;
@@ -125,6 +129,7 @@ else
   [ -n "$name" ] || fail "--name is needed: the run's name, such as baseline-1"
   [[ $name =~ ^[a-z0-9-]+$ ]] || fail "--name '$name' has characters outside a-z0-9-"
   case "$mode" in key-points | unattended | step-by-step) ;; *) fail "--mode is key-points, unattended or step-by-step, not '$mode'" ;; esac
+  case "$reviewer_reasoning" in low | medium | high | off) ;; *) fail "--reviewer-reasoning is low, medium, high or off, not '$reviewer_reasoning'" ;; esac
   for pair in run-turns:"$run_turns" run-tokens:"$run_tokens" day-turns:"$day_turns" day-tokens:"$day_tokens"; do
     [[ ${pair#*:} =~ ^[1-9][0-9]*$ ]] || fail "--${pair%%:*} is a whole number above 0, not '${pair#*:}'"
   done
@@ -230,9 +235,11 @@ else
   [ -f "$work/factory.yaml" ] && [ -f "$work/proof.meta" ] || fail "$work has no factory.yaml or proof.meta: this script did not set it up"
   meta() { sed -n "s/^$1 //p" "$work/proof.meta" | head -n 1; } # a key's value; each is checked below as a flag is
   name="$(meta name)" mode="$(meta mode)" planner="$(meta planner)" implementer="$(meta implementer)" reviewer="$(meta reviewer)"
+  reviewer_reasoning="$(meta reviewer_reasoning)"
   task="$(meta task)" suite="$(meta suite)" have="$(meta brief)"
   [[ $name =~ ^[a-z0-9-]+$ ]] || fail "$work/proof.meta has no proof run name"
   case "$mode" in key-points | unattended | step-by-step) ;; *) fail "$work/proof.meta has no mode" ;; esac
+  case "$reviewer_reasoning" in low | medium | high | off) ;; *) fail "$work/proof.meta has no reviewer reasoning" ;; esac
   roles_ok
   [[ $task =~ ^[A-Za-z0-9._-]+$ && $suite =~ ^[a-z0-9][a-z0-9._-]*$ && $have =~ ^[0-9a-f]{64}$ ]] || fail "$work/proof.meta has no task, suite or brief SHA-256"
   if [ -z "$baseline" ]; then
@@ -278,7 +285,7 @@ if [ -z "$cont" ]; then
   fill MODE "$mode"
   fill PLANNER_AGENT "${planner%%:*}"; fill PLANNER_MODEL "${planner#*:}"
   fill IMPLEMENTER_AGENT "${implementer%%:*}"; fill IMPLEMENTER_MODEL "${implementer#*:}"
-  fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"
+  fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"; fill REVIEWER_REASONING "$reviewer_reasoning"
   fill RUN_TOKENS "$run_tokens"; fill RUN_TURNS "$run_turns"; fill RUN_USD "$usd_run"
   fill DAY_TOKENS "$day_tokens"; fill DAY_TURNS "$day_turns"; fill DAY_USD "$usd_day"
   fill ENGINE "$engine"; fill FOLDER "$dir_abs"; fill BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
@@ -291,8 +298,8 @@ if [ -z "$cont" ]; then
   [ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
   # What --continue needs to know about this proof run, one "key value" a line; every value was checked above.
   private "$work/proof.meta"
-  printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
-    "$name" "$mode" "$planner" "$implementer" "$reviewer" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
+  printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\nreviewer_reasoning %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
+    "$name" "$mode" "$planner" "$implementer" "$reviewer" "$reviewer_reasoning" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
 else
   project="$work/project"
   echo "proof-run: continuing run $cont of the proof run $name in $work"
@@ -319,7 +326,7 @@ build_argv=("${ygg_arr[@]}" sandbox build --all --config "$work/factory.yaml")
 run_cmd="$(q "${run_argv[@]}")"
 build_cmd="$(q "${build_argv[@]}")"
 timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
-echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer"
+echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning)"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 [ -z "$cont_what" ] || echo "proof-run: the continuation: $cont_what"

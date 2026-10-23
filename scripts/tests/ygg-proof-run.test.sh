@@ -206,7 +206,7 @@ check "the umbrella.yaml sets root: true" grep -q '^root: true$' "$P/project/umb
 check "the project folder is DIR/proof-<name>-<time>/project" bash -c '[[ $1 =~ /proof-first-[0-9]{8}-[0-9]{6}$ ]]' _ "$P"
 check "the config has the default mode" grep -q '^mode: key-points$' "$FY"
 check "the config has the planner" grep -q 'planner: { agent: claude-code, model: sonnet }' "$FY"
-check "the config has the reviewer" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b }' "$FY"
+check "the config has the reviewer" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$FY"
 check "the config has the run caps with usd" grep -q 'per_run: { tokens: 12000000, turns: 1500, usd: 5 }' "$FY"
 check "the config has the day caps with usd" grep -q 'per_day: { tokens: 24000000, turns: 2000, usd: 10 }' "$FY"
 check "the config has the tasks folder" grep -q -x "  tasks_dir: $TK" "$FY"
@@ -225,7 +225,28 @@ check "the mode asked for is in the config" grep -q '^mode: unattended$' "$FY"
 check "the caps asked for are in the config" grep -q 'per_run: { tokens: 20, turns: 10 }' "$FY"
 check "the day caps asked for are in the config" grep -q 'per_day: { tokens: 40, turns: 30 }' "$FY"
 check "no usd line when no role is paid" bash -c '! grep -q "usd:" "$1"' _ "$FY"
-check "the reviewer asked for is in the config" grep -q 'reviewer: { agent: claude-code, model: opus }' "$FY"
+check "the reviewer asked for is in the config" grep -q 'reviewer: { agent: claude-code, model: opus, reasoning: medium }' "$FY"
+
+# --- gallery-runtime T28: the reviewer's reasoning effort (F2)
+rm -rf "$D"/proof-* "$T/ygg.calls"
+run proof --name reason --dry-run
+P="$(made)"; FY="$P/factory.yaml"
+check "the reviewer role asks for reasoning medium by default" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$FY"
+check "the planner and the implementer have no reasoning" bash -c '! grep -E "^  (planner|implementer):" "$1" | grep -q reasoning' _ "$FY"
+check "the plan says reviewer AGENT:MODEL (reasoning medium)" has "reviewer opencode:openrouter/qwen/qwen3.8-27b (reasoning medium)"
+check "the config with reasoning passes ygg doctor" grep -q -- "^doctor --project .*/project --config $FY\$" "$T/ygg.calls"
+check "the config has no place left to fill" bash -c '! grep -q "@[A-Z_]*@" "$1"' _ "$FY"
+rm -rf "$D"/proof-*
+run proof --name reasonoff --dry-run --reviewer-reasoning off "${AC[@]}"
+P="$(made)"
+check "--reviewer-reasoning off writes off, for a claude-code reviewer too" grep -q 'reviewer: { agent: claude-code, model: opus, reasoning: off }' "$P/factory.yaml"
+check "--reviewer-reasoning off shows in the plan" has "(reasoning off)"
+for v in low high; do
+  rm -rf "$D"/proof-*; run proof --name reasonv --dry-run --reviewer-reasoning "$v"
+  check "--reviewer-reasoning $v writes $v" grep -q "reasoning: $v }" "$(made)/factory.yaml"
+done
+runq proof --name ok --reviewer-reasoning extreme;    check "a reasoning outside low, medium, high and off is refused" refuses "--reviewer-reasoning"
+runq proof --name ok --reviewer-reasoning 'low }';    check "a reasoning with YAML characters is refused" refuses "--reviewer-reasoning"
 
 # --- the dry run
 rm -rf "$D"/proof-* "$T/ygg.calls"
@@ -592,6 +613,7 @@ clearlogs; runc cont --continue RUN-1 --resume --note hi;           check "--not
 clearlogs; runc cont --continue RUN-1 --resume --name other;        check "--continue with a setup flag: refused" refusesc "keeps the config"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --note $'a\nb'; check "--note with a control character: refused" refusesc "control character"
 clearlogs; runc cont --continue .. --resume;                        check "--continue .. is not a run id" refusesc "not a run id"
+clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "--continue refuses --reviewer-reasoning as a setup flag" refusesc "keeps the config"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
