@@ -614,6 +614,16 @@ clearlogs; runc cont --continue RUN-1 --resume --name other;        check "--con
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --note $'a\nb'; check "--note with a control character: refused" refusesc "control character"
 clearlogs; runc cont --continue .. --resume;                        check "--continue .. is not a run id" refusesc "not a run id"
 clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "--continue refuses --reviewer-reasoning as a setup flag" refusesc "keeps the config"
+fresh; FAKE_RUN_RC=4 run proof --name go; W="$(RUND)"; clearlogs
+cp "$W/proof.meta" "$T/meta.keep"
+grep -v '^reviewer_reasoning ' "$T/meta.keep" >"$W/proof.meta"
+clearlogs; runc cont --continue RUN-1 --resume --dry-run
+check "--continue on a proof.meta without reviewer_reasoning goes on (exit 0)" test "$rc" -eq 0
+check "--continue on such a folder prints the unset form" has "(reasoning unset: a folder from before --reviewer-reasoning)"
+sed 's/^reviewer_reasoning .*/reviewer_reasoning extreme/' "$T/meta.keep" >"$W/proof.meta"
+clearlogs; runc cont --continue RUN-1 --resume --dry-run
+check "--continue on a proof.meta with a bad reviewer_reasoning is refused" refusesc "reviewer reasoning"
+cp "$T/meta.keep" "$W/proof.meta"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"

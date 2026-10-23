@@ -239,7 +239,9 @@ else
   task="$(meta task)" suite="$(meta suite)" have="$(meta brief)"
   [[ $name =~ ^[a-z0-9-]+$ ]] || fail "$work/proof.meta has no proof run name"
   case "$mode" in key-points | unattended | step-by-step) ;; *) fail "$work/proof.meta has no mode" ;; esac
-  case "$reviewer_reasoning" in low | medium | high | off) ;; *) fail "$work/proof.meta has no reviewer reasoning" ;; esac
+  # A folder from before --reviewer-reasoning has no such line: its factory.yaml is written, so the value is only shown.
+  if ! grep -q '^reviewer_reasoning ' "$work/proof.meta"; then reviewer_reasoning="unset"
+  else case "$reviewer_reasoning" in low | medium | high | off) ;; *) fail "$work/proof.meta has no valid reviewer reasoning" ;; esac; fi
   roles_ok
   [[ $task =~ ^[A-Za-z0-9._-]+$ && $suite =~ ^[a-z0-9][a-z0-9._-]*$ && $have =~ ^[0-9a-f]{64}$ ]] || fail "$work/proof.meta has no task, suite or brief SHA-256"
   if [ -z "$baseline" ]; then
@@ -326,7 +328,9 @@ build_argv=("${ygg_arr[@]}" sandbox build --all --config "$work/factory.yaml")
 run_cmd="$(q "${run_argv[@]}")"
 build_cmd="$(q "${build_argv[@]}")"
 timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
-echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning)"
+reasoning_note="" # for an old folder, why the reasoning is unset
+[ "$reviewer_reasoning" != unset ] || reasoning_note=": a folder from before --reviewer-reasoning"
+echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning${reasoning_note})"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 [ -z "$cont_what" ] || echo "proof-run: the continuation: $cont_what"
