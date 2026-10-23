@@ -612,6 +612,8 @@ clearlogs; runc cont --approve ship-gate;                           check "--app
 clearlogs; runc cont --continue RUN-1 --resume --note hi;           check "--note without --approve: refused" refusesc "--note goes with --approve"
 clearlogs; runc cont --continue RUN-1 --resume --name other;        check "--continue with a setup flag: refused" refusesc "keeps the config"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --note $'a\nb'; check "--note with a control character: refused" refusesc "control character"
+clearlogs; LC_ALL=C runc cont --continue RUN-1 --approve ship-gate --note $'a\xe2\x80\xa8b'; check "--note with U+2028: refused" refusesc "control character"
+clearlogs; LC_ALL=C runc cont --continue RUN-1 --approve ship-gate --note $'a\xe2\x80\xa9b'; check "--note with U+2029: refused" refusesc "control character"
 clearlogs; runc cont --continue .. --resume;                        check "--continue .. is not a run id" refusesc "not a run id"
 clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "--continue refuses --reviewer-reasoning as a setup flag" refusesc "keeps the config"
 # --- gallery-runtime T29: --reject (F3), run as --approve is run
@@ -642,6 +644,8 @@ clearlogs; runc cont --continue RUN-1 --reject ship-gate --resume --reason why; 
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason why --note hi;            check "--note with --reject: refused" refusesc "--note goes with --approve"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason '   ';                    check "--reject with a blank reason: refused" refusesc "--reason is blank"
 clearlogs; runc cont --continue RUN-1 --reject ship-gate --reason $'a\nb';                  check "--reject with a control character in the reason: refused" refusesc "control character"
+clearlogs; LC_ALL=C runc cont --continue RUN-1 --reject ship-gate --reason $'a\xe2\x80\xa8b';              check "--reject with U+2028 in the reason: refused" refusesc "control character"
+clearlogs; LC_ALL=C runc cont --continue RUN-1 --reject ship-gate --reason $'a\xe2\x80\xa9b';              check "--reject with U+2029 in the reason: refused" refusesc "control character"
 clearlogs; runc cont --continue RUN-1 --reject 'a b' --reason why;                         check "--reject with a bad gate name: refused" refusesc "not a gate name"
 clearlogs; runc cont --reject ship-gate --reason why;                                       check "--reject without --continue: refused" refusesc "go with --continue"
 clearlogs; runc cont --reason why;                                                          check "--reason without --continue: refused" refusesc "go with --continue"
