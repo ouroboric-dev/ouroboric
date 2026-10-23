@@ -57,7 +57,9 @@ if [ "${YGG_ENGINE_CHECK:-1}" = 1 ]; then
   eval "$engine_env"
 fi
 command -v podman >/dev/null 2>&1 || fail "podman is not installed"
-stack() { podman images --filter "reference=localhost/ygg-stack-$1" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | head -n 1; }
+# The newest image is the first line. sed reads every line: head would close the pipe early, and podman's SIGPIPE
+# would then fail the pipeline (pipefail) and stop the script with 141 and no message.
+stack() { podman images --filter "reference=localhost/ygg-stack-$1" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | sed -n 1p; }
 [ -n "$api_image" ] || api_image="$(stack helheim-go)"
 [ -n "$web_image" ] || web_image="$(stack midgard-react)"
 [ -n "$api_image" ] || fail "no sandbox image of helheim-go; build it with 'ygg sandbox build --realm helheim-go' or pass --api-image"
