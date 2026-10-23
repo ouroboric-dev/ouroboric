@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Check that ouroboric-dev repos have the required setup. See docs/4-ways-of-working/docs-standard.md.
-#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot]... [repo...]
+#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot|services]... [repo...]
+# services is not a default check and runs once per call: it keeps the services' versions equal in niflheim-local's
+# pack, mimir's client-gallery-lite Dockerfile and helheim-go's template CI.
 # The bot check also checks that the pr-bot can't reach any hidden repo. Run it under
 # as-bot.sh --read all, because it reads the pr-bot's own list of repos.
 # shellcheck disable=SC2015,SC2329  # `cond && ok || bad` reports only (ok and bad just print); checks run by name as check_$c
@@ -9,7 +11,7 @@ ROOT="${CHECK_REPOS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}" 
 ORG="ouroboric-dev"
 UMBRELLAS=" ouroboric yggdrasil asgard "
 FACTORIES=" yggdrasil asgard "   # the only repos with issues on
-LEAVES=" gungnir odin gleipnir jormungandr midgard-react helheim-go havamal voluspa "
+LEAVES=" gungnir odin gleipnir jormungandr midgard-react helheim-go havamal voluspa niflheim-local "
 LATER=" mimir "     # standard repos checked once they exist; side-by-side clones like the umbrellas
 REALMS=" midgard-react helheim-go "   # build realms; they share scripts, and helheim-go's copy is the source
 SHARED=(devcontainer/checks/docs.sh devcontainer/checks/protected-common)
@@ -90,6 +92,42 @@ check_shared() { # a realm's copy of each shared file must match helheim-go's; a
   ok "$1" shared
 }
 
+svc_image() { # <pack.yaml|ci.yml> <service>: the image of that service, from `image: X` or a folded `image: >-` line
+  awk -v svc="$2" '
+    $0 ~ "^[ ]*" svc ":[ ]*$" { want = 1; next }
+    want && $1 == "image:" { if ($2 ~ /^>/) { fold = 1; next } print $2; exit }
+    fold { print $1; exit }' "$1"
+}
+check_services() { # once per call: the three copies of the services' versions; a missing clone fails, never skips
+  local pack ci df f
+  pack="$(local_path niflheim-local)/pack.yaml"
+  ci="$(local_path helheim-go)/templates/api/.github/workflows/ci.yml"
+  df="$ROOT/mimir/client-gallery-lite/environment/Dockerfile"
+  for f in "$pack" "$ci" "$df"; do [ -f "$f" ] || { bad niflheim-local services "$f is missing"; return; }; done
+  local pg s3 cipg weed pkg
+  pg="$(svc_image "$pack" postgres)"; s3="$(svc_image "$pack" s3)"; cipg="$(svc_image "$ci" postgres)"
+  weed="$(sed -nE 's/^FROM([[:space:]]+--[^[:space:]]+)*[[:space:]]+([^[:space:]]+)[[:space:]]+AS[[:space:]]+weed[[:space:]]*$/\2/Ip' "$df" | head -1)"
+  pkg="$(grep -o 'postgresql-[0-9]\{1,\}\(=[^[:space:]\\]\{1,\}\)\{0,1\}' "$df" | head -1)"
+  [ -n "$pg" ] || { bad niflheim-local services "$pack has no postgres image"; return; }
+  [ -n "$s3" ] || { bad niflheim-local services "$pack has no s3 image"; return; }
+  [ -n "$cipg" ] || { bad niflheim-local services "$ci has no postgres service image"; return; }
+  [ -n "$weed" ] || { bad niflheim-local services "$df has no FROM ... AS weed line"; return; }
+  [ -n "$pkg" ] || { bad niflheim-local services "$df installs no postgresql-<major> package"; return; }
+  [ "${weed#*@}" = "${s3#*@}" ] && [[ "$weed" == *@* ]] \
+    && ok niflheim-local services "weed digest ${s3#*@}" || bad niflheim-local services "$df: the weed stage is $weed, the pack's s3 is $s3"
+  [ "$cipg" = "$pg" ] && ok niflheim-local services "template CI postgres image equals the pack's" \
+    || bad niflheim-local services "$ci: the postgres image is $cipg, the pack's is $pg"
+  local tag major pkgmajor imgminor pkgminor
+  tag="${pg%%@*}"; tag="${tag##*:}"; imgminor="${tag%%-*}"; major="${imgminor%%.*}"
+  pkgmajor="${pkg#postgresql-}"; pkgmajor="${pkgmajor%%=*}"
+  [ "$pkgmajor" = "$major" ] || { bad niflheim-local services "$df: ${pkg%%=*} is major $pkgmajor, the pack's postgres is major $major"; return; }
+  [[ "$pkg" == *=* ]] || { bad niflheim-local services "$df: ${pkg} is not pinned to a version (postgresql-$major=<version>)"; return; }
+  [[ "$pkg" != *'$'* ]] || { bad niflheim-local services "$df: ${pkg} holds a variable; pin the literal version (postgresql-$major=<version>)"; return; }
+  pkgminor="${pkg#*=}"; pkgminor="${pkgminor%%-*}"
+  if [ "$pkgminor" = "$imgminor" ]; then ok niflheim-local services "postgres minor $imgminor (image) and $pkgminor (package)"
+  else ok niflheim-local services "postgres minors differ, allowed: $imgminor (image) and $pkgminor (package)"; fi
+}
+
 bot_repos() { # the pr-bot's installation repos, once; ERROR if they can't be listed
   [ -n "${BOT_REPOS+x}" ] && return
   local out
@@ -113,10 +151,15 @@ checks=(); repos=()
 while [ $# -gt 0 ]; do case "$1" in --check) checks+=("${2:?--check needs a name}"); shift 2 ;; *) repos+=("$1"); shift ;; esac; done
 [ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks shared bot)
 for c in "${checks[@]}"; do declare -F "check_$c" >/dev/null || { echo "unknown check: $c"; exit 1; }; done
-if [ ${#repos[@]} -eq 0 ]; then
-  repos=(.github ouroboric yggdrasil asgard ouroboric-packages)
-  for r in $LEAVES $LATER; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
+repo_checks=(); services=0   # services compares three repos, so it runs once, not once per repo
+for c in "${checks[@]}"; do if [ "$c" = services ]; then services=1; else repo_checks+=("$c"); fi; done
+if [ ${#repo_checks[@]} -gt 0 ]; then
+  if [ ${#repos[@]} -eq 0 ]; then
+    repos=(.github ouroboric yggdrasil asgard ouroboric-packages)
+    for r in $LEAVES $LATER; do gh_api "repos/$ORG/$r" >/dev/null 2>&1 && repos+=("$r"); done
+  fi
+  for r in "${repos[@]}"; do for c in "${repo_checks[@]}"; do "check_$c" "$r"; done; done
 fi
-for r in "${repos[@]}"; do for c in "${checks[@]}"; do "check_$c" "$r"; done; done
+[ "$services" = 1 ] && check_services
 [[ " ${checks[*]} " == *" bot "* ]] && for h in $HIDDEN; do check_hidden "$h"; done
 exit $fail

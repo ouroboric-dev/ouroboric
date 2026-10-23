@@ -86,4 +86,68 @@ check "shared, sha256sum fails: FAIL naming the file" [ "$(PATH="$T/nohash:$PATH
 mkdir -p "$T/vroot/yggdrasil/voluspa"
 printf '# AGENTS.md: Voluspa\n\nInvariants: https://github.com/ouroboric-dev/yggdrasil/blob/main/AGENTS.md#invariants\n' > "$T/vroot/yggdrasil/voluspa/AGENTS.md"
 check "agents, voluspa is a leaf under yggdrasil: PASS" [ "$(CHECK_REPOS_ROOT="$T/vroot" "$HERE/../check-repos.sh" --check agents voluspa)" = "PASS voluspa agents" ]
+# services: the services' versions live in niflheim-local's pack; mimir's Dockerfile and helheim-go's template CI copy them.
+# A fixture root; each argument overrides a part: seaweed=<digest> pgci=<image> pgpkg=<package> shape=folded|inline|nopkg, and drop=<repo> leaves a clone out.
+PGIMG=docker.io/library/postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382
+SWD=sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
+services_root() {
+  local d seaweed="$SWD" pgci="$PGIMG" pgpkg="postgresql-18=18.4-1.pgdg120+1" shape=folded drop="" weedfmt=plain a
+  for a in "$@"; do case "$a" in seaweed=*) seaweed="${a#*=}" ;; pgci=*) pgci="${a#*=}" ;; pgpkg=*) pgpkg="${a#*=}" ;; shape=*) shape="${a#*=}" ;; drop=*) drop="${a#*=}" ;; weedfmt=*) weedfmt="${a#*=}" ;; esac; done
+  d="$(mktemp -d -p "$T")"
+  mkdir -p "$d/yggdrasil/niflheim-local" "$d/yggdrasil/helheim-go/templates/api/.github/workflows" "$d/mimir/client-gallery-lite/environment"
+  { printf 'services:\n  postgres:\n'
+    if [ "$shape" = folded ]; then printf '    image: >-\n      %s\n' "$PGIMG"; else printf '    image: %s\n' "$PGIMG"; fi
+    printf '    env:\n      POSTGRES_DB: app\n  s3:\n    image: docker.io/chrislusf/seaweedfs:4.45@%s\n    ports: [8333]\n' "$SWD"
+  } > "$d/yggdrasil/niflheim-local/pack.yaml"
+  { printf 'jobs:\n  test:\n    services:\n      postgres:\n        image: >-\n          %s\n        env:\n          POSTGRES_DB: app\n' "$pgci"
+  } > "$d/yggdrasil/helheim-go/templates/api/.github/workflows/ci.yml"
+  local from=FROM as=AS flag=""
+  [ "$weedfmt" != lower ] || { from=from; as=as; }
+  [ "$weedfmt" != flag ] || flag="--platform=linux/amd64 "
+  { printf '%s %sdocker.io/chrislusf/seaweedfs:4.45@%s %s weed\nFROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff1\n' "$from" "$flag" "$seaweed" "$as"
+    if [ "$shape" = nopkg ]; then printf 'RUN apt-get install -y postgresql-18\n'; else printf 'RUN apt-get install -y --no-install-recommends \\\n    %s \\\n    git\n' "$pgpkg"; fi
+  } > "$d/mimir/client-gallery-lite/environment/Dockerfile"
+  case "$drop" in mimir) rm -rf "$d/mimir" ;; helheim-go|niflheim-local) rm -rf "$d/yggdrasil/$drop" ;; esac
+  echo "$d"
+}
+# shellcheck disable=SC2053  # the pattern is meant as a glob
+matches() { [[ "$1" == $2 ]]; }   # <text> <glob pattern>
+services() { CHECK_REPOS_ROOT="$1" "$HERE/../check-repos.sh" --check services "${@:2}"; }
+r="$(services_root)"
+check "services, the copies agree: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+check "services, prints both Postgres minors" matches "$(services "$r")" "*18.4*18.4*"
+r="$(services_root shape=inline)"
+check "services, an inline image line: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+r="$(services_root seaweed=sha256:0000)"
+out="$(services "$r")"
+check "services, another weed digest: FAIL naming the Dockerfile and both digests" matches "$out" "*FAIL*client-gallery-lite/environment/Dockerfile*sha256:0000*$SWD*"
+r="$(services_root pgci=docker.io/library/postgres:18.4-bookworm@sha256:0000)"
+out="$(services "$r")"
+check "services, another CI image: FAIL naming ci.yml and both images" matches "$out" "*FAIL*ci.yml*sha256:0000*$PGIMG*"
+r="$(services_root pgpkg=postgresql-17=17.4-1)"
+out="$(services "$r")"
+check "services, another major: FAIL naming the Dockerfile and both majors" matches "$out" "*FAIL*Dockerfile*17*18*"
+r="$(services_root shape=nopkg)"
+out="$(services "$r")"
+check "services, an unpinned package: FAIL" matches "$out" "*FAIL*Dockerfile*pinned*"
+r="$(services_root weedfmt=lower)"
+check "services, a lower-case as: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+r="$(services_root weedfmt=flag)"
+check "services, FROM --platform=... IMAGE AS weed: PASS" [ "$(services "$r" | cut -d' ' -f1 | sort -u)" = PASS ]
+r="$(services_root pgpkg="postgresql-18=\${PGV}")"
+out="$(services "$r")"
+check "services, an ARG-based pin: FAIL, pin the literal version" matches "$out" "*FAIL*Dockerfile*pin the literal version*" 
+r="$(services_root pgpkg=postgresql-18=18.5-1.pgdg120+1)"
+out="$(services "$r"; echo "exit $?")"
+check "services, another minor: PASS with a line that says so" matches "$out" "*minor*18.4*18.5*exit 0" && ! matches "$out" "*FAIL*"
+for m in niflheim-local helheim-go mimir; do
+  r="$(services_root drop=$m)"
+  out="$(services "$r")"
+  check "services, no $m clone: FAIL naming the path" matches "$out" "*FAIL*$m*" && ! matches "$out" "*PASS*"
+done
+r="$(services_root)"
+check "services, once per call whatever repos are named" [ "$(services "$r" ouroboric yggdrasil gungnir | grep -c 'services')" = "$(services "$r" | grep -c 'services')" ]
+out="$(CHECK_REPOS_ROOT="$r" "$HERE/../check-repos.sh" --check agents gungnir 2>&1)"
+check "services, not in the default checks" [ "$(grep -c '^\(FAIL\|PASS\) niflheim-local services' <<<"$out")" = 0 ]
+check "services, the check never names the hidden suites" [ -z "$(grep -n 'hidden-suites\|huldra\|credentials\|factory.env' <(sed -n '/^check_services/,/^}/p' "$HERE/../check-repos.sh"))" ]
 exit $fail

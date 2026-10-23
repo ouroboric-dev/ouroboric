@@ -137,8 +137,11 @@ if [ -n "$cont" ]; then
   if [ "$note_set" -eq 1 ] && [ -z "$gate_in" ]; then fail "--note goes with --approve"; fi
   if [ "$reason_set" -eq 1 ] && [ -z "$reject_in" ]; then fail "--reason goes with --reject"; fi
   if [ -n "$reject_in" ] && [ "$reason_set" -eq 0 ]; then fail "--reject needs --reason TEXT: the reason goes to the agents"; fi
-  if [[ $note == *[[:cntrl:]]* ]]; then fail "--note has a control character; a note is one line of text"; fi
-  if [[ $reason == *[[:cntrl:]]* ]]; then fail "--reason has a control character; a reason is one line of text"; fi
+  # U+2028, U+2029 and the C1 controls U+0080 to U+009F (odin refuses them) are matched as bytes, so the locale does not decide.
+  sep_line=$'\xe2\x80\xa8' sep_para=$'\xe2\x80\xa9'
+  c1_re=$'\xc2[\x80-\x9f]'
+  if [[ $note == *[[:cntrl:]]* || $note == *"$sep_line"* || $note == *"$sep_para"* || $note =~ $c1_re ]]; then fail "--note has a control character (or U+2028, U+2029, a C1 control); a note is one line of text"; fi
+  if [[ $reason == *[[:cntrl:]]* || $reason == *"$sep_line"* || $reason == *"$sep_para"* || $reason =~ $c1_re ]]; then fail "--reason has a control character (or U+2028, U+2029, a C1 control); a reason is one line of text"; fi
   if [ "$reason_set" -eq 1 ] && [[ $reason =~ ^[[:space:]]*$ ]]; then fail "--reason is blank; say why the gate is rejected"; fi
 else
   if [ -n "$gate_in" ] || [ -n "$reject_in" ] || [ "$resume" -eq 1 ] || [ "$note_set" -eq 1 ] || [ "$reason_set" -eq 1 ]; then
