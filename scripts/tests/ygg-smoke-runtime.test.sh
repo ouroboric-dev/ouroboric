@@ -52,16 +52,19 @@ a="$*"
 case "$1" in
   image) [ "$FAKE_NO_IMAGE" = "${3:-}" ] && exit 1; exit 0 ;;
   images) echo "localhost/ygg-stack-x:abc" ;;
-  unshare) shift; "$@" ;;
   inspect) echo "10.89.0.7" ;;
   logs) echo "start: weed stopped" ;;
   run)
     case "$a" in
+      *"--entrypoint rm "*)
+        for x in "$@"; do case "$x" in *:/w) rm -rf -- "${x%:/w}/app" ;; esac; done ;;
+      *"--entrypoint /app/start.sh"*)
+        for x in "$@"; do case "$x" in *:/app) [ -x "${x%:/app}/start.sh" ] || { echo "no start.sh" >&2; exit 126; } ;; esac; done ;;
       *release.sh*)
         [ "${FAKE_RELEASE_FAIL:-}" != 1 ] || { echo "go: build failed"; exit 1; }
         for x in "$@"; do case "$x" in *:/out) mkdir -p "${x%:/out}"; printf '#!/bin/sh\n' >"${x%:/out}/run.sh" ;; esac; done ;;
     esac ;;
-  restart) ;;
+  restart) [ "${FAKE_RESTART_LOSE:-}" != 1 ] || : >"$FAKE_STORE" ;;
   exec)
     case "$a" in
       *"cat /app/.ygg/release/repos/web/dist/index.html"*) echo "<html>bundle</html>" ;;
@@ -81,15 +84,17 @@ case "$1" in
           *"-X PUT"*) printf '%s' "${FAKE_UNSIGNED_CODE:-403}" ;;
           *"/api/healthz"*) printf '200' ;;
           *"-o /dev/null"*) [ "${FAKE_NO_ANSWER:-}" = 1 ] && printf '000' || printf '200' ;;
-          *) echo "<html>bundle</html>" ;;
+          *) if [ "${FAKE_INDEX_DIFF:-}" = 1 ]; then echo "<html>other</html>"; else echo "<html>bundle</html>"; fi ;;
         esac ;;
     esac ;;
 esac
 exit 0
 EOF2
 chmod +x "$T/bin/podman"
+# The engine sees the folder at the bind mount (a link here), as the Podman machine does.
+export YGG_BIND="$T/bind"
 export PATH="$T/bin:$PATH" FAKE_CALLS="$T/calls" FAKE_STORE="$T/store"
-D="$T/it"; mkdir -p "$D"
+D="$T/it"; mkdir -p "$D"; ln -s "$D" "$YGG_BIND"
 runit() { : >"$T/calls"; : >"$T/store"; run "$SCRIPT" --folder "$D" --yggdrasil "$Y" --image task:img --api-image api:img --web-image web:img "$@"; }
 
 # Refusals.
@@ -131,11 +136,26 @@ check "the access key is never in an argument" notinlog "AKIAFAKEKEY"
 check "the work folder is gone" bash -c "! ls '$D' | grep -q smoke-runtime-"
 check "it never names hidden-suites or a credentials file" bash -c "! grep -qi 'hidden-suites\|factory.env\|huldra' '$SCRIPT'"
 
+check "every -v source starts with the bind mount" bash -c "grep -oE -- '-v /[^ ]+' '$T/calls' | grep -qv -- '-v $YGG_BIND/' && exit 1; grep -q -- '-v $YGG_BIND/' '$T/calls'"
+check "no -v source is a host path under the folder" bash -c "! grep -E -- '-v $D' '$T/calls'"
+check "every curl runs in the checker container" bash -c "! grep -E '^podman loaded=1 exec' '$T/calls' | grep curl | grep -v 'smoke-runtime-check-[0-9]'"
+check "the chown of /app is a root run in the task image, on the bind path" bash -c "grep -Eq 'run --rm --user root --entrypoint chown -v $YGG_BIND/smoke-runtime-[0-9-]+/app:/app task:img -R app:app /app' '$T/calls'"
+check "the cleanup removes app in a root container, before the host rm" bash -c "grep -Eq 'run --rm --user root --entrypoint rm -v $YGG_BIND/smoke-runtime-[0-9-]+:/w task:img -rf /w/app' '$T/calls'"
+check "unshare is never used" notinlog "unshare"
+check "both containers go in one rm -f, product first" bash -c "grep -Eq 'rm -f smoke-runtime-product-([0-9]+) smoke-runtime-check-\\1\$' '$T/calls'"
+check "the key is read as app" bash -c "grep -Eq 'exec --user app smoke-runtime-product-[0-9]+ cat /app/.data/seaweed-identity.json' '$T/calls'"
+check "signed requests send the unsigned-payload header" inlog "x-amz-content-sha256: UNSIGNED-PAYLOAD"
+check "no-route has a positive control that connects" bash -c "grep -Eq 'exec smoke-runtime-product-[0-9]+ timeout 5 bash -c .*/dev/tcp/10.89.0.7/3000' '$T/calls'"
+
 # One thing broken at a time.
 FAKE_UNSIGNED_CODE=200 runit; check "an unsigned PUT that is accepted fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  unsigned' '$T/out'"
 FAKE_PUT_CODE=500 runit; check "a signed PUT that fails, fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  signed' '$T/out'"
 FAKE_LISTEN_ALL=1 runit; check "a listener on 0.0.0.0 that is not 3000 fails, with a count" bash -c "[ $rc = 1 ] && grep -q 'FAIL  listeners.*1 not on loopback' '$T/out'"
 FAKE_ROUTE=1 runit; check "an outside address that answers fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  no-route' '$T/out'"
+FAKE_INDEX_DIFF=1 runit; check "an index that is not the bundle's fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  index' '$T/out'"
+FAKE_RESTART_LOSE=1 runit; check "an object lost by the restart fails" bash -c "[ $rc = 1 ] && grep -q 'FAIL  restart' '$T/out'"
+FAKE_NO_ANSWER=1 YGG_SMOKE_WAIT=2 runit; check "a product that never answers fails after the wait, with every check named" bash -c "[ $rc = 1 ] && grep -q 'FAIL  index' '$T/out' && grep -q 'FAIL  restart' '$T/out'"
+check "... and nothing is left: the network is removed" inlog "network rm -f smoke-runtime-"
 
 [ "$fail" -eq 0 ] || exit 1
 echo "all ok"

@@ -21,9 +21,14 @@
 #        signed    a signed PUT and GET (curl --aws-sigv4; the key is read as `app` from /app/.data and is never
 #                  printed) through port 3000 succeed;
 #        listeners every listener except :3000 is bound to loopback (ss -ltn, or /proc/net/tcp);
-#        no-route  the product container cannot reach an outside address;
+#        no-route  the product container cannot reach an outside address (after a control: it reaches its own);
 #        restart   a restart of start.sh in the same container finds the object written before (the time is printed);
 #   6. removes both containers, the network and the work folder, whatever the result.
+# The newest localhost/ygg-stack-<realm> image may be stale (an older build of the realm): pass --api-image and
+# --web-image to name the images. The default --yggdrasil needs the umbrella's submodules at their merged main
+# (helheim-go's release.sh, niflheim-local's start.sh). Paths given to the engine are mapped to its bind mount
+# (YGG_BIND, default /mnt/wsl/ygg-bind) as ygg-smoke-grade.sh does, so DIR must be under it. YGG_SMOKE_WAIT is the
+# wait for port 3000 in seconds (default 120; for tests).
 # Exit 0 only when every check passes.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,11 +68,15 @@ done
 
 id="$$" work="$dir/smoke-runtime-$(date +%Y%m%d-%H%M%S)" net="smoke-runtime-$$" prod="smoke-runtime-product-$$" chk="smoke-runtime-check-$$"
 app="$work/app"
+# eng PATH: where the engine (the Podman machine) sees a path under DIR: at the bind mount, as ygg-smoke-grade.sh does.
+bind="${YGG_BIND:-/mnt/wsl/ygg-bind}"
+eng() { echo "$bind${1#"$dir"}"; }
 cleanup() {
   podman rm -f "$prod" "$chk" >/dev/null 2>&1 || true
   podman network rm -f "$net" >/dev/null 2>&1 || true
-  # The files belong to a mapped user: remove them from the user namespace.
-  podman unshare rm -rf -- "$work" >/dev/null 2>&1 || rm -rf -- "$work" 2>/dev/null || true
+  # The files of app belong to a mapped user the host cannot remove: a root container in the engine does it.
+  podman run --rm --user root --entrypoint rm -v "$(eng "$work"):/w" "$image" -rf /w/app >/dev/null 2>&1 || true
+  rm -rf -- "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 mkdir -p "$app/.ygg/release/repos/api" "$app/.ygg/release/repos/web" "$app/repos/api" "$app/repos/web" "$work/build"
@@ -78,7 +87,7 @@ release() { # release LEAF IMAGE SRC: build the template's release into app/.ygg
   cp -R "$src" "$b"
   rm -rf -- "$b/node_modules" "$b/dist"
   echo "smoke-runtime: building the $leaf release in $img"
-  podman run --rm -v "$b:/src" -v "$app/.ygg/release/repos/$leaf:/out" -e OUT=/out -w /src "$img" sh /src/release.sh >"$work/build-$leaf.txt" 2>&1 \
+  podman run --rm -v "$(eng "$b"):/src" -v "$(eng "$app/.ygg/release/repos/$leaf"):/out" -e OUT=/out -w /src "$img" sh /src/release.sh >"$work/build-$leaf.txt" 2>&1 \
     || { sed 's/^/  | /' "$work/build-$leaf.txt" >&2; fail "the $leaf release failed (see above)"; }
   [ -f "$app/.ygg/release/repos/$leaf/run.sh" ] || fail "the $leaf release.sh wrote no run.sh"
 }
@@ -86,10 +95,10 @@ release api "$api_image" "$api_src"
 release web "$web_image" "$web_src"
 cp "$start_src" "$app/start.sh"
 chmod 755 "$app/start.sh"
-podman run --rm --user root --entrypoint chown -v "$app:/app" "$image" -R app:app /app
+podman run --rm --user root --entrypoint chown -v "$(eng "$app"):/app" "$image" -R app:app /app
 
 podman network create --internal "$net" >/dev/null
-podman run -d --name "$prod" --network "$net" --user app --entrypoint /app/start.sh -v "$app:/app" -w /app "$image" >/dev/null
+podman run -d --name "$prod" --network "$net" --user app --entrypoint /app/start.sh -v "$(eng "$app"):/app" -w /app "$image" >/dev/null
 podman run -d --name "$chk" --network "$net" --user app --entrypoint sleep "$image" infinity >/dev/null
 start=$SECONDS
 ip() { podman inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$prod"; }
@@ -98,18 +107,18 @@ code() { podman exec "$chk" curl -s -o /dev/null -w '%{http_code}' --max-time 10
 # key: print the access and the secret key of the identity file, read as `app`, as "ACCESS SECRET" on stdout. The
 # caller keeps them in variables and never prints them.
 key() {
-  podman exec "$prod" cat /app/.data/seaweed-identity.json \
+  podman exec --user app "$prod" cat /app/.data/seaweed-identity.json \
     | tr -d '\n' | sed -n 's/.*"accessKey":"\([^"]*\)".*"secretKey":"\([^"]*\)".*/\1 \2/p'
 }
 signed() { # signed URL CURL-ARGS...: curl with the key, which goes through the environment, not the arguments
   local url="$1" ak sk
   shift
   read -r ak sk < <(key)
-  AK="$ak" SK="$sk" podman exec -e AK -e SK "$chk" sh -c 'u="$1"; shift; curl -s --max-time 10 --aws-sigv4 "aws:amz:us-east-1:s3" --user "$AK:$SK" "$@" "$u"' sh "$url" "$@"
+  AK="$ak" SK="$sk" podman exec -e AK -e SK "$chk" sh -c 'u="$1"; shift; curl -s --max-time 10 -H "x-amz-content-sha256: UNSIGNED-PAYLOAD" --aws-sigv4 "aws:amz:us-east-1:s3" --user "$AK:$SK" "$@" "$u"' sh "$url" "$@"
 }
 wait_index() { # wait_index: seconds until / answers, or empty after 2 minutes
   local t=$SECONDS
-  while [ $((SECONDS - t)) -lt 120 ]; do
+  while [ $((SECONDS - t)) -lt "${YGG_SMOKE_WAIT:-120}" ]; do
     if [ "$(code "http://$(ip):3000/")" = 200 ]; then echo $((SECONDS - t)); return 0; fi
     sleep 2
   done
@@ -126,7 +135,9 @@ result() { # result DESCRIPTION COMMAND...: PASS when the command succeeds
 same() { [ "$1" = "$2" ]; }
 refused() { case "$1" in 4??) true ;; *) false ;; esac; }
 put_ok() { [ "$1" = 200 ] && [ "$2" = "$3" ]; } # put_ok CODE GOT WANT
-outside_fails() { ! podman exec "$prod" timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/80' >/dev/null 2>&1; }
+outside_fails() { # a control first: the same probe to the product's own address must connect, or the probe proves nothing
+  podman exec "$prod" timeout 5 bash -c "exec 3<>/dev/tcp/$(ip)/3000" >/dev/null 2>&1 || return 1
+  ! podman exec "$prod" timeout 5 bash -c 'exec 3<>/dev/tcp/1.1.1.1/80' >/dev/null 2>&1; }
 lacks() { [ -n "$1" ] && [ -z "$2" ]; } # lacks LISTENERS OTHERS
 
 body="smoke-$id-$RANDOM"
