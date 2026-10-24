@@ -25,12 +25,15 @@ sandbox:
   mounts:
     - { host: $D, engine: $T/bind }
 YAML
-# Fakes: podman answers `info` from $FAKE_ROOTLESS (true by default) or hangs when FAKE_HANG is set;
+# Fakes: podman answers `info` from $FAKE_ROOTLESS (true by default), hangs when FAKE_HANG is set, or fails
+# with FAKE_ERR on stderr (after a blank line and before a noise line) and exit 125; it logs calls to FAKE_LOG;
 # devcontainer prints $FAKE_CLI (0.89.0 by default).
 mkdir -p "$T/bin"
 cat > "$T/bin/podman" <<'EOF2'
 #!/usr/bin/env bash
+[ -z "${FAKE_LOG:-}" ] || echo "podman $*" >> "$FAKE_LOG"
 [ -z "${FAKE_HANG:-}" ] || sleep 30
+if [ -n "${FAKE_ERR:-}" ]; then printf '\n%s\nsecond line of noise\n' "$FAKE_ERR" >&2; exit 125; fi
 echo "${FAKE_ROOTLESS:-true}"
 EOF2
 cat > "$T/bin/devcontainer" <<'EOF2'
@@ -44,6 +47,8 @@ cat > "$T/bin/mountpoint" <<'EOF2'
 EOF2
 chmod +x "$T/bin/podman" "$T/bin/devcontainer" "$T/bin/mountpoint"
 touch "$T/bind/.fake-mounted"
+mkdir -p "$T/xdg"
+export XDG_RUNTIME_DIR="$T/xdg"
 export PATH="$T/bin:$PATH" YGG_BIND="$T/bind" YGG_ENGINE_TIMEOUT=2
 
 run bash "$S/ygg-engine.sh" check --folder "$D"
@@ -68,6 +73,19 @@ check "check refuses an engine that is not rootless" bash -c "[ $rc = 2 ]" && ha
 FAKE_HANG=1 run bash "$S/ygg-engine.sh" check --folder "$D"
 check "check gives up on an engine that does not answer, and says to ask before restarting" \
   bash -c "[ $rc = 2 ]" && has "did not answer in 2s" && has "Ask before restarting"
+
+ERRLINE='Failed to obtain podman configuration: lstat /run/user/1000: no such file or directory'
+FAKE_ERR="$ERRLINE" run bash "$S/ygg-engine.sh" check --folder "$D"
+check "check quotes podman's first error line when podman fails at once, and does not call it a hang" \
+  bash -c "[ $rc = 2 ] && grep -q -F 'podman could not reach the engine at unix://$SOCK: $ERRLINE' '$T/out' && ! grep -q 'did not answer' '$T/out' && ! grep -q 'second line of noise' '$T/out'"
+
+rm -f "$T/calls"
+XDG_RUNTIME_DIR="$T/no-such-xdg" FAKE_LOG="$T/calls" run bash "$S/ygg-engine.sh" check --folder "$D"
+check "check names a missing XDG_RUNTIME_DIR with both fixes, and never calls podman" \
+  bash -c "[ $rc = 2 ] && grep -q -F '$T/no-such-xdg' '$T/out' && grep -q 'WSL restart' '$T/out' && grep -q -F 'mkdir -p -m 700' '$T/out' && grep -q -F '/run/user/' '$T/out' && [ ! -e '$T/calls' ] && [ ! -e '$T/no-such-xdg' ]"
+
+env -u XDG_RUNTIME_DIR bash "$S/ygg-engine.sh" check --folder "$D" >"$T/out" 2>&1; rc=$?
+check "check does not mind an unset XDG_RUNTIME_DIR" bash -c "[ $rc = 0 ]" && has "answers and is rootless"
 
 FAKE_CLI=0.90.0 run bash "$S/ygg-engine.sh" check --folder "$D"
 check "check refuses another devcontainer CLI version" bash -c "[ $rc = 2 ]" && has "want 0.89.0"

@@ -44,8 +44,18 @@ unset CONTAINER_CONNECTION DOCKER_HOST
 export PATH="$dir/dc/node_modules/.bin:$PATH"
 
 [ -S "$sock" ] || fail "the engine socket $sock is not there; is the Podman machine running?"
-if ! rootless="$(timeout "$wait" podman --url "$engine" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)"; then
-  fail "the engine at $engine did not answer in ${wait}s; the machine may be hung (a registry credential helper can wait for cloud credentials). Ask before restarting it"
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ ! -d "$XDG_RUNTIME_DIR" ]; then
+  fail "XDG_RUNTIME_DIR is $XDG_RUNTIME_DIR, but that folder does not exist, so podman cannot run (a WSL restart without a systemd user session does this). Either fix the shell: export XDG_RUNTIME_DIR=/tmp/ygg-xdg-\$(id -u); mkdir -p -m 700 \"\$XDG_RUNTIME_DIR\"   or create /run/user/\$(id -u), owned by you, with mode 700"
+fi
+errf="$(mktemp)"
+rc=0
+rootless="$(timeout "$wait" podman --url "$engine" info --format '{{.Host.Security.Rootless}}' 2>"$errf")" || rc=$?
+first="$(grep -m 1 '[^[:space:]]' "$errf" || true)"; rm -f -- "$errf"
+if [ "$rc" -ne 0 ]; then
+  if [ "$rc" -eq 124 ]; then
+    fail "the engine at $engine did not answer in ${wait}s; the machine may be hung (a registry credential helper can wait for cloud credentials). Ask before restarting it"
+  fi
+  fail "podman could not reach the engine at $engine: ${first:-no error text (exit $rc)}"
 fi
 [ "$rootless" = true ] || fail "the engine at $engine is not rootless ($rootless); the factory runs on the user socket only, never the root one"
 got="$(devcontainer --version 2>/dev/null | head -n 1 || true)"
