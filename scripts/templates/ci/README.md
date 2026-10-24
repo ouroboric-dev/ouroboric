@@ -84,4 +84,5 @@ pull request, because it runs every hook for real.
 
 An org whose Actions policy allows only listed actions (ouroboric-dev's does) must list both of `lint.yml`'s
 actions, `actions/checkout` and `actions/setup-python`, at the exact SHAs it pins. Otherwise `lint` ends in
-`startup_failure` and never runs. So a bump of either action SHA also updates the org's allowlist.
+`startup_failure` and never runs. So a bump of either action SHA also updates the org's allowlist. A
+user's repo holds its own allowlist: run `setup-repo.sh` on each of them after the bump.

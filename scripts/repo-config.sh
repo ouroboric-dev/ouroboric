@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # One config file per org, read by create-repo.sh, add-licences.sh, add-ci.sh, setup-repo.sh and
 # new-repo.sh. Source this file; do not run it. It defines functions only.
-# Founder and agents run the scripts that source it; the config lives in scripts/orgs/<org>.json
-# (see scripts/orgs/README.md).
+# Founder and agents run the scripts that source it; the config lives in scripts/orgs/<org>.json, or
+# for an operator's own account in scripts/orgs/local/<name>.json, which git ignores (see
+# scripts/orgs/README.md).
 #
 # Use:  . repo-config.sh; repo_config_args "$@"; repo_config_load
-#   repo_config_args ARGS...      reads a leading --org <name> or --config <path>, given once. Sets RC_FILE (absolute),
+#   repo_config_args ARGS...      reads a leading --org <name> or --config <path>, given once. --org looks in orgs/
+#                                 and orgs/local/, and refuses a name found in both. Sets RC_FILE (absolute),
 #                                 RC_REST (the other arguments) and RC_FROM (--config "$RC_FILE", to pass on).
 #   repo_config_load              checks RC_FILE and sets RC_ORG, RC_LICENCE, RC_DOCS_LICENCE, RC_DOCS_PATHS,
-#                                 RC_COPYRIGHT, RC_LICENCE_DIR, RC_ISSUES_ON and RC_CI.
+#                                 RC_COPYRIGHT, RC_LICENCE_DIR, RC_ISSUES_ON, RC_CI and RC_OWNER (org or user).
 #   repo_after_create public|private REPO   prints the config's after-create message for REPO, if any.
 # Every error prints "repo-config: <message>" on stderr and exits 2.
 
@@ -25,12 +27,13 @@ RC_CHECK='
   def isstr: type == "string";
   def name($re): isstr and test($re);
   def text: isstr and . != "" and (test("[\"\\\\\n]") | not);
-  ["org","licence","docs_licence","docs_paths","copyright","licence_dir","issues_on","ci","after_create"] as $known
+  ["org","owner","licence","docs_licence","docs_paths","copyright","licence_dir","issues_on","ci","after_create"] as $known
   | if type != "object" then "the config must be a JSON object"
     elif (keys - $known | length) > 0 then "unknown key: \(keys - $known | first)"
     elif (["org","licence","copyright"] - keys | length) > 0 then "missing required key: \(["org","licence","copyright"] - keys | first)"
     elif (has("docs_licence") != has("docs_paths")) then "docs_licence and docs_paths go together: set both or neither"
     elif (.org | name("\\A[A-Za-z0-9][A-Za-z0-9._-]*\\z") | not) then "bad org name"
+    elif has("owner") and (.owner | . == "org" or . == "user" | not) then "owner must be org or user"
     elif (.licence | name("\\A[A-Za-z0-9][A-Za-z0-9.+-]*\\z") | not) then "bad licence"
     elif (.copyright | text | not) then "copyright must be non-empty with no \", \\ or newline"
     elif has("docs_licence") and (.docs_licence | name("\\A[A-Za-z0-9][A-Za-z0-9.+-]*\\z") | not) then "bad docs_licence"
@@ -49,7 +52,12 @@ repo_config_args() {
       [ $# -ge 2 ] || rc_die "--org needs a name"
       [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] || rc_die "bad org name: $2"
       RC_WANT_ORG="$2"
-      RC_FILE="${REPO_ORGS_DIR:-$RC_DIR/orgs}/$2.json"
+      local dir="${REPO_ORGS_DIR:-$RC_DIR/orgs}"
+      RC_FILE="$dir/$2.json"
+      if [ -f "$dir/local/$2.json" ]; then
+        [ ! -f "$RC_FILE" ] || rc_die "$2 is in both $dir and $dir/local: remove one"
+        RC_FILE="$dir/local/$2.json"
+      fi
       shift 2
       ;;
     --config)
@@ -82,6 +90,7 @@ repo_config_load() {
   RC_DOCS_PATHS="$(jq -r '[(.docs_paths // [])[] | tojson] | join(", ")' "$RC_FILE")"
   RC_ISSUES_ON="$(jq -r '(.issues_on // []) | if length == 0 then "" else " " + join(" ") + " " end' "$RC_FILE")"
   RC_CI="$(jq -r '(.ci // []) | join(",")' "$RC_FILE")"
+  RC_OWNER="$(jq -r '.owner // "org"' "$RC_FILE")"
   RC_LICENCE_DIR=''
   dir="$(jq -r '.licence_dir // ""' "$RC_FILE")"
   if [ -n "$dir" ]; then

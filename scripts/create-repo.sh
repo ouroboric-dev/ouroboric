@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Create new, empty repos in the org that a config names. Each repo has no commits and no settings
-# beyond the visibility, so nothing in it is protected yet. new-repo.sh is the normal way to run this
-# script: it adds the first commit and protects the repo. If any repo already exists, a name repeats or
+# Create new, empty repos in the org that a config names, or in a user's own account when the config
+# has "owner": "user". Each repo has no commits and no settings beyond the visibility, so nothing in it
+# is protected yet. new-repo.sh is the normal way to run this script: it adds the first commit and
+# protects the repo. If any repo already exists, a name repeats or
 # a description is bad, nothing is created. Stops at the first error. A description is one line, with
 # no control characters and no leading or trailing spaces: new-repo.sh makes it the first paragraph of
 # README.md.
 # Founder-run: GH_TOKEN must hold the short-lived admin token, with Administration read and write
-# (the pr-bot can't create repos).
+# (the pr-bot can't create repos). For a user config, the token is the user's own, and it must
+# belong to the config's account, or nothing is created.
 #   GH_TOKEN=... create-repo.sh (--org <name>|--config <path>) [--private] [--check] <repo> "<description>" [<repo> "<description>"]...
 # --check runs every check, creates nothing and prints nothing. --private makes private repos, such as
 # huldra, the hidden benchmark suite.
@@ -54,6 +56,15 @@ for ((i = 0; i < ${#args[@]}; i += 2)); do
   [ "$ok" = true ] || die "$r: the description must be one line, with no control characters and no leading or trailing spaces"
   for ((j = 0; j < i; j += 2)); do [ "${args[j]}" != "$r" ] || die "$r is named twice"; done
 done
+# A user's repos are created on the token's own account, so the token must be the config's account.
+create="/orgs/$RC_ORG/repos"
+if [ "$RC_OWNER" = user ]; then
+  code="$(request GET /user)"
+  [ "$code" = 200 ] || die "can't tell whose token this is (HTTP $code); nothing was created"
+  login="$(jq -r '.login // empty' "$T/reply")"
+  [ "${login,,}" = "${RC_ORG,,}" ] || die "the token belongs to ${login:-no user}, not $RC_ORG; nothing was created"
+  create=/user/repos
+fi
 for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}"
   code="$(request GET "/repos/$RC_ORG/$r")"
@@ -65,7 +76,7 @@ for ((i = 0; i < ${#args[@]}; i += 2)); do
   r="${args[i]}"
   body="$(jq -cn --arg n "$r" --arg d "${args[i + 1]}" --arg v "$visibility" \
     '{name: $n, description: $d, visibility: $v, auto_init: false, has_issues: false, has_wiki: false, has_projects: false}')"
-  code="$(request POST "/orgs/$RC_ORG/repos" "$body")"
+  code="$(request POST "$create" "$body")"
   [ "$code" = 201 ] || die "$r: GitHub refused to create it (HTTP $code: $(message))"
   echo "created $r"
 done

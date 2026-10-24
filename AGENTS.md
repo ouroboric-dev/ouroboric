@@ -17,6 +17,10 @@ loosen these.
 7. Never commit raw sources that should not be published, such as AI-generated rasters or the
    founder's source images. Commit only final vectors and exports.
 8. Work on a branch, stage files by path, and open a pull request for every change.
+9. Never commit an operator's own config, such as a personal account name, a local path or a personal
+   setting. The scripts serve any operator: such config goes in a gitignored folder, such as
+   `scripts/orgs/local/`, and only generic examples are committed. Docs, plans and fixtures never name
+   an operator either: `scripts/check-repos.sh --check operator` fails when they do.
 
 ## Map
 
@@ -44,7 +48,7 @@ folder.
 | Compare reviewer models: costs money unless `--dry-run`; on the planted-fault leaves in `scripts/testdata/reviewer-bench`; runs the OpenCode version gleipnir pins (installed once with npm; `--opencode BIN`, `--any-opencode`) | `scripts/ygg-reviewer-bench.sh --model MODEL --leaf DIR --sessions N --dry-run`, then without it |
 | A Phase 6 proof run (v0-T290, v0-T291): costs money without `--dry-run`; `--dry-run` first; the `software` graph on the real task with three roles and caps you set, then the grade and the evidence; never reads the suites folder or prints the credentials | `scripts/ygg-proof-run.sh --name NAME --dry-run [--planner AGENT:MODEL --implementer AGENT:MODEL --reviewer AGENT:MODEL --run-usd N ...]`, then without `--dry-run`. `--reviewer-reasoning EFFORT` (low, medium, high or off; default `medium`) sets the reviewer's reasoning effort; `--build` builds the sandbox images first; `--baseline RUN_ID` compares with a run of an earlier proof run; `--continue RUN_ID --approve GATE`, `--reject GATE --reason TEXT` or `--resume` continues a stopped or paused run (a rejection starts sessions, so it needs the credentials as an approval does); `--clip` copies the report. The run's output is in `run.txt` and the evidence in `report.txt`, in `DIR/proof-NAME-TIME`. The example config is `scripts/testdata/proof/factory.proof.example.yaml` |
 | Build a plan from reference commits, or execute one task by task | `scripts/plan-*` (`plan-generate.py`, `plan-replay.py`, `plan-states.sh`, `plan-red.sh`, `plan-defences.py`; `plan-blocks.py`, `plan-task-start.sh`, `plan-task-done.sh`, `plan-task-land.sh`) |
-| Check that the repos have the required setup, and that the realms' shared files match | `scripts/as-bot.sh --read all scripts/check-repos.sh`; `--check shared` runs the realms check alone; `--check services` (not a default, once per call) keeps the services' versions equal in niflheim-local, mimir and helheim-go |
+| Check that the repos have the required setup, and that the realms' shared files match | `scripts/as-bot.sh --read all scripts/check-repos.sh`; `--check shared` runs the realms check alone; `--check operator` (local, no GitHub) checks that no tracked file names you; `--check services` (not a default, once per call) keeps the services' versions equal in niflheim-local, mimir and helheim-go |
 | Scan git history for secrets | `scripts/scan-history.sh` |
 | Create a repo with its first commit (`README.md`, licences, base CI) and its protection | `scripts/new-repo.sh --org <org> <repo> "<description>"`. Founder only |
 | Write the licence files or the base CI into a folder | `scripts/add-licences.sh`, `scripts/add-ci.sh`. Founder only |

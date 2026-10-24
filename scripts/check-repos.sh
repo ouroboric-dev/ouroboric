@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Check that ouroboric-dev repos have the required setup. See docs/4-ways-of-working/docs-standard.md.
-#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot|services]... [repo...]
+#   check-repos.sh [--check settings|security|ruleset|reuse|agents|gitleaks|shared|bot|operator|services]... [repo...]
 # services is not a default check and runs once per call: it keeps the services' versions equal in niflheim-local's
 # pack, mimir's client-gallery-lite Dockerfile and helheim-go's template CI.
+# operator fails when a tracked file in a repo's local clone names the operator who runs the check (invariant 9):
+# their login, their home folder's name, or a user account in scripts/orgs/local/, matched as whole words in any
+# case. CHECK_REPOS_OPERATOR (names, space-separated) replaces those names. It prints the files, never the names.
+# The past records in RECORDS keep their paths as written; every other file is checked.
 # The bot check also checks that the pr-bot can't reach any hidden repo. Run it under
 # as-bot.sh --read all, because it reads the pr-bot's own list of repos.
 # shellcheck disable=SC2015,SC2329  # `cond && ok || bad` reports only (ok and bad just print); checks run by name as check_$c
@@ -16,6 +20,23 @@ LATER=" mimir "     # standard repos checked once they exist; side-by-side clone
 REALMS=" midgard-react helheim-go "   # build realms; they share scripts, and helheim-go's copy is the source
 SHARED=(devcontainer/checks/docs.sh devcontainer/checks/protected-common)
 HIDDEN=" huldra "   # private repos that agents must never see
+# Records of past work that name the founder's paths as they were; a new record names no operator.
+RECORDS=(
+  yggdrasil:docs/2-engineering/changes/2026-10-18-base-ci-rollout/tasks.md
+  yggdrasil:docs/2-engineering/changes/2026-10-18-repo-bootstrap/tasks.md
+  yggdrasil:docs/2-engineering/changes/2026-10-19-voluspa/tasks.md
+  yggdrasil:docs/2-engineering/changes/2026-10-22-gallery-runtime/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-12-yggdrasil-v0/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-15-yggdrasil-v0-phase-1/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-15-yggdrasil-v0-phase-2/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-16-yggdrasil-v0-phase-3/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-16-yggdrasil-v0-phase-4/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-17-yggdrasil-v0-phase-5a/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-17-yggdrasil-v0-phase-5b/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-18-yggdrasil-v0-phase-5c/tasks.md
+  yggdrasil:docs/2-engineering/plans/2026-10-22-yggdrasil-v0-phase-6/tasks.md
+  yggdrasil:docs/5-research/2026-10-12-sandbox-spike.md
+)
 unset BOT_REPOS     # set only by bot_repos below, never from the environment
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
 local_path() { if [[ "$LEAVES" == *" $1 "* ]]; then echo "$ROOT/yggdrasil/$1"; else echo "$ROOT/$1"; fi; }
@@ -128,6 +149,29 @@ check_services() { # once per call: the three copies of the services' versions; 
   else ok niflheim-local services "postgres minors differ, allowed: $imgminor (image) and $pkgminor (package)"; fi
 }
 
+operator_names() { # the names of the operator who runs the check, one per line
+  local -a given
+  if [ -n "${CHECK_REPOS_OPERATOR+set}" ]; then read -ra given <<<"$CHECK_REPOS_OPERATOR"; printf '%s\n' ${given[@]+"${given[@]}"}; return; fi
+  printf '%s\n' "${USER:-$(id -un)}" "$(basename "$HOME")"
+  local f
+  for f in "${REPO_ORGS_DIR:-$(dirname "${BASH_SOURCE[0]}")/orgs}"/local/*.json; do
+    [ -f "$f" ] && jq -r 'select(.owner == "user") | .org // empty' "$f" 2>/dev/null
+  done
+}
+check_operator() {
+  local d n names=() ex=() rec hits rc=0
+  d="$(local_path "$1")"
+  [ -e "$d/.git" ] || { bad "$1" operator "no local clone at $d"; return; }
+  while IFS= read -r n; do [ -z "$n" ] || names+=(-e "$n"); done < <(operator_names | sort -u)
+  [ ${#names[@]} -gt 0 ] || { bad "$1" operator "no operator names to look for"; return; }
+  for rec in "${RECORDS[@]}"; do [ "${rec%%:*}" != "$1" ] || ex+=(":(exclude)${rec#*:}"); done
+  hits="$(git -C "$d" grep -lIiwF "${names[@]}" -- . ${ex[@]+"${ex[@]}"})" || rc=$?   # 1: no match
+  case "$rc" in
+    0) bad "$1" operator "names the operator in $(paste -sd' ' - <<<"$hits")" ;;
+    1) ok "$1" operator ;;
+    *) bad "$1" operator "git grep failed in $d" ;;
+  esac
+}
 bot_repos() { # the pr-bot's installation repos, once; ERROR if they can't be listed
   [ -n "${BOT_REPOS+x}" ] && return
   local out
@@ -149,7 +193,7 @@ check_hidden() { # fails closed: a repo agents must never see
 
 checks=(); repos=()
 while [ $# -gt 0 ]; do case "$1" in --check) checks+=("${2:?--check needs a name}"); shift 2 ;; *) repos+=("$1"); shift ;; esac; done
-[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks shared bot)
+[ ${#checks[@]} -gt 0 ] || checks=(settings security ruleset reuse agents gitleaks shared bot operator)
 for c in "${checks[@]}"; do declare -F "check_$c" >/dev/null || { echo "unknown check: $c"; exit 1; }; done
 repo_checks=(); services=0   # services compares three repos, so it runs once, not once per repo
 for c in "${checks[@]}"; do if [ "$c" = services ]; then services=1; else repo_checks+=("$c"); fi; done

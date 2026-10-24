@@ -1,7 +1,8 @@
 # Fake GitHub API for the script tests. Logs each request to LOG as one JSON line.
 #   python3 -I fake-github.py LOG PORTFILE
 # FAKE_PEM: the key the manifest conversion returns. FAKE_GIT_ROOT: where a created repo gets its
-# bare git repo, so a test can push to file://$FAKE_GIT_ROOT/<org>/<repo>.git.
+# bare git repo, so a test can push to file://$FAKE_GIT_ROOT/<org>/<repo>.git. FAKE_USER: the login
+# that GET /user returns, and the account that POST /user/repos creates in (default acme).
 import json
 import os
 import re
@@ -17,8 +18,10 @@ def repo_routes(method, path, body):
     if method == "GET" and (m := re.fullmatch(r"/repos/([^/]+)/([^/]+)", path)):
         org, name = m.groups()
         return (200, {"name": name}) if name == "taken" or (org, name) in repos else None
-    if method == "POST" and (m := re.fullmatch(r"/orgs/([^/]+)/repos", path)):
-        org = m.group(1)
+    if method == "GET" and path == "/user":
+        return 200, {"login": os.environ.get("FAKE_USER", "acme")}
+    if method == "POST" and (m := re.fullmatch(r"/orgs/([^/]+)/repos|/user/repos", path)):
+        org = m.group(1) or os.environ.get("FAKE_USER", "acme")
         name = json.loads(body)["name"]
         if name == "taken" or (org, name) in repos:
             return 422, {"message": "Repository creation failed."}

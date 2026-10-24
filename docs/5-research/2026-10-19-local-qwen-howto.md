@@ -117,7 +117,7 @@ Start the server, then run these commands. The figures in each answer come from 
 
    ```zsh
    python3 -I scripts/qwen-measure.py prompt --tokens 95000 --out /tmp/long.txt \
-     "$HOME/brunogbv/ouroboric/yggdrasil/gleipnir/**/*.go"
+     "../yggdrasil/gleipnir/**/*.go"
    python3 -I scripts/qwen-measure.py speed --runs 1 --max-tokens 256 /tmp/long.txt
    ```
 
@@ -139,7 +139,7 @@ the same prompt. Tools are approved without asking, so use a task you trust the 
 
 ```zsh
 scripts/qwen-local.sh start
-scripts/qwen-compare.sh --repo ~/brunogbv/ouroboric/yggdrasil/odin --commit bc973e3 \
+scripts/qwen-compare.sh --repo ../yggdrasil/odin --commit bc973e3 \
   --prompt docs/5-research/2026-10-19-local-qwen-comparison/prompt.txt --out /tmp/qwen-compare-b071
 ```
 

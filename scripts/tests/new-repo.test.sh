@@ -13,7 +13,7 @@ B="$T/git/ouroboric-dev"
 
 mkdir -p "$B"
 : > "$T/log"
-FAKE_GIT_ROOT="$T/git" python3 -I "$HERE/fake-github.py" "$T/log" "$T/port" &
+FAKE_GIT_ROOT="$T/git" FAKE_USER=someone python3 -I "$HERE/fake-github.py" "$T/log" "$T/port" &
 for _ in $(seq 50); do [ -s "$T/port" ] && break; sleep 0.1; done
 CREATE_REPO_API="http://127.0.0.1:$(cat "$T/port")"
 CREATE_REPO_GIT="file://$T/git"
@@ -111,5 +111,26 @@ check "a failed setup: exit with its code" [ "$rc" = 7 ]
 check "a failed setup: stderr says zeta is not protected" grep -qx \
   'new-repo: zeta was created, but setup-repo.sh failed. It is not protected and agents must not get it yet. Delete it, or push a first commit and run setup-repo.sh.' "$T/err"
 check "a failed setup: it never says protected" bash -c "! grep -q protected '$T/out'"
+
+# An operator's user config, end to end: the example, copied into local/ as an operator would.
+O="$T/orgs"; mkdir -p "$O/local/someone"
+cp "$HERE/../orgs/examples/LicenseRef-Proprietary.txt" "$O/local/someone/"
+jq '.org = "someone" | .copyright = "Someone" | .licence_dir = "someone"' "$HERE/../orgs/examples/user.json" > "$O/local/someone.json"
+printf '#!/bin/sh\necho "$@" >> "%s/user-setup.log"\n' "$T" > "$T/user-setup"
+chmod +x "$T/user-setup"
+GH_TOKEN=$TOKEN REPO_ORGS_DIR="$O" NEW_REPO_SETUP="$T/user-setup" "$NEW" --org someone --private mu "The mu repo." \
+  </dev/null > "$T/out" 2> "$T/err"; rc=$?
+U="$T/git/someone/mu.git"
+check "a user config: exit 0" [ "$rc" = 0 ]
+check "a user config: the repo is made on the user's account, private" \
+  [ "$(grep '"method": "POST"' "$T/log" | tail -1 | jq -r '.path + " " + (.body|fromjson|.visibility)')" = '/user/repos private' ]
+check "a user config: the commit holds the proprietary licence, the base CI and the README" \
+  [ "$(git -C "$U" ls-tree -r --name-only main 2>/dev/null)" = "$(printf '%s\n' .github/workflows/lint.yml .markdownlint.yaml \
+    .pre-commit-config.yaml LICENSE LICENSES/LicenseRef-Proprietary.txt README.md REUSE.toml)" ]
+check "a user config: REUSE.toml names the proprietary licence and the operator" \
+  bash -c "git -C '$U' show main:REUSE.toml | grep -qx 'SPDX-License-Identifier = \"LicenseRef-Proprietary\"' &&
+    git -C '$U' show main:REUSE.toml | grep -q 'SPDX-FileCopyrightText = \"[0-9]* Someone\"'"
+check "a user config: setup runs on the user's repo" grep -qx -- "--config $O/local/someone.json mu" "$T/user-setup.log"
+check "a user config: the message says agents can't reach it" grep -q "agents can't reach it" "$T/out"
 
 exit $fail
