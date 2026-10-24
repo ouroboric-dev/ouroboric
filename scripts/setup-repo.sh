@@ -7,6 +7,8 @@
 # ci.yml gives "test". A repo with neither workflow requires nothing.
 # A push after approval dismisses the approval, and the last push needs approval from someone else,
 # so the pr-bot can't land commits nobody reviewed.
+# Auto-merge is on, so a pull request merges by itself once a human approves it and the required checks
+# pass. It never skips the approval or a check: the ruleset still requires both.
 # A user config ("owner": "user") gets the same setup, with two changes. Each repo holds its own Actions
 # allowlist, lint.yml's pinned actions, because a user has no org to hold it. And a private repo gets no
 # secret scanning, push protection or private vulnerability reporting, because GitHub offers none there.
@@ -29,7 +31,8 @@ R="repos/$RC_ORG/$repo"
 gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
 if [[ "${RC_ISSUES_ON:-}" == *" $repo "* ]]; then ISSUES=true; else ISSUES=false; fi
 gh_api -X PATCH "$R" -F has_issues=$ISSUES -F has_wiki=false -F has_projects=false \
-  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true >/dev/null
+  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false -F allow_auto_merge=true \
+  -F delete_branch_on_merge=true >/dev/null
 visibility=''
 [ "$RC_OWNER" != user ] || visibility="$(gh_api "$R" -q .visibility)"
 if [ "$visibility" = private ]; then

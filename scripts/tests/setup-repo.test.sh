@@ -54,6 +54,8 @@ export FAKE_GH_DIR="$T/issues-asgard"
 check "a factory repo (asgard): issues on" [ "$(issues_field asgard)" = has_issues=true ]
 export FAKE_GH_DIR="$T/issues-gungnir"
 check "another repo (gungnir): issues off" [ "$(issues_field gungnir)" = has_issues=false ]
+check "auto-merge on, so a PR merges once a human approves and the checks pass" \
+  bash -c "jq -e 'select(.method==\"PATCH\" and .path==\"repos/ouroboric-dev/gungnir\" and (.fields|any(.==\"allow_auto_merge=true\")))' \"\$FAKE_GH_DIR/log\" >/dev/null"
 
 # lint.yml maps to lint, ci.yml to test; each is required only when its file exists.
 export FAKE_GH_DIR="$T/lint-only"; mkdir -p "$FAKE_GH_DIR/GET"
@@ -120,7 +122,7 @@ check "a private user repo: the same ruleset as an org's" \
   bash -c "jq -rs 'map(select(.path==\"repos/me/widget/rulesets\"))|last|.body' \"\$FAKE_GH_DIR/log\" \
     | jq -e '([.rules[].type]|sort)==[\"deletion\",\"non_fast_forward\",\"pull_request\"] and .bypass_actors==[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]' >/dev/null"
 check "a private user repo: the same merge settings as an org's" \
-  logged '.method=="PATCH" and .path=="repos/me/widget" and (.fields|index("allow_squash_merge=true") and index("has_issues=false"))'
+  logged '.method=="PATCH" and .path=="repos/me/widget" and (.fields|index("allow_squash_merge=true") and index("allow_auto_merge=true") and index("has_issues=false"))'
 
 user_repo user-public public
 GH_TOKEN=fake "$HERE/../setup-repo.sh" --config "$T/me.json" widget > /dev/null 2>&1
