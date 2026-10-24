@@ -45,11 +45,11 @@ ok()  { echo "PASS $1 $2${3:+: $3}"; }
 bad() { echo "FAIL $1 $2: $3"; fail=1; }
 
 check_settings() { # GraphQL: REST hides the merge settings from tokens that can't push
-  local v; v="$(gh_api graphql -f query="{repository(owner:\"$ORG\",name:\"$1\"){visibility hasIssuesEnabled hasWikiEnabled mergeCommitAllowed rebaseMergeAllowed}}" \
-    -q '.data.repository|[.visibility,.hasIssuesEnabled,.hasWikiEnabled,.mergeCommitAllowed,.rebaseMergeAllowed]|map(tostring)|join(" ")')"
+  local v; v="$(gh_api graphql -f query="{repository(owner:\"$ORG\",name:\"$1\"){visibility hasIssuesEnabled hasWikiEnabled mergeCommitAllowed rebaseMergeAllowed autoMergeAllowed}}" \
+    -q '.data.repository|[.visibility,.hasIssuesEnabled,.hasWikiEnabled,.mergeCommitAllowed,.rebaseMergeAllowed,.autoMergeAllowed]|map(tostring)|join(" ")')"
   local issues=false desc="no issues"   # issues are on for the factories only
   [[ "$FACTORIES" == *" $1 "* ]] && { issues=true; desc="issues on (a factory)"; }
-  [ "$v" = "PUBLIC $issues false false false" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, $desc, no wiki, squash only)"
+  [ "$v" = "PUBLIC $issues false false false true" ] && ok "$1" settings || bad "$1" settings "got: $v (want public, $desc, no wiki, squash only, auto-merge on)"
 }
 check_security() {
   local s p
