@@ -150,4 +150,39 @@ check "services, once per call whatever repos are named" [ "$(services "$r" ouro
 out="$(CHECK_REPOS_ROOT="$r" "$HERE/../check-repos.sh" --check agents gungnir 2>&1)"
 check "services, not in the default checks" [ "$(grep -c '^\(FAIL\|PASS\) niflheim-local services' <<<"$out")" = 0 ]
 check "services, the check never names the hidden suites" [ -z "$(grep -n 'hidden-suites\|huldra\|credentials\|factory.env' <(sed -n '/^check_services/,/^}/p' "$HERE/../check-repos.sh"))" ]
+# operator: no tracked file names the operator who runs the check. The names come from the machine (the
+# login and the home folder's name) and from the user accounts in orgs/local/, or from CHECK_REPOS_OPERATOR.
+O="$T/oroot"
+# clone <repo path under $O> <file> <text>: a git repo with one tracked file
+clone() { mkdir -p "$O/$1/$(dirname "$2")"; printf '%s\n' "$3" > "$O/$1/$2"
+  git -C "$O/$1" init -q 2>/dev/null; git -C "$O/$1" add -- "$2"; }
+operator() { CHECK_REPOS_ROOT="$O" "$HERE/../check-repos.sh" --check operator "$@"; }
+clone asgard README.md 'cd ~/zed/ouroboric/asgard'
+clone yggdrasil/odin main_test.go 'Owner: "ouroboric-dev"'
+out="$(CHECK_REPOS_OPERATOR=zed operator asgard odin)"
+check "operator, a file that names the operator: FAIL, with the file" grep -qx 'FAIL asgard operator: names the operator in README.md' <<<"$out"
+check "operator, a repo that names only the org: PASS" grep -qx 'PASS odin operator' <<<"$out"
+check "operator, the output never prints the names" bash -c "! grep -qw zed <<<'$out'"
+check "operator, the match ignores case and needs a whole word" bash -c "
+  [ \"\$(CHECK_REPOS_OPERATOR=ZED CHECK_REPOS_ROOT='$O' '$HERE/../check-repos.sh' --check operator asgard | cut -d' ' -f1)\" = FAIL ] &&
+  [ \"\$(CHECK_REPOS_OPERATOR=ze CHECK_REPOS_ROOT='$O' '$HERE/../check-repos.sh' --check operator asgard | cut -d' ' -f1)\" = PASS ]"
+printf 'zed\n' > "$O/asgard/untracked.txt"
+check "operator, an untracked file is not checked" [ "$(CHECK_REPOS_OPERATOR=nobody operator asgard)" = 'PASS asgard operator' ]
+check "operator, without its clone: FAIL" [ "$(CHECK_REPOS_OPERATOR=zed operator gleipnir | cut -d' ' -f1)" = FAIL ]
+check "operator, from the machine: the login" \
+  [ "$(env -u CHECK_REPOS_OPERATOR USER=zed HOME="$T/h/someone" REPO_ORGS_DIR="$T/none" CHECK_REPOS_ROOT="$O" "$HERE/../check-repos.sh" --check operator asgard | cut -d' ' -f1)" = FAIL ]
+check "operator, from the machine: the home folder's name" \
+  [ "$(env -u CHECK_REPOS_OPERATOR USER=someone HOME="$T/h/zed" REPO_ORGS_DIR="$T/none" CHECK_REPOS_ROOT="$O" "$HERE/../check-repos.sh" --check operator asgard | cut -d' ' -f1)" = FAIL ]
+mkdir -p "$T/orgs/local"
+printf '%s\n' '{"org":"zed","owner":"user","licence":"MIT","copyright":"Z"}' > "$T/orgs/local/zed.json"
+check "operator, from the machine: a user account in orgs/local/" \
+  [ "$(env -u CHECK_REPOS_OPERATOR USER=someone HOME="$T/h/someone" REPO_ORGS_DIR="$T/orgs" CHECK_REPOS_ROOT="$O" "$HERE/../check-repos.sh" --check operator asgard | cut -d' ' -f1)" = FAIL ]
+check "operator, no names at all: FAIL, never a silent pass" \
+  [ "$(CHECK_REPOS_OPERATOR=' ' operator odin | cut -d' ' -f1)" = FAIL ]
+# The past records keep their paths as written; any other file in the same folders is checked.
+clone yggdrasil docs/2-engineering/plans/2026-10-12-yggdrasil-v0/tasks.md 'cd /home/zed/ouroboric'
+check "operator, a listed past record: PASS" [ "$(CHECK_REPOS_OPERATOR=zed operator yggdrasil)" = 'PASS yggdrasil operator' ]
+clone yggdrasil docs/2-engineering/plans/2026-11-01-next/tasks.md 'cd /home/zed/ouroboric'
+check "operator, a new plan beside the records: FAIL" grep -q 'tasks.md' <<<"$(CHECK_REPOS_OPERATOR=zed operator yggdrasil)"
+check "operator, in the default checks" grep -q 'operator' <(sed -n 's/.*checks=(\(settings.*\))$/\1/p' "$HERE/../check-repos.sh")
 exit $fail

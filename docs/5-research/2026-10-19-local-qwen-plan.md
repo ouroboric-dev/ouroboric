@@ -26,7 +26,7 @@ already installed at `/home/linuxbrew/.linuxbrew/bin/claude`), python3 only insi
 
 ## Global Constraints
 
-- Repo: `~/brunogbv/ouroboric/ouroboric`, branch `local-qwen`. Stage explicit paths only; never
+- Repo: your `ouroboric` clone, branch `local-qwen`. Stage explicit paths only; never
   `git add -A` (the tree has an untracked `docs/assets/logo/` that is not ours).
 - Scripts go in `scripts/`, tests in `scripts/tests/<name>.test.sh`, in the style of
   `scripts/tests/ygg-engine.test.sh`: a temp `HOME`, fake commands, no GPU and no network. Scripts are
@@ -85,7 +85,7 @@ already installed at `/home/linuxbrew/.linuxbrew/bin/claude`), python3 only insi
 - [ ] **Step 1: Create the branch and commit the design and this plan**
 
 ```bash
-cd ~/brunogbv/ouroboric/ouroboric
+cd ouroboric   # your clone
 git switch main && git pull --ff-only
 git switch -c local-qwen
 git add docs/5-research/2026-10-19-local-qwen-design.md docs/5-research/2026-10-19-local-qwen-plan.md
@@ -356,7 +356,7 @@ Expected: only `ok` lines, and no shellcheck output.
 
 - [ ] **Step 5: Real smoke**
 
-With the server running, in `~/brunogbv/ouroboric/ouroboric`, run:
+With the server running, in your `ouroboric` clone, run:
 `scripts/qwen-opencode.sh run "List the files in scripts/ that start with qwen, using a tool"`.
 
 Expected: an answer that names the qwen scripts, after at least one tool call. The server log shows
@@ -468,12 +468,12 @@ Expected: only `ok` lines, and no shellcheck output.
 - [ ] **Step 5: Real smoke**
 
 1. Run `scripts/qwen-claude.sh init`.
-2. With the server running, in `~/brunogbv/ouroboric/ouroboric`, run
+2. With the server running, in your `ouroboric` clone, run
    `scripts/qwen-claude.sh -p "Which scripts in scripts/ start with qwen? Use a tool."`.
 3. Check the answer. Expected: it names the qwen scripts. No login prompt appears, and
    `ls ~/.claude-qwen/plugins` shows the three plugins.
 4. Check the server log. Expected: the server log shows `/v1/messages` requests.
-5. Check the personal config. Expected: `claude-whoami` in `~/brunogbv` still reports the personal
+5. Check the personal config. Expected: `claude-whoami` in the personal folder still reports the personal
    account.
 
 - [ ] **Step 6: Commit**
@@ -504,7 +504,7 @@ git commit -m "qwen-claude.sh: Claude Code on the local Qwen server, in its own 
 - [ ] **Step 2: Speed with about 100K tokens filled**
 
 Build a prompt of about 95,000 tokens from real source files (for example, the contents of
-`~/brunogbv/ouroboric/yggdrasil/gleipnir`, repeated). Send it with `max_tokens: 256`, with MTP on.
+the `gleipnir` clone, repeated). Send it with `max_tokens: 256`, with MTP on.
 Record the prompt speed, the decode speed and the VRAM in use. If the request fails for lack of
 memory, lower `QWEN_CTX` in steps of 8192 tokens, but not below `65536`. Record the result.
 

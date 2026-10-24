@@ -52,7 +52,7 @@ Yggdrasil. It wins on limits, privacy, offline use and learning.
 These make the work a failure even if the model runs:
 
 - **The Claude account split breaks.** The founder runs two Claude Code accounts, split by folder
-  (work under `~/flink` with `~/.claude`; personal under `~/brunogbv` with `~/.claude-personal`),
+  (a work folder with `~/.claude`, a personal folder with `~/.claude-personal`),
   with `claude`, `claude-work` and `claude-personal` shell functions in
   `~/.config/claude-accounts.zsh` and an `account-guard.sh` hook in each config. The local setup MUST
   NOT change either config dir, either login, or the `claude` function's routing. Local Claude Code

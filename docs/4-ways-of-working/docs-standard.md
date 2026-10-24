@@ -174,7 +174,11 @@ checks:
 - `reuse lint`;
 - the `AGENTS.md` structure;
 - the pinned `gitleaks` pre-commit hook;
-- that the pr-bot can reach the repo.
+- that the pr-bot can reach the repo;
+- that no tracked file names the operator who runs the check (`operator`, invariant 9): their login,
+  their home folder's name, or a user account in `scripts/orgs/local/`. Docs give paths relative to
+  the folder that holds the clones side by side, or through `$HOME`, and fixtures use the org. The
+  records of past work that the script lists keep their paths as written.
 
 Run one check with `--check <name>`, or name repos to check only those.
 
