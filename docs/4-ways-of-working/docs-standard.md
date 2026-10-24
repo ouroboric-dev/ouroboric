@@ -195,6 +195,9 @@ Run one check with `--check <name>`, or name repos to check only those.
   output says. `--private` makes a hidden repo, which is never added. Another org copies
   [`scripts/orgs/ouroboric-dev.json`](../../scripts/orgs/ouroboric-dev.json) to
   `scripts/orgs/<org>.json` and changes the values ([the keys](../../scripts/orgs/README.md)).
+  An operator's own account works the same way with `"owner": "user"`. Its config lives in
+  `scripts/orgs/local/`, which git ignores, and is never committed
+  ([the differences](../../scripts/orgs/README.md#a-users-own-account)).
 - **Each step also runs alone**, with the same `--org`.
   [`create-repo.sh`](../../scripts/create-repo.sh) creates empty repos.
   [`add-licences.sh`](../../scripts/add-licences.sh) and [`add-ci.sh`](../../scripts/add-ci.sh)

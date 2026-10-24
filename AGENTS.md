@@ -17,6 +17,9 @@ loosen these.
 7. Never commit raw sources that should not be published, such as AI-generated rasters or the
    founder's source images. Commit only final vectors and exports.
 8. Work on a branch, stage files by path, and open a pull request for every change.
+9. Never commit an operator's own config, such as a personal account name, a local path or a personal
+   setting. The scripts serve any operator: such config goes in a gitignored folder, such as
+   `scripts/orgs/local/`, and only generic examples are committed.
 
 ## Map
 

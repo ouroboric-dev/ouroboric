@@ -1,0 +1,12 @@
+{
+  "org": "your-github-user",
+  "owner": "user",
+  "licence": "LicenseRef-Proprietary",
+  "copyright": "Your Name",
+  "licence_dir": ".",
+  "ci": ["reuse", "markdown", "actions"],
+  "after_create": {
+    "public": "{repo} is on your own account, where the pr-bot is not installed: agents can't reach it until you install a bot for {repo} alone.",
+    "private": "{repo} is on your own account, where the pr-bot is not installed: agents can't reach it until you install a bot for {repo} alone."
+  }
+}

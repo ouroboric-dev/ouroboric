@@ -109,4 +109,33 @@ check "a config in a folder with a space" \
   [ "$(load --config "$T/my org/acme.json" | sed -n 's/^DIR=//p')" = "$T/my org/lic" ]
 check "a relative --config gives an absolute RC_FILE" bash -c "
   cd '$T/my org' && . '$HERE/../repo-config.sh' && repo_config_args --config acme.json && [ \"\$RC_FILE\" = '$T/my org/acme.json' ]"
+
+# owner: the account is an org (the default) or a user.
+owner() { ( . "$HERE/../repo-config.sh"; repo_config_args "$@"; repo_config_load; printf '%s' "$RC_OWNER" ); }
+check "without owner, the account is an org" [ "$(owner --config "$T/min.json")" = org ]
+check "ouroboric-dev is an org" [ "$(owner --org ouroboric-dev)" = org ]
+cfg u "{$base, \"owner\": \"user\"}"
+check "owner user loads" [ "$(owner --config "$T/u.json")" = user ]
+cfg m "{$base, \"owner\": \"team\"}"
+check "an unknown owner is refused" refused --config "$T/m.json"
+cfg m "{$base, \"owner\": 1}"
+check "an owner that is not a string is refused" refused --config "$T/m.json"
+check "the user example is a user, with its licence text and no docs licence" bash -c "
+  . '$HERE/../repo-config.sh'; repo_config_args --config '$HERE/../orgs/examples/user.json'; repo_config_load
+  [ \"\$RC_OWNER\" = user ] && [ -s \"\$RC_LICENCE_DIR/\$RC_LICENCE.txt\" ] && [ -z \"\$RC_DOCS_LICENCE\" ]"
+
+# An operator's own config lives in orgs/local/, which git ignores; --org finds it there.
+mkdir -p "$T/o/local"
+printf '%s\n' '{"org": "someone", "owner": "user", "licence": "MIT", "copyright": "Someone"}' > "$T/o/local/someone.json"
+check "--org finds an operator's config in local/" bash -c "
+  . '$HERE/../repo-config.sh'; REPO_ORGS_DIR='$T/o' repo_config_args --org someone; repo_config_load
+  [ \"\$RC_FILE\" = '$T/o/local/someone.json' ] && [ \"\$RC_OWNER\" = user ]"
+cp "$T/o/local/someone.json" "$T/o/someone.json"
+REPO_ORGS_DIR="$T/o" check "a name in both orgs/ and local/ is refused" refused --org someone
+REPO_ORGS_DIR="$T/o" check "a name in neither is refused" refused --org nobody
+check "git ignores the operator configs in local/" git -C "$HERE/../.." check-ignore -q scripts/orgs/local/someone.json
+check "git ignores an operator's licence texts in local/" git -C "$HERE/../.." check-ignore -q scripts/orgs/local/someone/LicenseRef-Proprietary.txt
+check "git keeps local/README.md" bash -c "! git -C '$HERE/../..' check-ignore -q scripts/orgs/local/README.md"
+check "no operator config is committed: every committed config is an org's or an example" \
+  bash -c "[ -z \"\$(git -C '$HERE/../..' ls-files 'scripts/orgs/*.json' 'scripts/orgs/local/*' | grep -vx -e 'scripts/orgs/ouroboric-dev.json' -e 'scripts/orgs/examples/user.json' -e 'scripts/orgs/local/README.md')\" ]"
 exit $fail

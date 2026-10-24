@@ -73,4 +73,25 @@ check "--private: exit 0" [ "$rc" = 0 ]
 check "--private creates a private repo" \
   [ "$(grep '"method": "POST"' "$T/log" | tail -1 | jq -r '.body|fromjson|.visibility')" = private ]
 
+# owner user: the repo is created on the token's own account, which must be the config's.
+org_lines="$(logn)"
+mkdir -p "$T/git/acme"
+printf '{"org":"acme","owner":"user","licence":"MIT","copyright":"Acme"}\n' > "$T/me.json"
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/me.json" --private kappa "The kappa repo." > "$T/out" 2>&1; rc=$?
+check "a user config: exit 0" [ "$rc" = 0 ]
+check "a user config creates the repo on the user's account" \
+  [ "$(grep '"method": "POST"' "$T/log" | tail -1 | jq -r .path)" = /user/repos ]
+check "a user config keeps the visibility and the settings" \
+  [ "$(grep '"method": "POST"' "$T/log" | tail -1 | jq -cS '.body|fromjson')" = '{"auto_init":false,"description":"The kappa repo.","has_issues":false,"has_projects":false,"has_wiki":false,"name":"kappa","visibility":"private"}' ]
+check "a user config: the repo is a bare repo under the user" [ -d "$T/git/acme/kappa.git" ]
+printf '{"org":"someone-else","owner":"user","licence":"MIT","copyright":"Acme"}\n' > "$T/other.json"
+before="$(posts)"
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/other.json" lambda "The lambda repo." 2> "$T/err"; rc=$?
+check "a token of another user: exit 2, nothing is created" bash -c "[ $rc = 2 ] && [ '$before' = \$(grep -c '\"method\": \"POST\"' '$T/log') ]"
+check "a token of another user: both accounts are named" bash -c "grep -q someone-else '$T/err' && grep -q acme '$T/err'"
+GH_TOKEN=ghp_FAKE "$CREATE" --config "$T/other.json" --check lambda "The lambda repo." 2>/dev/null; rc=$?
+check "a token of another user fails --check too" [ "$rc" = 2 ]
+check "an org config never asks who the token is" \
+  bash -c "! head -n '$org_lines' '$T/log' | jq -e 'select(.path==\"/user\")' >/dev/null"
+
 exit $fail

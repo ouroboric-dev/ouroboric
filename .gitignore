@@ -1,0 +1,4 @@
+# Operators' own configs, such as a user account's repo config, stay on the operator's machine
+# (AGENTS.md invariant 9). Only the README that explains the folder is committed.
+/scripts/orgs/local/*
+!/scripts/orgs/local/README.md

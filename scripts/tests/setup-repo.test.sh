@@ -91,4 +91,52 @@ check "two repo arguments: exit 2" bash -c "GH_TOKEN=fake '$HERE/../setup-repo.s
 export FAKE_GH_DIR="$T/option"; mkdir -p "$FAKE_GH_DIR/GET"
 check "an unknown option: exit 2, and gh is never called" \
   bash -c "GH_TOKEN=fake '$HERE/../setup-repo.sh' --org ouroboric-dev --cl >/dev/null 2>&1; [ \$? = 2 ] && [ ! -s '$FAKE_GH_DIR/log' ]"
+# owner user: no org to hold the Actions allowlist, so each repo holds it. GitHub offers no secret
+# scanning or private vulnerability reporting on a user's private repo.
+printf '%s\n' '{"org":"me","owner":"user","licence":"MIT","copyright":"Me"}' > "$T/me.json"
+PINS="$(sed -n 's/^ *- uses: \([^ ]*\).*/\1/p' "$HERE/../templates/ci/lint.yml" | jq -Rnc '[inputs]')"
+# user_repo <dir> <visibility>: a fake for repos/me/widget with no ruleset yet
+user_repo() { export FAKE_GH_DIR="$T/$1"; mkdir -p "$FAKE_GH_DIR/GET" "$FAKE_GH_DIR/ERR"
+  echo "{\"visibility\":\"$2\"}" > "$FAKE_GH_DIR/GET/repos_me_widget.json"
+  echo '[]' > "$FAKE_GH_DIR/GET/repos_me_widget_rulesets.json"; }
+# logged <jq filter>: some logged request matches
+logged() { jq -e "select($1)" "$FAKE_GH_DIR/log" >/dev/null; }
+allowlisted() { logged '.method=="PUT" and .path=="repos/me/widget/actions/permissions" and (.body|fromjson|.enabled==true and .allowed_actions=="selected")' &&
+  jq -se --argjson pins "$PINS" 'map(select(.method=="PUT" and .path=="repos/me/widget/actions/permissions/selected-actions"))
+    |length==1 and (.[0].body|fromjson|.patterns_allowed==$pins and .github_owned_allowed==false and .verified_allowed==false)' "$FAKE_GH_DIR/log" >/dev/null; }
+export -f logged allowlisted
+export PINS
+check "lint.yml pins two actions, each by a full SHA" bash -c "jq -e 'length==2 and all(test(\"@[0-9a-f]{40}\$\"))' <<<'$PINS' >/dev/null"
+
+user_repo user-private private
+GH_TOKEN=fake "$HERE/../setup-repo.sh" --config "$T/me.json" widget > /dev/null 2> "$T/err"; rc=$?
+check "a private user repo: exit 0" [ "$rc" = 0 ]
+check "a private user repo: only lint.yml's pinned actions may run" allowlisted
+check "a private user repo: no secret scanning request" bash -c "! logged '.body|test(\"secret_scanning\")'"
+check "a private user repo: no private vulnerability reporting request" bash -c "! logged '.path|test(\"private-vulnerability-reporting\")'"
+check "a private user repo: stderr names what GitHub doesn't offer" \
+  bash -c "grep -q 'secret scanning' '$T/err' && grep -q 'vulnerability reporting' '$T/err'"
+check "a private user repo: the same ruleset as an org's" \
+  bash -c "jq -rs 'map(select(.path==\"repos/me/widget/rulesets\"))|last|.body' \"\$FAKE_GH_DIR/log\" \
+    | jq -e '([.rules[].type]|sort)==[\"deletion\",\"non_fast_forward\",\"pull_request\"] and .bypass_actors==[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]' >/dev/null"
+check "a private user repo: the same merge settings as an org's" \
+  logged '.method=="PATCH" and .path=="repos/me/widget" and (.fields|index("allow_squash_merge=true") and index("has_issues=false"))'
+
+user_repo user-public public
+GH_TOKEN=fake "$HERE/../setup-repo.sh" --config "$T/me.json" widget > /dev/null 2>&1
+check "a public user repo: secret scanning and push protection" logged '.path=="repos/me/widget" and (.body|test("secret_scanning_push_protection"))'
+check "a public user repo: private vulnerability reporting" logged '.method=="PUT" and .path=="repos/me/widget/private-vulnerability-reporting"'
+check "a public user repo: only lint.yml's pinned actions may run" allowlisted
+
+user_repo user-free private
+echo 'Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)' > "$FAKE_GH_DIR/ERR/POST_repos_me_widget_rulesets"
+GH_TOKEN=fake "$HERE/../setup-repo.sh" --config "$T/me.json" widget > "$T/out" 2> "$T/err"; rc=$?
+check "a refused ruleset: exit non-zero" [ "$rc" != 0 ]
+check "a refused ruleset: stderr says main is not protected" grep -q 'main is not protected' "$T/err"
+check "a refused ruleset on a private user repo: stderr names GitHub Pro" grep -q 'GitHub Pro' "$T/err"
+check "a refused ruleset: it never says set up" bash -c "! grep -q 'set up' '$T/out'"
+check "a refused ruleset: the Actions allowlist is already in place" allowlisted
+
+export FAKE_GH_DIR="$T/acme"
+check "an org repo: the Actions allowlist is the org's, so none is written" bash -c "! logged '.path|test(\"actions/permissions\")'"
 exit $fail

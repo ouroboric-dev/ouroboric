@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Create new repos in the org that a config names, each with a first commit and the required setup, so
-# agents only ever see a protected repo. Every check runs before the first repo is created: if any repo
+# Create new repos in the org that a config names, or in a user's own account for a config with
+# "owner": "user", each with a first commit and the required setup, so agents only ever see a protected
+# repo. Every check runs before the first repo is created: if any repo
 # already exists, a name repeats, a --ci piece is unknown or the config is bad, nothing is created.
 # Then, for each repo in turn: it builds the first commit in a temporary folder, with README.md (the
 # name as the title, the description as the first paragraph), the licence files (add-licences.sh) and
@@ -13,6 +14,9 @@
 # repository access "All repositories", with Administration, Contents and Workflows read and write
 # (the pr-bot can't create repos). A real run confirmed this token on 2026-10-18; a token limited to
 # selected repositories is untested. The org's Actions allowlist must hold lint.yml's two actions.
+# For a user config, the token is owned by that user instead, with the same access, and each repo holds
+# its own allowlist (setup-repo.sh writes it). GitHub refuses rulesets on a user's private repo without
+# GitHub Pro: then setup-repo.sh fails, and the repo is reported as not protected.
 #   GH_TOKEN=... new-repo.sh (--org <name>|--config <path>) [--private] [--ci <piece>,...] <repo> "<description>" [<repo> "<description>"]...
 # --private makes private repos, such as huldra, the hidden benchmark suite. --ci replaces the
 # config's base CI pieces. After each repo, it prints the config's after-create message, such as how
