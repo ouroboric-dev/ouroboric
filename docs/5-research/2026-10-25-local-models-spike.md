@@ -17,7 +17,7 @@ command that showed it and its output. It was done on 2026-10-25 (task LM-T01). 
 
 | Item | Fact | Result |
 | --- | --- | --- |
-| 1 | CUDA in rootless Podman through CDI | **Differs; pending a founder step.** The CDI spec is read by the engine, which runs in the Podman machine's own WSL distro. The spec was generated in the operator's distro, so the engine does not see it |
+| 1 | CUDA in rootless Podman through CDI | **Differed; confirmed after a founder step.** The CDI spec is read by the engine, which runs in the Podman machine's own WSL distro. Generated there, the GPU is reachable |
 | 2 | A container on an internal network publishes a port on `127.0.0.1` | **Confirmed.** No second network is needed |
 | 3 | The router's endpoints and the preset's key format | **Confirmed, with details the spec must add:** a flag is `key = true`; a bare key or an unknown key stops the server; a load of a running model answers 400 |
 | 4 | OpenCode uses `@ai-sdk/openai-compatible` without npm | **Confirmed.** OpenCode 1.18.32 fails on the connection, not on a package fetch |
@@ -45,7 +45,7 @@ command that showed it and its output. It was done on 2026-10-25 (task LM-T01). 
 
 ## Item 1: CUDA in rootless Podman through CDI
 
-**Result: differs from the spec. Pending: founder step 1, done again inside the Podman machine.**
+**Result: differed from the spec; confirmed once founder step 1 was done again inside the Podman machine (below).**
 
 The founder installed the NVIDIA container toolkit (1.19.0) in the Ubuntu distro and ran `sudo nvidia-ctk
 cdi generate --output=/etc/cdi/nvidia.yaml`. The founder reported these lines of its output (not seen by
@@ -124,6 +124,24 @@ scripts/ygg-engine.sh run -- podman run --rm --device nvidia.com/gpu=all \
 ```
 
 Expected: the table lists `NVIDIA GeForce RTX 4090`.
+
+**Done (2026-10-25).** The founder ran the step above. The machine then had `nvidia-container-toolkit-1.20.1-1`, and
+the check passed:
+
+```text
+$ scripts/ygg-engine.sh run -- podman run --rm --device nvidia.com/gpu=all \
+    docker.io/nvidia/cuda@sha256:59436e8ac61921052d8f420be8b8cb8b117f1d7cc643397a289e37aaa0b83ea1 \
+    nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+name, memory.total [MiB], driver_version
+NVIDIA GeForce RTX 4090, 24564 MiB, 610.88
+```
+
+The machine's PID 1 is WSL's init, not systemd, so the toolkit's `nvidia-cdi-refresh.path` and
+`nvidia-cdi-refresh.service` units never run. The spec names one driver store folder
+(`/usr/lib/wsl/drivers/nvrfi.inf_amd64_87b4cb6242e17d7d`); a driver update renames it.
+
+[ANALYSIS] The setup must be repeatable by a script: the spec's `scripts/ygg-gpu.sh` (task LM-T15) installs what is
+missing and finds a stale spec by checking that every driver store folder it names exists.
 
 **Amendments proposed.**
 
