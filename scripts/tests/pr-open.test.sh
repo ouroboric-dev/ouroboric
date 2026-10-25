@@ -14,6 +14,8 @@ cat > "$T/s/as-bot.sh" <<'FAKE'
 printf '%s\n' "$*" >> "$FAKE_LOG"
 case "$3 $4" in
   "pr create") echo "https://github.com/ouroboric-dev/gleipnir/pull/7" ;;
+  "pr view") echo "${FAKE_BASE:-main}" ;;
+  "repo view") echo "main" ;;
   "pr merge") if [ -n "${FAKE_MERGE_FAIL:-}" ]; then echo "GraphQL: Auto merge is not allowed for this repository" >&2; exit 1; fi ;;
 esac
 FAKE
@@ -25,8 +27,10 @@ U=https://github.com/ouroboric-dev/gleipnir/pull/7
 out="$("$T/s/pr-open.sh" gleipnir --base main --head my-branch --title "A title" --body-file body.md 2>"$T/err")"; rc=$?
 check "success: exit 0" [ "$rc" = 0 ]
 check "success: the URL is printed" [ "$out" = "$U" ]
-check "success: create, then arm, in order, both as the bot for the repo" \
+check "success: create, read the base and the default branch, then arm, in order, all as the bot for the repo" \
   [ "$(cat "$FAKE_LOG")" = "gleipnir gh pr create --repo ouroboric-dev/gleipnir --base main --head my-branch --title A title --body-file body.md
+gleipnir gh pr view $U --repo ouroboric-dev/gleipnir --json baseRefName -q .baseRefName
+gleipnir gh repo view ouroboric-dev/gleipnir --json defaultBranchRef -q .defaultBranchRef.name
 gleipnir gh pr merge $U --auto --squash" ]
 check "no admin bypass" bash -c "! grep -e '--admin' '$FAKE_LOG'"
 check "the only merge call carries --auto" bash -c "[ \"\$(grep -c 'pr merge' '$FAKE_LOG')\" = 1 ] && grep 'pr merge' '$FAKE_LOG' | grep -q -e '--auto'"
@@ -38,6 +42,14 @@ check "arming fails: the message says the PR stays open and why" \
   bash -c "grep -q 'stays open' '$T/err' && grep -q 'auto-merge' '$T/err' && grep -q 'Auto merge is not allowed' '$T/err'"
 check "arming fails: the URL is still printed" [ "$out" = "$U" ]
 check "arming fails: nothing closes or deletes the PR" bash -c "! grep -e 'close' -e 'delete' '$FAKE_LOG'"
+
+: > "$FAKE_LOG"
+out="$(FAKE_BASE=typed-boundaries "$T/s/pr-open.sh" voluspa --base typed-boundaries --head stacked --title t 2>"$T/err")"; rc=$?
+check "stacked: exit 0" [ "$rc" = 0 ]
+check "stacked: the URL is printed" [ "$out" = "$U" ]
+check "stacked: auto-merge is not armed on a base that is not the default branch" bash -c "! grep -q 'pr merge' '$FAKE_LOG'"
+check "stacked: the message names the base and says why" \
+  bash -c "grep -q 'typed-boundaries' '$T/err' && grep -q 'not armed' '$T/err' && grep -q 'approval' '$T/err'"
 
 : > "$FAKE_LOG"
 check "no repo: usage, exit 2, no call" bash -c "'$T/s/pr-open.sh' >/dev/null 2>&1; [ \$? = 2 ] && [ ! -s '$FAKE_LOG' ]"
