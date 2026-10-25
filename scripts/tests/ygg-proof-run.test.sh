@@ -8,9 +8,12 @@
 # shellcheck disable=SC2329,SC2016 # check calls has and hasnt by name; the $ in the patterns is literal
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The whole test runs under env -i, with PATH, HOME and GOPATH in its own folder (hermetic.sh).
+# shellcheck source-path=SCRIPTDIR source=hermetic.sh
+. "$HERE/hermetic.sh"
+HERMETIC_TOOLS="git python3" hermetic_enter "$@"
 S="$HERE/.."
 SCRIPT="$S/ygg-proof-run.sh"
-T="$(mktemp -d)"
 trap 'rm -rf -- "$T"' EXIT
 fail=0
 check() {
@@ -18,8 +21,9 @@ check() {
   if "$@"; then echo "ok   $d"; else echo "FAIL $d"; fail=1; [ -z "${VERBOSE:-}" ] || sed 's/^/     | /' "$T/out"; fi
 }
 # The script names its folder by the second, so each run that makes a project waits for the next second.
-run() { sleep 1; "$@" >"$T/out" 2>&1; rc=$?; }
-runq() { rm -rf "$D"/proof-*; "$@" >"$T/out" 2>&1; rc=$?; } # a refusal makes no project: no wait
+pathok() { hermetic_path_ok "$PATH" || { echo "FAIL the test's PATH leaves its folder: $PATH"; exit 3; }; }
+run() { pathok; sleep 1; "$@" >"$T/out" 2>&1; rc=$?; }
+runq() { pathok; rm -rf "$D"/proof-*; "$@" >"$T/out" 2>&1; rc=$?; } # a refusal makes no project: no wait
 has() { grep -q -F -- "$1" "$T/out"; }
 hasnt() { ! grep -q -F -- "$1" "$T/out"; }
 export HOME="$T/home"; mkdir -p "$HOME"
@@ -258,6 +262,43 @@ check "doctor ran" grep -q '^doctor ' "$T/ygg.calls"
 check "ygg run never ran" bash -c '! grep -q "^run" "$1"' _ "$T/ygg.calls"
 check "the dry run says nothing was started and the credentials were not loaded" has "nothing was started and the credentials were not loaded"
 check "doctor was given the project and the config" grep -q -- "--project .*/project --config .*/factory.yaml" "$T/ygg.calls"
+
+# --- the stale-binary guard: a ygg from PATH (not YGG_CMD) must have build facts (ygg-build.sh) that name the HEAD of
+# the umbrella's odin
+mkdir -p "$YG/odin"; git -C "$YG/odin" init -q -b main; printf 'x\n' >"$YG/odin/f"; git -C "$YG/odin" add f
+git -C "$YG/odin" -c user.name=t -c user.email=t@example.invalid commit -q -m odin
+head12="$(git -C "$YG/odin" rev-parse --short=12 HEAD)"
+facts() { printf 'format: 1\nodin: %s\nsha256: %s\n' "$2" "$(sha256sum "$1" | cut -d' ' -f1)" >"$1.build.txt"; } # BINARY ODIN_COMMIT
+build_cmd="run: $(cd "$S" && pwd)/ygg-build.sh --yggdrasil $YG"
+rm -f "$FB/ygg.build.txt"
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
+check "guard: a dry run with a ygg with no build facts is not refused" test "$rc" -eq 0
+check "guard: it prints STALE and says to run the build script" has "proof-run: ygg guard: STALE: the ygg at $FB/ygg has no build facts"
+check "guard: it gives the whole build command and says the dry run did not refuse" has "$build_cmd (a dry run: not refused)"
+: >"$T/ygg.calls"
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+check "guard: a real run with no build facts is refused, and makes nothing" refuses "$build_cmd"
+check "guard: the refusal names --any-ygg" has "--any-ygg"
+check "guard: no ygg verb ran before the refusal" test ! -s "$T/ygg.calls"
+facts "$FB/ygg" 000000000000
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+check "guard: a binary from another commit is refused, with both commits" refuses "built from odin 000000000000, but the checkout $YG/odin is at $head12"
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg --dry-run
+check "guard: --any-ygg passes a stale binary and says so" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2"' _ "$rc" "$T/out"
+: >"$T/ygg.calls"
+run env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg
+check "guard: a real run with --any-ygg and a stale binary runs, and says it skipped the check" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2" && grep -q "^run " "$3"' _ "$rc" "$T/out" "$T/ygg.calls"
+rm -rf "$D"/proof-*
+facts "$FB/ygg" "$head12"
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
+check "guard: a binary built from odin's HEAD passes" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: ok" "$2"' _ "$rc" "$T/out"
+cp "$FB/ygg" "$T/ygg.keep"; printf '# rebuilt by hand\n' >>"$FB/ygg"
+runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+check "guard: a binary changed after its facts were written is refused" refuses "is not the binary ygg-build.sh wrote"
+mv "$T/ygg.keep" "$FB/ygg"
+runq "$SCRIPT" "${BASE[@]}" --name guard --dry-run
+check "guard: YGG_CMD is not guarded" bash -c '[ "$1" -eq 0 ] && ! grep -q "ygg guard" "$2"' _ "$rc" "$T/out"
+rm -f "$FB/ygg.build.txt"; rm -rf "$D"/proof-* "$YG/odin"
 
 # --- the suites folder is never listed or read
 SH="$T/shims"; mkdir -p "$SH"; : >"$T/shim.log"
@@ -581,7 +622,7 @@ check "the dry run names the baseline it found and its folder" bash -c 'grep -F 
 # --- the ouroboric review (I1): --continue continues a stopped or paused run inside the script
 CBASE=(--folder "$D" --env "$ENVF")
 cont() { "$SCRIPT" "${CBASE[@]}" "$@"; }
-runc() { "$@" >"$T/out" 2>&1; rc=$?; } # a continuation makes no folder: no wait
+runc() { pathok; "$@" >"$T/out" 2>&1; rc=$?; } # a continuation makes no folder: no wait
 clearlogs() { rm -f "$T/ygg.calls" "$T/ygg.env" "$T/timeout.args"; }
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
 FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --approve ship-gate --note 'looks right'
@@ -743,5 +784,6 @@ check "--continue ending 5: record, the score line and the record path" bash -c 
 clearlogs; FAKE_CONT_RC=3 runc cont --continue RUN-1 --approve ship-gate
 check "--continue ending 3: no score line" bash -c '! grep -q "ygg score" "$1"' _ "$T/out"
 
+hermetic_done
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
