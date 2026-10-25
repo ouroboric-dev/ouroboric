@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, three roles
-# the operator names and caps the operator sets. Every proof run is set up the same way, so that `ygg metrics
-# --compare` compares two factories and not two setups. IT WILL COST MONEY (without --dry-run):
-# the script makes the project and the config, runs the factory, grades the run and prints the evidence.
+# Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, the roles the
+# operator names (planner, implementer, reviewer, retrospective) and caps the operator sets. Every proof run is set up
+# the same way, so that `ygg metrics --compare` compares two factories and not two setups. IT WILL COST MONEY (without
+# --dry-run): the script makes the project and the config, runs the factory (the run grades itself, and its retro
+# follows) and prints the evidence.
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
 #                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL]
+#                    [--retro-agent AGENT] [--retro-model MODEL]
 #                    [--reviewer-reasoning low|medium|high|off] [--run-turns N] [--run-tokens N] [--run-usd N]
 #                    [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run] [--build]
 #                    [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]
-#   ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --reject GATE --reason TEXT | --resume)
+#   ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] |
+#                    --reject GATE (--reason TEXT | --decisions FILE) | --resume)
 #                    [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]
 # AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>; a MODEL has only A-Za-z0-9._/:-
 # because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
 # opencode:openrouter/qwen/qwen3.8-27b with --reviewer-reasoning medium (the reviewer role's reasoning effort: a
 # Qwen reviewer at the default high stalled a whole session in the rehearsal; a claude-code agent ignores the
-# setting, and the line is written for every agent); a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000
+# setting, and the line is written for every agent); the retrospective role claude-code:opus (--retro-agent and
+# --retro-model; the role that writes the run's retrospective); a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000
 # turns, 24,000,000 tokens, $10; --wall 8h; DIR $HOME/ygg-it; FILE $HOME/.config/ouroboric/factory.env;
 # --tasks ../mimir; --suites $HOME/ygg-it/hidden-suites; --yggdrasil the umbrella beside this repo.
 # The task is client-gallery-lite (YGG_PROOF_TASK names another, for tests); its suite is the `suite` key of its
@@ -42,21 +46,28 @@
 #      script still prints goes to DIR/proof-NAME-TIME/hangup.txt;
 #   8. prints the exit code (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall
 #      clock); after an abnormal end (any code but 0, 3, 4 and 5) runs `ygg doctor`, which stops the sandboxes a run
-#      left; after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`, with
+#      left; `ygg grade` is not run here, because the run grades itself; after any ending runs `ygg metrics RUN`, with
 #      --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN` (printed as the CLI gives it: this script judges
 #      nothing; each proof run has its own project, so the two run folders are linked into DIR/proof-NAME-TIME/compare
-#      for it), `ygg report RUN`, ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that
-#      replaces the credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this
-#      report to the Windows clipboard);
+#      for it), `ygg report RUN`, after a run that ended 0 or 5 also `ygg record RUN` (it writes record.json and prints
+#      its path), ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that replaces the
+#      credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this report to the
+#      Windows clipboard);
+#      After a run that ended 0 or 5 the script prints the path of record.json and a line for the operator to fill,
+#      `ygg score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run can
+#      still go on;
 #   9. for a run that stopped (3) or paused (4), ends with this script's command that continues it. A stopped or
-#      paused run is not graded. The exit code is the run's.
+#      paused run is not finished, so it has no grade yet. The exit code is the run's.
 # --baseline RUN_ID names a run of an earlier proof run: exactly one DIR/proof-*/project/.factory/runs/RUN_ID must
 # hold it, or the script refuses before it makes anything.
 # --continue RUN_ID continues a run that stopped or paused, in the proof folder under DIR that holds it (the setup
 # flags are refused: the run keeps its config). It checks the credentials and runs `ygg doctor`, then `ygg approve
 # RUN_ID GATE --project P [--note TEXT]`, `ygg reject RUN_ID GATE --reason TEXT --project P` or `ygg resume RUN_ID
 # --project P` as step 7 runs `ygg run` (the same timeout, the credentials in that subshell only, the filter, the
-# output added to run.txt; a rejection advances the run at once, so it starts sessions as an approval does), then
+# output added to run.txt; --decisions FILE gives the gate's decisions as a file, in place of --note or --reason: the
+# script refuses the pair, and a file that is missing, and passes the file as an absolute path, made from the caller's
+# folder; a rejection may take a file and no reason; a rejection advances the run at once, so it starts sessions as an
+# approval does), then
 # steps 8 and 9, with the baseline the proof run recorded unless --baseline names another. The raw `ygg approve`,
 # `ygg reject` and `ygg resume` commands are printed too, as a fallback: they run without the wall clock, the filter
 # or the report.
@@ -65,8 +76,8 @@ set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
-  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
-  echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT] | --reject GATE --reason TEXT | --resume)" >&2
+  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--retro-agent AGENT] [--retro-model MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
+  echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] | --reject GATE (--reason TEXT | --decisions FILE) | --resume)" >&2
   echo "                        [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
   exit 2
 }
@@ -79,14 +90,15 @@ put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small 
 name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
 # --continue; setup_flags are the setup flags given (a continued run keeps its config)
 cont="" gate_in="" reject_in="" reason="" reason_set=0 note="" note_set=0 resume=0 setup_flags=""
+decisions="" decisions_set=0
 planner=claude-code:sonnet implementer=claude-code:sonnet reviewer=opencode:openrouter/qwen/qwen3.8-27b
-reviewer_reasoning=medium
+reviewer_reasoning=medium retro_agent=claude-code retro_model=opus
 run_turns=1500 run_tokens=12000000 run_usd=5 day_turns=2000 day_tokens=24000000 day_usd=10
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir"
 suites="$HOME/ygg-it/hidden-suites" ygg_dir="$HERE/../../yggdrasil"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name | --mode | --planner | --implementer | --reviewer | --reviewer-reasoning | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
+    --name | --mode | --planner | --implementer | --reviewer | --reviewer-reasoning | --retro-* | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
   esac
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -97,6 +109,9 @@ while [ $# -gt 0 ]; do
     --reject) [ $# -ge 2 ] || usage; reject_in="$2"; shift 2 ;;
     --reason) [ $# -ge 2 ] || usage; reason="$2"; reason_set=1; shift 2 ;;
     --note) [ $# -ge 2 ] || usage; note="$2"; note_set=1; shift 2 ;;
+    --decisions) [ $# -ge 2 ] || usage; decisions="$2"; decisions_set=1; shift 2 ;;
+    --retro-agent) [ $# -ge 2 ] || usage; retro_agent="$2"; shift 2 ;;
+    --retro-model) [ $# -ge 2 ] || usage; retro_model="$2"; shift 2 ;;
     --clip) clip=1; shift ;;
     --name) [ $# -ge 2 ] || usage; name="$2"; shift 2 ;;
     --mode) [ $# -ge 2 ] || usage; mode="$2"; shift 2 ;;
@@ -132,20 +147,30 @@ if [ -n "$cont" ]; then
   [ "$resume" -eq 0 ] || actions=$((actions + 1))
   if [ "$actions" -gt 1 ]; then fail "--continue takes --approve GATE, --reject GATE --reason TEXT or --resume, only one"; fi
   if [ "$actions" -eq 0 ]; then fail "--continue takes --approve GATE, --reject GATE --reason TEXT or --resume"; fi
+  if [ "$decisions_set" -eq 1 ] && [ -z "$gate_in" ] && [ -z "$reject_in" ]; then fail "--decisions goes with --approve or --reject"; fi
+  if [ "$decisions_set" -eq 1 ] && { [ "$note_set" -eq 1 ] || [ "$reason_set" -eq 1 ]; }; then fail "--decisions replaces --note and --reason; give the file or the text, not both"; fi
   if [ -n "$gate_in" ] && ! [[ $gate_in =~ $run_id_re ]]; then fail "--approve '$gate_in' is not a gate name"; fi
   if [ -n "$reject_in" ] && ! [[ $reject_in =~ $run_id_re ]]; then fail "--reject '$reject_in' is not a gate name"; fi
   if [ "$note_set" -eq 1 ] && [ -z "$gate_in" ]; then fail "--note goes with --approve"; fi
   if [ "$reason_set" -eq 1 ] && [ -z "$reject_in" ]; then fail "--reason goes with --reject"; fi
-  if [ -n "$reject_in" ] && [ "$reason_set" -eq 0 ]; then fail "--reject needs --reason TEXT: the reason goes to the agents"; fi
+  if [ -n "$reject_in" ] && [ "$reason_set" -eq 0 ] && [ "$decisions_set" -eq 0 ]; then fail "--reject needs --reason TEXT or --decisions FILE: the reason goes to the agents"; fi
+  if [ "$decisions_set" -eq 1 ]; then
+    # The file is passed as an absolute path, made from the caller's folder: ygg runs from another one.
+    [ -n "$decisions" ] || fail "--decisions is empty; it names a decisions file"
+    [ -f "$decisions" ] || fail "--decisions $decisions: no such file"
+    decisions_dir="$(cd -P -- "$(dirname -- "$decisions")" 2>/dev/null && pwd -P)" || fail "--decisions $decisions: no such file"
+    decisions="$decisions_dir/$(basename -- "$decisions")"
+  fi
   # U+2028, U+2029 and the C1 controls U+0080 to U+009F (odin refuses them) are matched as bytes, so the locale does not decide.
   sep_line=$'\xe2\x80\xa8' sep_para=$'\xe2\x80\xa9'
   c1_re=$'\xc2[\x80-\x9f]'
+  if [[ $decisions == *[[:cntrl:]]* || $decisions == *"$sep_line"* || $decisions == *"$sep_para"* || $decisions =~ $c1_re ]]; then fail "--decisions has a control character (or U+2028, U+2029, a C1 control) in its path"; fi
   if [[ $note == *[[:cntrl:]]* || $note == *"$sep_line"* || $note == *"$sep_para"* || $note =~ $c1_re ]]; then fail "--note has a control character (or U+2028, U+2029, a C1 control); a note is one line of text"; fi
   if [[ $reason == *[[:cntrl:]]* || $reason == *"$sep_line"* || $reason == *"$sep_para"* || $reason =~ $c1_re ]]; then fail "--reason has a control character (or U+2028, U+2029, a C1 control); a reason is one line of text"; fi
   if [ "$reason_set" -eq 1 ] && [[ $reason =~ ^[[:space:]]*$ ]]; then fail "--reason is blank; say why the gate is rejected"; fi
 else
-  if [ -n "$gate_in" ] || [ -n "$reject_in" ] || [ "$resume" -eq 1 ] || [ "$note_set" -eq 1 ] || [ "$reason_set" -eq 1 ]; then
-    fail "--approve, --reject, --reason, --resume and --note go with --continue RUN_ID"
+  if [ -n "$gate_in" ] || [ -n "$reject_in" ] || [ "$resume" -eq 1 ] || [ "$note_set" -eq 1 ] || [ "$reason_set" -eq 1 ] || [ "$decisions_set" -eq 1 ]; then
+    fail "--approve, --reject, --reason, --resume, --note and --decisions go with --continue RUN_ID"
   fi
   [ -n "$name" ] || fail "--name is needed: the run's name, such as baseline-1"
   [[ $name =~ ^[a-z0-9-]+$ ]] || fail "--name '$name' has characters outside a-z0-9-"
@@ -180,8 +205,15 @@ role_ok() { # FLAG VALUE: sets agent_of and model_of
 }
 roles_ok() { # sets paid, need_claude and need_router
   role_ok --planner "$planner"; role_ok --implementer "$implementer"; role_ok --reviewer "$reviewer"
+  # A proof folder from before the retrospective role has none: retro stays empty and the role is left out.
+  retro=""
+  if [ -n "$retro_agent$retro_model" ]; then
+    [[ $retro_agent != *:* ]] || fail "--retro-agent is claude-code or opencode, not '$retro_agent'"
+    retro="$retro_agent:$retro_model"
+    role_ok --retro-agent/--retro-model "$retro"
+  fi
   paid=0 need_claude=0 need_router=0
-  for r in "$planner" "$implementer" "$reviewer"; do
+  for r in "$planner" "$implementer" "$reviewer" ${retro:+"$retro"}; do
     case "${r%%:*}" in claude-code) need_claude=1 ;; opencode) need_router=1; paid=1 ;; esac
   done
 }
@@ -257,6 +289,8 @@ else
   meta() { sed -n "s/^$1 //p" "$work/proof.meta" | head -n 1; } # a key's value; each is checked below as a flag is
   name="$(meta name)" mode="$(meta mode)" planner="$(meta planner)" implementer="$(meta implementer)" reviewer="$(meta reviewer)"
   reviewer_reasoning="$(meta reviewer_reasoning)"
+  retro="$(meta retrospective)" retro_agent="" retro_model=""
+  if [ -n "$retro" ]; then retro_agent="${retro%%:*}" retro_model="${retro#*:}"; fi
   task="$(meta task)" suite="$(meta suite)" have="$(meta brief)"
   [[ $name =~ ^[a-z0-9-]+$ ]] || fail "$work/proof.meta has no proof run name"
   case "$mode" in key-points | unattended | step-by-step) ;; *) fail "$work/proof.meta has no mode" ;; esac
@@ -309,6 +343,7 @@ if [ -z "$cont" ]; then
   fill PLANNER_AGENT "${planner%%:*}"; fill PLANNER_MODEL "${planner#*:}"
   fill IMPLEMENTER_AGENT "${implementer%%:*}"; fill IMPLEMENTER_MODEL "${implementer#*:}"
   fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"; fill REVIEWER_REASONING "$reviewer_reasoning"
+  fill RETRO_AGENT "$retro_agent"; fill RETRO_MODEL "$retro_model"
   fill RUN_TOKENS "$run_tokens"; fill RUN_TURNS "$run_turns"; fill RUN_USD "$usd_run"
   fill DAY_TOKENS "$day_tokens"; fill DAY_TURNS "$day_turns"; fill DAY_USD "$usd_day"
   fill ENGINE "$engine"; fill FOLDER "$dir_abs"; fill BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
@@ -321,8 +356,8 @@ if [ -z "$cont" ]; then
   [ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
   # What --continue needs to know about this proof run, one "key value" a line; every value was checked above.
   private "$work/proof.meta"
-  printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\nreviewer_reasoning %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
-    "$name" "$mode" "$planner" "$implementer" "$reviewer" "$reviewer_reasoning" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
+  printf 'name %s\nmode %s\nplanner %s\nimplementer %s\nreviewer %s\nreviewer_reasoning %s\nretrospective %s\ntask %s\nsuite %s\nbrief %s\nbaseline %s\n' \
+    "$name" "$mode" "$planner" "$implementer" "$reviewer" "$reviewer_reasoning" "$retro" "$task" "$suite" "$have" "$baseline" >"$work/proof.meta"
 else
   project="$work/project"
   echo "proof-run: continuing run $cont of the proof run $name in $work"
@@ -341,9 +376,11 @@ if [ -z "$cont" ]; then
 elif [ -n "$gate_in" ]; then
   run_argv=("${ygg_arr[@]}" approve "$cont" "$gate_in" --project "$project")
   [ "$note_set" -eq 0 ] || run_argv+=(--note "$note")
+  [ "$decisions_set" -eq 0 ] || run_argv+=(--decisions "$decisions")
   cont_what="approve $gate_in"
 elif [ -n "$reject_in" ]; then
-  run_argv=("${ygg_arr[@]}" reject "$cont" "$reject_in" --reason "$reason" --project "$project")
+  if [ "$decisions_set" -eq 1 ]; then run_argv=("${ygg_arr[@]}" reject "$cont" "$reject_in" --project "$project" --decisions "$decisions")
+  else run_argv=("${ygg_arr[@]}" reject "$cont" "$reject_in" --reason "$reason" --project "$project"); fi
   cont_what="reject $reject_in"
 else
   run_argv=("${ygg_arr[@]}" resume "$cont" --project "$project")
@@ -355,7 +392,7 @@ build_cmd="$(q "${build_argv[@]}")"
 timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
 reasoning_note="" # for an old folder, why the reasoning is unset
 [ "$reviewer_reasoning" != unset ] || reasoning_note=": a folder from before --reviewer-reasoning"
-echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning${reasoning_note})"
+echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning${reasoning_note})${retro:+; retrospective $retro}"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 [ -z "$cont_what" ] || echo "proof-run: the continuation: $cont_what"
@@ -469,13 +506,14 @@ rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2
 echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 2 refused, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock, 129, 130 or 143 ended by HUP, INT or TERM, 137 killed after the grace period, 141 SIGPIPE)"
 
-# 8. The grade and the evidence. The run's id is the one continued, or the newest folder in the project's runs. None
+# 8. The evidence. The graph ends with a grade node and then a retro node, and the factory.yaml has a grader section,
+# so the run grades itself and its retro follows: this script never runs `ygg grade`. The run's id is the one continued, or the newest folder in the project's runs. None
 # of these needs a credential; the filter removes the exact values anyway, from anything a tool prints.
 if [ -n "$cont" ]; then id="$cont"
 else id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"; fi
 report="$work/report.txt"
 if [ -z "$id" ] || ! [[ $id =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to grade or report" >&2
+  echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to report" >&2
   echo "proof-run: the folder is $work"
   exit "$rc"
 fi
@@ -492,7 +530,6 @@ evidence_part() {
     0 | 3 | 4 | 5) ;;
     *) step "ygg doctor (an abnormal end: it finds and stops what the run left)" "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml" ;;
   esac
-  case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
   step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
   if [ -n "$baseline" ] && [ "$baseline" = "$id" ]; then
     printf '## ygg metrics --compare\n(not run: the baseline is this run)\n\n'
@@ -504,6 +541,8 @@ evidence_part() {
     step "ygg metrics --compare $baseline $id" "${ygg_arr[@]}" metrics --compare "$baseline" "$id" --project "$work/compare"
   fi
   step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
+  # The record is for a run that is done; it is written again, with the judgement, by `ygg score`.
+  case "$rc" in 0 | 5) step "ygg record" "${ygg_arr[@]}" record "$id" --project "$project" ;; esac
   if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
     step "cost" "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
     step "evidence" env YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --output "$out" "$project" "$id"
@@ -519,6 +558,14 @@ if [ "$clip" -eq 1 ]; then
   else echo "proof-run: --clip needs clip.exe (WSL); the report is in $report" >&2; fi
 fi
 echo "proof-run: the folder is $work"
+
+# After a run that ended 0 or 5 (done, with or without tasks given up): where the record is, and the line to judge the
+# run with. Nothing of the kind after a stop, a pause or a failure: that run can still go on.
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 5 ]; then
+  echo "proof-run: the run is done; its record is $project/.factory/runs/$id/record.json"
+  echo "proof-run: judge it (a score from 0 to 10, and what went well and what went wrong), then run:"
+  echo "  $(q "${ygg_arr[@]}")score $(qt "$id") --score N --well \"…\" --wrong \"…\" $(q --project "$project")"
+fi
 
 # 9. How to continue a run that stopped or paused: this script's --continue, which keeps the wall clock, the filter,
 # run.txt and the report. The raw ygg command is printed first, as a fallback. The last line is the --continue command.
@@ -538,9 +585,9 @@ PY
     echo "$by_hand"
     echo "  $(q "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" approve "$id" "$gate" --project "$project")"
     echo "  $(qt "$HERE/ygg-engine.sh" run --folder "$dir_abs" -- "${ygg_arr[@]}" reject "$id" "$gate") --reason \"...\" $(q --project "$project")"
-    echo "proof-run: the run stopped at $gate; read its gates folder. If ygg offered a rejection above, reject it with a reason:"
+    echo "proof-run: the run stopped at $gate; read its gates folder. If ygg offered a rejection above, reject it with a reason, or --decisions FILE in its place:"
     echo "  $(qt "${self[@]}" --reject "$gate") --reason \"...\" $(q --folder "$dir_abs" --env "$envfile")"
-    echo "proof-run: or approve it (add --note TEXT if you like; some stops take no rejection or no approval):"
+    echo "proof-run: or approve it (add --note TEXT or --decisions FILE if you like; some stops take no rejection or no approval):"
     echo "  $(q "${self[@]}" --approve "$gate" --folder "$dir_abs" --env "$envfile")"
     ;;
   4)
