@@ -280,19 +280,19 @@ runit() { fresh; FAKE_RUN_RC="$1" run proof --name go "${@:2}"; }
 RUND() { find "$D" -maxdepth 1 -name 'proof-go-*' | head -n 1; }
 runit 0
 check "exit 0: the script exits 0" test "$rc" -eq 0
-check "exit 0: doctor, run, grade, metrics, report in that order" test "$(calls)" = "doctor,run,grade,metrics,report,record"
+check "exit 0: doctor, run, metrics, report in that order" test "$(calls)" = "doctor,run,metrics,report,record"
 check "run.txt holds the run's output" grep -q 'the run runs' "$(RUND)/run.txt"
 check "report.txt holds the metrics and the report" bash -c 'grep -q "metrics output" "$1" && grep -q "report output" "$1"' _ "$(RUND)/report.txt"
 check "the run's output was shown" has "the run runs"
 check "the exit code is printed" has "exit code 0"
 runit 5
 check "exit 5: the script exits 5" test "$rc" -eq 5
-check "exit 5: doctor, run, grade, metrics, report" test "$(calls)" = "doctor,run,grade,metrics,report,record"
+check "exit 5: doctor, run, metrics, report" test "$(calls)" = "doctor,run,metrics,report,record"
 for c in 1 3 4 124; do
   runit "$c"
   check "exit $c: the script exits $c" test "$rc" -eq "$c"
   case "$c" in
-    3 | 4) check "exit $c: no grade, but metrics and report" test "$(calls)" = "doctor,run,metrics,report" ;;
+    3 | 4) check "exit $c: no grade (the run graded itself), but metrics and report" test "$(calls)" = "doctor,run,metrics,report" ;;
     *) check "exit $c: no grade; doctor after the abnormal end, then metrics and report" test "$(calls)" = "doctor,run,doctor,metrics,report" ;;
   esac
   check "exit $c: the exit code is printed" has "exit code $c"
@@ -335,7 +335,7 @@ check "a planted credential value is not in run.txt" bash -c '! grep -q -F fake-
 check "the planted value was replaced, not dropped" grep -q 'REDACTED' "$(RUND)/report.txt"
 fresh
 FAKE_RUN_RC=0 run proof --name go --build
-check "--build: sandbox build --all --config runs after doctor and before the run" test "$(calls)" = "doctor,sandbox,run,grade,metrics,report,record"
+check "--build: sandbox build --all --config runs after doctor and before the run" test "$(calls)" = "doctor,sandbox,run,metrics,report,record"
 check "--build: the build call has --all and --config" grep -q -E '^sandbox build --all --config [^ ]*/factory.yaml$' "$T/ygg.calls"
 fresh
 FAKE_RUN_RC=0 run proof --name go --dry-run
@@ -350,7 +350,7 @@ check "the full run called no reader with a folder inside the suites folder" bas
 # --- v0-T291 review: least privilege, any byte, the run's exit code, signals, umask
 runit 0
 check "least privilege: only run has the credentials" bash -c 'grep -q -x "run: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && ! grep -E "^(grade|metrics|report|status|doctor): ." "$1"' _ "$T/ygg.env"
-check "least privilege: grade, metrics, report and status ran without them" bash -c 'for s in grade metrics report status; do grep -q -x "$s: " "$1" || exit 1; done' _ "$T/ygg.env"
+check "least privilege: metrics, report and status ran without them" bash -c 'for s in metrics report status; do grep -q -x "$s: " "$1" || exit 1; done' _ "$T/ygg.env"
 fresh; plant_base; FAKE_RUN_RC=0 run proof --name go --build --baseline "$OLD"
 check "least privilege: sandbox build and metrics --compare ran without them" bash -c 'grep -q -x "sandbox: " "$1" && ! grep -E "^(sandbox|metrics): ." "$1"' _ "$T/ygg.env"
 fresh
@@ -565,7 +565,7 @@ check "exit 137: that doctor gets the project and the config" bash -c 'sed -n 3p
 check "exit 137: that doctor has no credential" test "$(grep -c -x 'doctor: ' "$T/ygg.env")" = 2
 check "exit 137: the doctor's output is in report.txt" grep -q -F '## ygg doctor' "$(RUND)/report.txt"
 runit 0
-check "exit 0: no doctor after the run" test "$(calls)" = "doctor,run,grade,metrics,report,record"
+check "exit 0: no doctor after the run" test "$(calls)" = "doctor,run,metrics,report,record"
 
 # --- the ouroboric review (C2): a baseline is found in its own proof folder, or refused before anything starts
 nothing_started() { [ "$rc" -eq 2 ] && [ ! -s "$T/ygg.calls" ] && [ -z "$(find "$D" -maxdepth 1 -name 'proof-go-*')" ]; }
@@ -586,14 +586,14 @@ clearlogs() { rm -f "$T/ygg.calls" "$T/ygg.env" "$T/timeout.args"; }
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
 FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --approve ship-gate --note 'looks right'
 check "--continue --approve after 3: exit 0, the continuation's code" test "$rc" -eq 0
-check "--continue --approve: doctor, approve, grade, metrics, the compare, report" test "$(calls)" = "doctor,approve,grade,metrics,metrics,report,record"
+check "--continue --approve: doctor, approve, metrics, the compare, report" test "$(calls)" = "doctor,approve,metrics,metrics,report,record"
 check "--continue --approve: approve gets the run, the gate, the project and the note" grep -q -x -F "approve RUN-1 ship-gate --project $W/project --note looks right" "$T/ygg.calls"
 check "--continue --approve: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 approve RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
 check "--continue: only approve has the credentials" bash -c 'grep -q -x "approve: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^approve: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
 check "--continue: the output is added to the folder's run.txt" bash -c 'grep -q "the run runs" "$1" && grep -q "approve runs" "$1"' _ "$W/run.txt"
 check "--continue: a planted value is filtered from run.txt and the output" bash -c '! grep -q -F fake-claude-VALUE-1 "$1" && ! grep -q -F fake-claude-VALUE-1 "$2" && grep -q REDACTED "$1"' _ "$W/run.txt" "$T/out"
 check "--continue: the recorded baseline is compared" grep -q -x -F "metrics --compare $OLD RUN-1 --project $W/compare" "$T/ygg.calls"
-check "--continue: the report is added to report.txt" bash -c '[ "$(grep -c "^# proof run go: run RUN-1" "$1")" = 2 ] && grep -q "^## ygg grade" "$1"' _ "$W/report.txt"
+check "--continue: the report is added to report.txt" bash -c '[ "$(grep -c "^# proof run go: run RUN-1" "$1")" = 2 ] && grep -q "^## ygg metrics" "$1"' _ "$W/report.txt"
 check "--continue: run.txt and report.txt stay private, the compare folder is private" bash -c '[ "$(stat -c %a "$1/run.txt")" = 600 ] && [ "$(stat -c %a "$1/report.txt")" = 600 ] && [ "$(stat -c %a "$1/compare")" = 700 ]' _ "$W"
 check "--continue: no new proof folder" test "$(find "$D" -maxdepth 1 -name 'proof-go-*' | wc -l)" = 1
 fresh; FAKE_RUN_RC=4 run proof --name go; W="$(RUND)"; clearlogs
@@ -603,7 +603,7 @@ check "--continue --resume ending 3: no grade, metrics and report" test "$(calls
 check "--continue --resume ending 3: the exit code is 3" test "$rc" -eq 3
 check "--continue --resume ending 3: the output ends with the next --continue command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-proof-run.sh --continue RUN-1 --approve ship-gate"' _ "$T/out"
 clearlogs; FAKE_CONT_RC=0 runc cont --continue RUN-1 --resume
-check "--continue --resume ending 0: doctor, resume, grade, metrics, report" test "$(calls)" = "doctor,resume,grade,metrics,report,record"
+check "--continue --resume ending 0: doctor, resume, metrics, report" test "$(calls)" = "doctor,resume,metrics,report,record"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --dry-run
 check "--continue --dry-run: exit 0, approve never called" bash -c '[ "$1" -eq 0 ] && ! grep -q "^approve" "$2"' _ "$rc" "$T/ygg.calls"
 check "--continue --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
@@ -626,7 +626,7 @@ clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
 FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --reject ship-gate --reason 'the gallery has no empty state'
 check "--reject after 3: exit 0, the continuation's code" test "$rc" -eq 0
-check "--reject: doctor, reject, grade, metrics, the compare, report" test "$(calls)" = "doctor,reject,grade,metrics,metrics,report,record"
+check "--reject: doctor, reject, metrics, the compare, report" test "$(calls)" = "doctor,reject,metrics,metrics,report,record"
 check "--reject: ygg reject runs once, with the run, the gate, the reason and the project" bash -c '[ "$(grep -c "^reject " "$1")" = 1 ] && grep -q -x -F "reject RUN-1 ship-gate --reason the gallery has no empty state --project $2/project" "$1"' _ "$T/ygg.calls" "$W"
 check "--reject: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 reject RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
 check "--reject: only reject has the credentials" bash -c 'grep -q -x "reject: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^reject: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
@@ -723,7 +723,8 @@ grep -v '^retrospective ' "$W/proof.meta" >"$T/meta.old"; cp "$T/meta.old" "$W/p
 clearlogs; runc cont --continue RUN-1 --resume --dry-run;  check "--continue on a proof.meta without a retrospective goes on" test "$rc" -eq 0
 
 fresh; run proof --name go; W="$(RUND)"
-check "exit 0: ygg record runs after the report" test "$(calls)" = "doctor,run,grade,metrics,report,record"
+check "exit 0: the script never calls ygg grade: the run graded itself" bash -c '! grep -q "^grade" "$1"' _ "$T/ygg.calls"
+check "exit 0: ygg record runs after the report" test "$(calls)" = "doctor,run,metrics,report,record"
 check "exit 0: the ready ygg score line has the real run id" has 'ygg score RUN-1 --score N --well "…" --wrong "…"'
 check "exit 0: the path of record.json is printed" has "$W/project/.factory/runs/RUN-1/record.json"
 check "exit 0: the score line is in the output, with the project" has "--project $W/project"

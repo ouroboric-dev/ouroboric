@@ -2,7 +2,8 @@
 # Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, the roles the
 # operator names (planner, implementer, reviewer, retrospective) and caps the operator sets. Every proof run is set up
 # the same way, so that `ygg metrics --compare` compares two factories and not two setups. IT WILL COST MONEY (without
-# --dry-run): the script makes the project and the config, runs the factory, grades the run and prints the evidence.
+# --dry-run): the script makes the project and the config, runs the factory (the run grades itself, and its retro
+# follows) and prints the evidence.
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
 #                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL]
 #                    [--retro-agent AGENT] [--retro-model MODEL]
@@ -45,7 +46,7 @@
 #      script still prints goes to DIR/proof-NAME-TIME/hangup.txt;
 #   8. prints the exit code (0 done, 1 a node failed, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall
 #      clock); after an abnormal end (any code but 0, 3, 4 and 5) runs `ygg doctor`, which stops the sandboxes a run
-#      left; after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`, with
+#      left; `ygg grade` is not run here, because the run grades itself; after any ending runs `ygg metrics RUN`, with
 #      --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN` (printed as the CLI gives it: this script judges
 #      nothing; each proof run has its own project, so the two run folders are linked into DIR/proof-NAME-TIME/compare
 #      for it), `ygg report RUN`, after a run that ended 0 or 5 also `ygg record RUN` (it writes record.json and prints
@@ -56,7 +57,7 @@
 #      `ygg score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run can
 #      still go on;
 #   9. for a run that stopped (3) or paused (4), ends with this script's command that continues it. A stopped or
-#      paused run is not graded. The exit code is the run's.
+#      paused run is not finished, so it has no grade yet. The exit code is the run's.
 # --baseline RUN_ID names a run of an earlier proof run: exactly one DIR/proof-*/project/.factory/runs/RUN_ID must
 # hold it, or the script refuses before it makes anything.
 # --continue RUN_ID continues a run that stopped or paused, in the proof folder under DIR that holds it (the setup
@@ -505,13 +506,14 @@ rc="$(cat "$work/run.rc" 2>/dev/null || echo 2)"
 [[ $rc =~ ^[0-9]+$ ]] || rc=2
 echo "proof-run: the run ended with exit code $rc (0 done, 1 a node failed, 2 refused, 3 stopped, 4 paused, 5 done with tasks given up, 124 the wall clock, 129, 130 or 143 ended by HUP, INT or TERM, 137 killed after the grace period, 141 SIGPIPE)"
 
-# 8. The grade and the evidence. The run's id is the one continued, or the newest folder in the project's runs. None
+# 8. The evidence. The graph ends with a grade node and then a retro node, and the factory.yaml has a grader section,
+# so the run grades itself and its retro follows: this script never runs `ygg grade`. The run's id is the one continued, or the newest folder in the project's runs. None
 # of these needs a credential; the filter removes the exact values anyway, from anything a tool prints.
 if [ -n "$cont" ]; then id="$cont"
 else id="$(find "$project/.factory/runs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"; fi
 report="$work/report.txt"
 if [ -z "$id" ] || ! [[ $id =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to grade or report" >&2
+  echo "proof-run: the run left no run folder in $project/.factory/runs; nothing to report" >&2
   echo "proof-run: the folder is $work"
   exit "$rc"
 fi
@@ -528,7 +530,6 @@ evidence_part() {
     0 | 3 | 4 | 5) ;;
     *) step "ygg doctor (an abnormal end: it finds and stops what the run left)" "${ygg_arr[@]}" doctor --project "$project" --config "$work/factory.yaml" ;;
   esac
-  case "$rc" in 0 | 5) step "ygg grade" "${ygg_arr[@]}" grade "$id" --project "$project" ;; esac
   step "ygg metrics" "${ygg_arr[@]}" metrics "$id" --project "$project"
   if [ -n "$baseline" ] && [ "$baseline" = "$id" ]; then
     printf '## ygg metrics --compare\n(not run: the baseline is this run)\n\n'
