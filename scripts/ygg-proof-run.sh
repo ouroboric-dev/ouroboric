@@ -48,13 +48,13 @@
 #      left; after a run that ended 0 or 5, runs `ygg grade RUN`; after any ending runs `ygg metrics RUN`, with
 #      --baseline RUN_ID also `ygg metrics --compare RUN_ID RUN` (printed as the CLI gives it: this script judges
 #      nothing; each proof run has its own project, so the two run folders are linked into DIR/proof-NAME-TIME/compare
-#      for it), `ygg report RUN`, after a run that ended 0 also `ygg record RUN` (it writes record.json and prints its
-#      path), ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that
-#      replaces the credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this
-#      report to the Windows clipboard);
-#      After a run that ended 0 the script prints the path of record.json and a line for the operator to fill, `ygg
-#      score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run can still
-#      go on;
+#      for it), `ygg report RUN`, after a run that ended 0 or 5 also `ygg record RUN` (it writes record.json and prints
+#      its path), ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that replaces the
+#      credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this report to the
+#      Windows clipboard);
+#      After a run that ended 0 or 5 the script prints the path of record.json and a line for the operator to fill,
+#      `ygg score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run can
+#      still go on;
 #   9. for a run that stopped (3) or paused (4), ends with this script's command that continues it. A stopped or
 #      paused run is not graded. The exit code is the run's.
 # --baseline RUN_ID names a run of an earlier proof run: exactly one DIR/proof-*/project/.factory/runs/RUN_ID must
@@ -541,7 +541,7 @@ evidence_part() {
   fi
   step "ygg report" "${ygg_arr[@]}" report "$id" --project "$project"
   # The record is for a run that is done; it is written again, with the judgement, by `ygg score`.
-  case "$rc" in 0) step "ygg record" "${ygg_arr[@]}" record "$id" --project "$project" ;; esac
+  case "$rc" in 0 | 5) step "ygg record" "${ygg_arr[@]}" record "$id" --project "$project" ;; esac
   if [ -f "$project/.factory/runs/$id/ledger.jsonl" ]; then
     step "cost" "$HERE/ygg-cost.sh" "$project/.factory/runs/$id/ledger.jsonl" "$work/factory.yaml"
     step "evidence" env YGG_CMD="$ygg" "$HERE/ygg-evidence.sh" --output "$out" "$project" "$id"
@@ -558,9 +558,9 @@ if [ "$clip" -eq 1 ]; then
 fi
 echo "proof-run: the folder is $work"
 
-# After a run that ended 0: where the record is, and the line to judge the run with. Nothing of the kind after a stop,
-# a pause or a failure: that run can still go on.
-if [ "$rc" -eq 0 ]; then
+# After a run that ended 0 or 5 (done, with or without tasks given up): where the record is, and the line to judge the
+# run with. Nothing of the kind after a stop, a pause or a failure: that run can still go on.
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 5 ]; then
   echo "proof-run: the run is done; its record is $project/.factory/runs/$id/record.json"
   echo "proof-run: judge it (a score from 0 to 10, and what went well and what went wrong), then run:"
   echo "  $(q "${ygg_arr[@]}")score $(qt "$id") --score N --well \"…\" --wrong \"…\" $(q --project "$project")"

@@ -287,7 +287,7 @@ check "the run's output was shown" has "the run runs"
 check "the exit code is printed" has "exit code 0"
 runit 5
 check "exit 5: the script exits 5" test "$rc" -eq 5
-check "exit 5: doctor, run, grade, metrics, report" test "$(calls)" = "doctor,run,grade,metrics,report"
+check "exit 5: doctor, run, grade, metrics, report" test "$(calls)" = "doctor,run,grade,metrics,report,record"
 for c in 1 3 4 124; do
   runit "$c"
   check "exit $c: the script exits $c" test "$rc" -eq "$c"
@@ -727,13 +727,18 @@ check "exit 0: ygg record runs after the report" test "$(calls)" = "doctor,run,g
 check "exit 0: the ready ygg score line has the real run id" has 'ygg score RUN-1 --score N --well "…" --wrong "…"'
 check "exit 0: the path of record.json is printed" has "$W/project/.factory/runs/RUN-1/record.json"
 check "exit 0: the score line is in the output, with the project" has "--project $W/project"
-for c in 1 3 4 5 124; do
+for c in 1 3 4 124; do
   fresh; FAKE_RUN_RC=$c run proof --name go
   check "exit $c: no score line and no record" bash -c '! grep -q "ygg score" "$1" && ! grep -q "^record" "$2"' _ "$T/out" "$T/ygg.calls"
 done
+fresh; FAKE_RUN_RC=5 run proof --name go; W="$(RUND)"
+check "exit 5: the ready ygg score line has the real run id" has 'score RUN-1 --score N --well "…" --wrong "…"'
+check "exit 5: the path of record.json is printed" has "$W/project/.factory/runs/RUN-1/record.json"
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go; W="$(RUND)"; clearlogs
 runc cont --continue RUN-1 --approve ship-gate
 check "--continue ending 0: the score line and the record path are printed" bash -c 'grep -q -F "ygg score RUN-1 --score N" "$1" && grep -q -F "$2/project/.factory/runs/RUN-1/record.json" "$1"' _ "$T/out" "$W"
+clearlogs; FAKE_CONT_RC=5 runc cont --continue RUN-1 --approve ship-gate
+check "--continue ending 5: record, the score line and the record path" bash -c 'grep -q "^record RUN-1" "$1" && grep -q -F "score RUN-1 --score N" "$2" && grep -q -F "RUN-1/record.json" "$2"' _ "$T/ygg.calls" "$T/out"
 clearlogs; FAKE_CONT_RC=3 runc cont --continue RUN-1 --approve ship-gate
 check "--continue ending 3: no score line" bash -c '! grep -q "ygg score" "$1"' _ "$T/out"
 
