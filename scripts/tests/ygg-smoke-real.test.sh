@@ -175,14 +175,15 @@ facts() { printf 'format: 1\nodin: %s\nsha256: %s\n' "$2" "$(sha256sum "$1" | cu
 rargs_real=("${rargs[@]:0:${#rargs[@]}-1}") # the same without --dry-run; a refusal comes before anything runs
 none_made() { [ -z "$(find "$D" -mindepth 1 -maxdepth 1 -name 'smoke-real-*' -newer "$T/out.mark" -print -quit)" ]; }
 mark() { : >"$T/out.mark"; sleep 1; }
+build_cmd="run: $(cd "$S" && pwd)/ygg-build.sh --yggdrasil $T" # the umbrella of --odin $O is $T
 rm -f "$T/pathbin/ygg.build.txt"
 PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
 check "guard: a dry run with a ygg with no build facts is not refused" test "$rc" -eq 0
 check "guard: it prints STALE and says to run the build script" has "smoke-real: ygg guard: STALE: the ygg at $T/pathbin/ygg has no build facts"
-check "guard: the dry run says it did not refuse" has "run scripts/ygg-build.sh (a dry run: not refused)"
+check "guard: the dry run gives the whole build command and says it did not refuse" has "$build_cmd (a dry run: not refused)"
 mark; PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}"
 check "guard: a real run with no build facts is refused (exit 2)" test "$rc" -eq 2
-check "guard: the refusal says run scripts/ygg-build.sh and names --any-ygg" bash -c "grep -q -F 'run scripts/ygg-build.sh' '$T/out' && grep -q -F -- '--any-ygg' '$T/out'"
+check "guard: the refusal gives the whole build command and names --any-ygg" bash -c "grep -q -F '$build_cmd' '$T/out' && grep -q -F -- '--any-ygg' '$T/out'"
 check "guard: nothing was made or run after the refusal" bash -c "! grep -q 'ygg doctor on that config' '$T/out' && ! grep -q 'smoke-real: made' '$T/out'"
 check "guard: no smoke folder was made" none_made
 facts "$T/pathbin/ygg" 000000000000
@@ -192,6 +193,8 @@ check "guard: the refusal names both commits" has "built from odin 000000000000,
 PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --any-ygg
 check "guard: --any-ygg passes a stale binary" test "$rc" -eq 0
 check "guard: and says it skipped the check" has "smoke-real: ygg guard: skipped (--any-ygg)"
+PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}" --any-ygg
+check "guard: a real run with --any-ygg and a stale binary runs, and says it skipped the check" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: skipped (--any-ygg)' '$T/out' && grep -q 'the run ended with exit code 0' '$T/out'"
 facts "$T/pathbin/ygg" "$head12"
 PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
 check "guard: a binary built from odin's HEAD passes" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: ok' '$T/out'"
@@ -200,6 +203,12 @@ cp "$T/pathbin/ygg" "$T/ygg.keep"; printf '# rebuilt by hand\n' >>"$T/pathbin/yg
 PATH="$T/pathbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}"
 check "guard: a binary changed after its facts were written is refused" bash -c "[ $rc -eq 2 ] && grep -q 'is not the binary ygg-build.sh wrote' '$T/out'"
 mv "$T/ygg.keep" "$T/pathbin/ygg"
+# A ygg on PATH that is a link: the facts are read beside its target, where ygg-build.sh writes them.
+mkdir -p "$T/linkbin" "$T/realbin"; cp "$T/pathbin/ygg" "$T/realbin/ygg"; ln -s "$T/realbin/ygg" "$T/linkbin/ygg"
+facts "$T/realbin/ygg" "$head12"
+PATH="$T/linkbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}"
+check "guard: a link on PATH passes on the facts beside its target" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: ok: the ygg at $T/realbin/ygg' '$T/out' && grep -q -F 'built from odin $head12 (build facts)' '$T/out'"
+rm -rf "$T/linkbin" "$T/realbin"
 PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
 check "guard: YGG_CMD is not guarded" bash -c "[ $rc -eq 0 ] && ! grep -q 'ygg guard' '$T/out'"
 PATH="$T/gobin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}"

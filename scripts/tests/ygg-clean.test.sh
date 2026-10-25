@@ -62,6 +62,12 @@ PY
 printf '2: POSIX  ADVISORY  WRITE 4243 00:00:1 0 EOF\n' >>"$YGG_LOCKS_FILE"
 hold "$D/smoke-live/project/.factory/runs/20261024-000005-eeeeee/lock"
 hold "$D/smoke-busy/project/.factory/locks/runs.lock" # a ygg that advances some run of that project
+# The second check does not need /proc/locks: a process with the lock file open, seen through PROC/PID/fd links.
+# The cases read a made-up proc folder (YGG_PROC_DIR); a last case reads the real /proc.
+export YGG_PROC_DIR="$T/proc"; mkdir -p "$YGG_PROC_DIR/1/fd"; ln -s /dev/null "$YGG_PROC_DIR/1/fd/0"
+mkproject smoke-open 20261024-000010-444444
+mkdir -p "$YGG_PROC_DIR/4244/fd"
+ln -s "$D/smoke-open/project/.factory/runs/20261024-000010-444444/lock" "$YGG_PROC_DIR/4244/fd/7"
 
 # The fake ygg: logs its arguments; doctor of smoke-b reports a removed pod and a removed grader; FAKE_DOCTOR_RC
 # sets its exit.
@@ -111,6 +117,8 @@ check "a project with a live run is not cleaned" bash -c "! grep -q smoke-live '
 check "the live run is said in the summary" has "skipped: $D/smoke-live/project: run 20261024-000005-eeeeee is live (a process holds its lock)"
 check "a project whose runs lock is held is not cleaned" bash -c "! grep -q smoke-busy '$FAKE_LOG'"
 check "and the summary says why" has "skipped: $D/smoke-busy/project: a ygg process holds the project's runs lock"
+check "a run whose lock a process has open (not in /proc/locks) is not cleaned" bash -c "! grep -q smoke-open '$FAKE_LOG'"
+check "and the summary names the process" has "skipped: $D/smoke-open/project: run 20261024-000010-444444 is live (process 4244 has its lock open)"
 check "a project with no config is skipped, with a message" has "skipped: $D/smoke-noconf/project: no config found"
 check "the run's recorded config is used" grep -q -F "ygg doctor --project $D/smoke-rec/project --config $T/recorded.yaml" "$FAKE_LOG"
 check "hidden-suites is never cleaned or named" bash -c "! grep -q hidden-suites '$FAKE_LOG' && ! grep -q hidden-suites '$T/out'"
@@ -127,6 +135,34 @@ check "--keep by name works" bash -c "! grep -q 'proof-keep' '$FAKE_LOG' && ! gr
 check "and the others are still cleaned" grep -q -F "smoke-b/project" "$FAKE_LOG"
 run "$S/ygg-clean.sh" --folder "$D" --keep nothing-here
 check "a --keep that names no folder is a refusal" bash -c "[ $rc -eq 2 ] && grep -q 'nothing-here' '$T/out'"
+
+# --- a bare name is a folder under DIR first, then one in the caller's folder
+mkdir -p "$T/cwd/smoke-a"
+: >"$FAKE_LOG"
+(cd "$T/cwd" && run "$S/ygg-clean.sh" --folder "$D" --keep smoke-a; echo "$rc" >"$T/rc")
+check "--keep smoke-a keeps DIR/smoke-a even when the caller's folder has a smoke-a" bash -c "[ \$(cat '$T/rc') -eq 0 ] && ! grep -q 'smoke-a' '$FAKE_LOG'"
+
+# --- the locks file must be readable: without it the script cannot tell a live run, so it refuses
+: >"$FAKE_LOG"
+YGG_LOCKS_FILE="$T/no-locks" run "$S/ygg-clean.sh" --folder "$D" --dry-run
+check "a locks file that is missing is a refusal (exit 2)" bash -c "[ $rc -eq 2 ] && grep -q -F 'cannot tell whether a run is live' '$T/out'"
+check "and nothing ran" test ! -s "$FAKE_LOG"
+cp "$YGG_LOCKS_FILE" "$T/locks-closed"; chmod 000 "$T/locks-closed"
+YGG_LOCKS_FILE="$T/locks-closed" run "$S/ygg-clean.sh" --folder "$D" "$D/smoke-a/project"
+check "a locks file that cannot be read is a refusal (exit 2)" bash -c "[ $rc -eq 2 ] && grep -q -F 'cannot tell whether a run is live' '$T/out' && [ ! -s '$FAKE_LOG' ]"
+YGG_PROC_DIR="$T/no-proc" run "$S/ygg-clean.sh" --folder "$D" "$D/smoke-a/project"
+check "a proc folder that cannot be read is a refusal (exit 2)" bash -c "[ $rc -eq 2 ] && grep -q -F 'cannot tell whether a run is live' '$T/out' && [ ! -s '$FAKE_LOG' ]"
+
+# --- a project under DIR/hidden-suites is refused by its path, before it is entered
+run "$S/ygg-clean.sh" --folder "$D" "$D/hidden-suites/x"
+check "a named project under hidden-suites is refused (exit 2)" bash -c "[ $rc -eq 2 ] && grep -q -F 'is under $D/hidden-suites' '$T/out'"
+run "$S/ygg-clean.sh" --folder "$D" hidden-suites/x
+check "and so is its name under DIR" bash -c "[ $rc -eq 2 ] && grep -q -F 'is under $D/hidden-suites' '$T/out'"
+run "$S/ygg-clean.sh" --folder "$D" "$D/smoke-a/../hidden-suites/x"
+check "and a path that reaches it through .." bash -c "[ $rc -eq 2 ] && grep -q -F 'is under $D/hidden-suites' '$T/out'"
+ln -s "$D/hidden-suites/x" "$T/sly"
+run "$S/ygg-clean.sh" --folder "$D" "$T/sly"
+check "and a link to it" bash -c "[ $rc -eq 2 ] && grep -q -F 'is under $D/hidden-suites' '$T/out'"
 
 # --- named projects
 : >"$FAKE_LOG"
@@ -177,6 +213,17 @@ if grep -q -E " FLOCK .*:$(stat -c %i "$real") " /proc/locks; then
 else
   echo "skip a real lock: this kernel leaves the test's own locks out of /proc/locks (another PID namespace)"
 fi
+for p in "${holders[@]}"; do kill "$p" 2>/dev/null; done
+
+# --- a real process with a run's lock open, read from the real /proc, with nothing in the locks file
+mkproject real-open 20261024-000011-555555
+real2="$D/real-open/project/.factory/runs/20261024-000011-555555/lock"
+( exec 9>>"$real2"; flock -x 9; exec sleep 300 ) & holders+=("$!")
+for _ in $(seq 50); do flock -n "$real2" true || break; sleep 0.1; done
+: >"$FAKE_LOG"; : >"$T/locks-empty"
+YGG_PROC_DIR=/proc YGG_LOCKS_FILE="$T/locks-empty" run "$S/ygg-clean.sh" --folder "$D" "$D/real-open/project"
+check "a run whose lock a real process has open is skipped (the real /proc fd links)" bash -c "[ ! -s '$FAKE_LOG' ] && grep -q -F 'run 20261024-000011-555555 is live (process ' '$T/out'"
+check "and that process still runs" kill -0 "${holders[-1]}"
 for p in "${holders[@]}"; do kill "$p" 2>/dev/null; done
 
 hermetic_done

@@ -5,9 +5,10 @@
 #   1. For each module that DIR/go.work uses: a tree with uncommitted changes is refused, and so is a checkout
 #      behind its origin/main (unless --allow-behind). Nothing is fetched: the comparison is with the local
 #      origin/main ref, so `git -C MODULE pull` (or fetch) first. Each module and its short commit are printed.
-#   2. The output OUT is --out FILE, else the ygg that is first on PATH, else $(go env GOPATH)/bin/ygg. An OUT that
-#      exists must be a regular file (never a folder; a link only with --force) and a Go binary (`go version -m`);
-#      a file that is not one is overwritten only with --force. The refusal names OUT.
+#   2. The output OUT is --out FILE, else the ygg that is first on PATH, else $(go env GOPATH)/bin/ygg. A link is
+#      followed (readlink -f): OUT is its target, which must exist, so the link stays and the facts go beside the
+#      binary the guard reads. An OUT that exists must be a regular file (never a folder) and a Go binary
+#      (`go version -m`); a file that is not one is overwritten only with --force. The refusal names OUT.
 #   3. `cd DIR/odin && go build -o OUT ./cmd/ygg` with GOWORK=DIR/go.work, to a temporary file that replaces OUT.
 #      odin's internal/version reads the build info and takes no link-time stamp, so the facts go to OUT.build.txt:
 #      odin and every module of go.work with its commit, and the SHA-256 of OUT (see ygg-build-facts.sh). The smoke
@@ -81,8 +82,12 @@ if [ -z "$out" ]; then
 fi
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 if [ -L "$out" ]; then
-  [ "$force" -eq 1 ] || fail "$out is not a regular file but a link; nothing was built. Pass --out with the file it points to, or --force to replace the link"
-elif [ -e "$out" ]; then
+  target="$(readlink -f -- "$out" || true)"
+  [ -n "$target" ] && [ -e "$target" ] || fail "$out is a link to ${target:-$(readlink -- "$out")}, which does not exist; nothing was built"
+  echo "ygg-build: $out is a link; building to its target $target"
+  out="$target"
+fi
+if [ -e "$out" ]; then
   [ -f "$out" ] || fail "$out is not a regular file; nothing was built (pass another --out)"
   if ! go version -m "$out" >/dev/null 2>&1 && [ "$force" -eq 0 ]; then
     fail "$out is not a Go binary (go version -m cannot read it); nothing was built. Pass --force to overwrite it"

@@ -269,14 +269,15 @@ mkdir -p "$YG/odin"; git -C "$YG/odin" init -q -b main; printf 'x\n' >"$YG/odin/
 git -C "$YG/odin" -c user.name=t -c user.email=t@example.invalid commit -q -m odin
 head12="$(git -C "$YG/odin" rev-parse --short=12 HEAD)"
 facts() { printf 'format: 1\nodin: %s\nsha256: %s\n' "$2" "$(sha256sum "$1" | cut -d' ' -f1)" >"$1.build.txt"; } # BINARY ODIN_COMMIT
+build_cmd="run: $(cd "$S" && pwd)/ygg-build.sh --yggdrasil $YG"
 rm -f "$FB/ygg.build.txt"
 runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
 check "guard: a dry run with a ygg with no build facts is not refused" test "$rc" -eq 0
 check "guard: it prints STALE and says to run the build script" has "proof-run: ygg guard: STALE: the ygg at $FB/ygg has no build facts"
-check "guard: it says the dry run did not refuse" has "run scripts/ygg-build.sh (a dry run: not refused)"
+check "guard: it gives the whole build command and says the dry run did not refuse" has "$build_cmd (a dry run: not refused)"
 : >"$T/ygg.calls"
 runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
-check "guard: a real run with no build facts is refused, and makes nothing" refuses "run scripts/ygg-build.sh"
+check "guard: a real run with no build facts is refused, and makes nothing" refuses "$build_cmd"
 check "guard: the refusal names --any-ygg" has "--any-ygg"
 check "guard: no ygg verb ran before the refusal" test ! -s "$T/ygg.calls"
 facts "$FB/ygg" 000000000000
@@ -284,6 +285,10 @@ runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
 check "guard: a binary from another commit is refused, with both commits" refuses "built from odin 000000000000, but the checkout $YG/odin is at $head12"
 runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg --dry-run
 check "guard: --any-ygg passes a stale binary and says so" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2"' _ "$rc" "$T/out"
+: >"$T/ygg.calls"
+run env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg
+check "guard: a real run with --any-ygg and a stale binary runs, and says it skipped the check" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2" && grep -q "^run " "$3"' _ "$rc" "$T/out" "$T/ygg.calls"
+rm -rf "$D"/proof-*
 facts "$FB/ygg" "$head12"
 runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
 check "guard: a binary built from odin's HEAD passes" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: ok" "$2"' _ "$rc" "$T/out"

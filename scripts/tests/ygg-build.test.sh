@@ -118,10 +118,14 @@ fresh_none; mkdir -p "$T/elsewhere/ygg"
 PATH="$T/elsewhere:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/elsewhere/ygg" --force
 check "an OUT that is a folder is refused, even with --force" bash -c "[ $rc -eq 2 ] && grep -q -F '$T/elsewhere/ygg is not a regular file' '$T/out'"
 check "and nothing was built into it" bash -c "! grep -q '^built ' '$FAKE_LOG' && [ -z \"\$(ls -A '$T/elsewhere/ygg')\" ]"
-fresh; ln -s "$T/pathbin/ygg" "$T/link-ygg"; mkdir -p "$T/linkbin"; mv "$T/link-ygg" "$T/linkbin/ygg"
+fresh_none; mkdir -p "$T/linkbin"; ln -s "$T/nowhere/ygg" "$T/linkbin/ygg"
+PATH="$T/linkbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/linkbin/ygg"
+check "an --out link that points to nothing is refused" bash -c "[ $rc -eq 2 ] && grep -q -F '$T/linkbin/ygg is a link to $T/nowhere/ygg, which does not exist' '$T/out' && [ ! -e '$T/nowhere' ]"
+rm -rf "$T/linkbin"; mkdir -p "$T/linkbin" "$T/real"; printf '#!/bin/sh\necho a wrapper\n' >"$T/real/ygg"; chmod +x "$T/real/ygg"
+ln -s "$T/real/ygg" "$T/linkbin/ygg"
 PATH="$T/linkbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U"
-check "an OUT that is a link is refused without --force" bash -c "[ $rc -eq 2 ] && grep -q -F '$T/linkbin/ygg is not a regular file' '$T/out' && [ -L '$T/linkbin/ygg' ]"
-rm -rf "$T/linkbin"
+check "a link to a file that is not a Go binary is refused, naming the target" bash -c "[ $rc -eq 2 ] && grep -q -F '$T/real/ygg is not a Go binary' '$T/out' && grep -q 'a wrapper' '$T/real/ygg'"
+rm -rf "$T/linkbin" "$T/real"
 
 # --- a dirty module is refused, and nothing is built
 fresh; printf 'dirty\n' >>"$U/gungnir/f.txt"
@@ -169,6 +173,7 @@ PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$T/none"
 check "a missing umbrella is refused" bash -c "[ $rc -eq 2 ] && grep -q -F 'no umbrella folder at $T/none' '$T/out'"
 
 # --- the stale check (the library the smoke scripts use)
+SA="$(cd "$S" && pwd)" # the scripts folder, as the message names it
 stale() { # BINARY ODIN: runs ygg_stale_check in a subshell and prints the message and the result
   # shellcheck source-path=SCRIPTDIR source=../ygg-build-facts.sh
   ( . "$S/ygg-build-facts.sh"; if ygg_stale_check "$1" "$2"; then echo "FRESH: $ygg_stale_msg"; else echo "STALE: $ygg_stale_msg"; fi )
@@ -180,10 +185,35 @@ printf '# changed\n' >>"$T/pathbin/ygg"; stale "$T/pathbin/ygg" "$U/odin" >"$T/o
 check "a binary changed after its build (another go install) is stale" has "STALE: the ygg at $T/pathbin/ygg is not the binary ygg-build.sh wrote"
 rm "$T/pathbin/ygg.build.txt"; stale "$T/pathbin/ygg" "$U/odin" >"$T/out"
 check "a binary with no facts is stale" has "STALE: the ygg at $T/pathbin/ygg has no build facts"
-check "the message names the script" has "run scripts/ygg-build.sh"
+check "the message gives the whole command to paste" has "; run: $SA/ygg-build.sh --yggdrasil $U"
 printf 'format: 1\nodin: 000000000000\nsha256: %s\n' "$(sha256sum "$T/pathbin/ygg" | cut -d' ' -f1)" >"$T/pathbin/ygg.build.txt"
 stale "$T/pathbin/ygg" "$U/odin" >"$T/out"
 check "a binary from another commit is stale, with both commits" has "built from odin 000000000000, but the checkout $U/odin is at $(sha odin)"
+
+# --- the guard (ygg_guard, as the smoke scripts call it): no ygg on PATH, and a ygg on PATH through a link
+guard() { # ODIN ANY DRY: runs ygg_guard with this test's PATH and prints its line and its result
+  # shellcheck source-path=SCRIPTDIR source=../ygg-build-facts.sh
+  ( . "$S/ygg-build-facts.sh"; if ygg_guard test "$1" "$2" "$3"; then echo "PASS"; else echo "REFUSED"; fi ) 2>&1
+}
+fresh_none
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 >"$T/out"
+check "with no ygg on PATH the guard says so" bash -c "grep -q -F 'test: ygg guard: STALE: no ygg is on PATH; run: $SA/ygg-build.sh --yggdrasil $U' '$T/out' && grep -q REFUSED '$T/out'"
+check "and never says 'the ygg at  has'" hasnt "the ygg at  has"
+# The link case end to end: a link on PATH, the guard refuses; the build writes the link's target; the guard passes.
+mkdir -p "$T/linkbin"; old "$T/real/ygg"; ln -s "$T/real/ygg" "$T/linkbin/ygg"
+PATH="$T/linkbin:$GB:$BASEPATH" guard "$U/odin" 0 0 >"$T/out"
+check "link: the guard reads the facts beside the link's target, and refuses with none" bash -c "grep -q -F 'STALE: the ygg at $T/real/ygg has no build facts ($T/real/ygg.build.txt)' '$T/out' && grep -q REFUSED '$T/out'"
+PATH="$T/linkbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U"
+check "link: ygg-build.sh builds to the link's target" bash -c "[ $rc -eq 0 ] && grep -q -F 'built $T/real/ygg' '$T/out' && grep -q -F 'built $T/real/ygg.new.' '$FAKE_LOG'"
+check "link: the link stays a link, and the facts are beside the target" bash -c "[ -L '$T/linkbin/ygg' ] && [ -f '$T/real/ygg.build.txt' ] && [ ! -e '$T/linkbin/ygg.build.txt' ] && ! grep -q old '$T/real/ygg'"
+PATH="$T/linkbin:$GB:$BASEPATH" guard "$U/odin" 0 0 >"$T/out"
+check "link: then the guard passes" bash -c "grep -q -F 'test: ygg guard: ok: the ygg at $T/real/ygg was built from odin $(sha odin)' '$T/out' && grep -q PASS '$T/out'"
+rm -f "$T/real/ygg.build.txt"
+PATH="$T/linkbin:$GB:$BASEPATH" guard "$U/odin" 0 1 >"$T/out"
+check "a dry run prints STALE and passes" bash -c "grep -q 'STALE: .*(a dry run: not refused)' '$T/out' && grep -q PASS '$T/out'"
+PATH="$T/linkbin:$GB:$BASEPATH" guard "$U/odin" 1 0 >"$T/out"
+check "--any-ygg skips the check and passes" bash -c "grep -q -F 'test: ygg guard: skipped (--any-ygg)' '$T/out' && grep -q PASS '$T/out'"
+rm -rf "$T/linkbin" "$T/real"
 
 hermetic_done
 echo; [ "$fail" -eq 0 ] && echo "ygg-build.test.sh: all ok" || echo "ygg-build.test.sh: FAILURES"

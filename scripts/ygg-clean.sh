@@ -4,11 +4,14 @@
 #   ygg-clean.sh [--dry-run] [--folder DIR] [--keep PROJECT]... [PROJECT...]
 # The projects are the PROJECTs named, or every folder that holds .factory/runs at DIR, DIR/NAME or DIR/NAME/SUB
 # (default DIR $HOME/ygg-it), so DIR/smoke-real-TIME/project and DIR/proof-NAME-TIME/project. DIR/hidden-suites and
-# DIR/dc are never entered. A PROJECT (and a --keep) is a folder, or a name under DIR. --keep P also keeps every
-# project inside the folder P, so `--keep DIR/proof-r1-X` keeps that proof run's project.
-#   * A project with a run whose lock a live process holds, or whose runs lock a live ygg holds, is skipped, and the
-#     summary says which. The check reads /proc/locks as odin's lock.Held does: it never takes a lock and never
-#     signals a process.
+# DIR/dc are never entered. A PROJECT (and a --keep) is a name under DIR, else a folder. --keep P also keeps every
+# project inside the folder P, so `--keep DIR/proof-r1-X` keeps that proof run's project. A PROJECT or --keep under
+# DIR/hidden-suites is refused by its path, before the folder is entered.
+#   * A project is skipped when a run of it is live, and the summary says which, by either of two checks: a FLOCK
+#     line in /proc/locks for a run's lock or the project's runs lock (as odin's lock.Held reads it), or a process
+#     with one of those lock files open (its /proc/PID/fd links: ygg keeps a lock file open while it holds it). The
+#     checks never take a lock and never signal a process. When the locks file or /proc cannot be read, the script
+#     cannot tell whether a run is live, so it refuses (exit 2) before any doctor runs.
 #   * The config is the one a run recorded (config_path in its run.json, newest run first), else PROJECT/factory.yaml
 #     or factory.yaml beside the project. A project with no config is skipped with a message.
 #   * It runs `ygg doctor --project P --config C` (YGG_CMD, default ygg), with the engine environment of
@@ -16,7 +19,8 @@
 #     and failed, and the pods and containers doctor said it removed.
 #   * --dry-run lists the doctor commands it would run and changes nothing; it does not call the engine.
 # It never deletes a run folder, a project or an image, and never starts, stops or restarts the engine.
-# Exit: 0 done, 1 a doctor failed, 2 a refusal. For tests: YGG_LOCKS_FILE (default /proc/locks).
+# Exit: 0 done, 1 a doctor failed, 2 a refusal. For tests: YGG_LOCKS_FILE (default /proc/locks) and YGG_PROC_DIR
+# (default /proc).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="$HOME/ygg-it" dry=0
@@ -33,35 +37,86 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -d "$dir" ] || fail "no folder at $dir (--folder)"
-dir="$(cd "$dir" && pwd)"
+dir="$(cd -P "$dir" && pwd -P)"
 ygg="${YGG_CMD:-ygg}"
 read -r -a ygg_arr <<<"$ygg"
 command -v -- "${ygg_arr[0]}" >/dev/null 2>&1 || fail "no ygg on the path (YGG_CMD names how it runs)"
-locks="${YGG_LOCKS_FILE:-/proc/locks}"
+locks="${YGG_LOCKS_FILE:-/proc/locks}" proc="${YGG_PROC_DIR:-/proc}"
+{ [ -f "$locks" ] && [ -r "$locks" ]; } || fail "cannot tell whether a run is live: $locks cannot be read; nothing was run"
+{ [ -d "$proc" ] && [ -r "$proc" ]; } || fail "cannot tell whether a run is live: $proc cannot be read; nothing was run"
+hidden="$dir/hidden-suites"
 
-# abs ARG: a folder, or a name under DIR, as an absolute path; fails when neither exists.
+# lexical PATH: PATH made absolute with . and .. removed, from its text alone (no folder is entered or read).
+lexical() {
+  local p="$1" part
+  local -a parts segs=()
+  case "$p" in /*) ;; *) p="$PWD/$p" ;; esac
+  IFS=/ read -r -a parts <<<"$p"
+  for part in "${parts[@]}"; do
+    case "$part" in
+      '' | .) ;;
+      ..) [ "${#segs[@]}" -eq 0 ] || unset 'segs[${#segs[@]}-1]' ;;
+      *) segs+=("$part") ;;
+    esac
+  done
+  local IFS=/
+  echo "/${segs[*]}"
+}
+under_hidden() { case "$1/" in "$hidden"/*) return 0 ;; esac; return 1; }
+# abs ARG: a name under DIR, else a folder, as an absolute path without links; fails when neither exists. A path
+# under DIR/hidden-suites is refused from its text before it is entered, and again once its links are resolved.
 abs() {
-  if [ -d "$1" ]; then (cd "$1" && pwd)
-  elif [ -d "$dir/$1" ]; then (cd "$dir/$1" && pwd)
-  else return 1; fi
+  local c p
+  local -a cands=("$dir/$1" "$1")
+  case "$1" in /*) cands=("$1") ;; esac
+  for c in "${cands[@]}"; do
+    if under_hidden "$(lexical "$c")"; then fail "$1 is under $hidden, which this script never enters"; fi
+  done
+  for c in "${cands[@]}"; do
+    [ -d "$c" ] || continue
+    p="$(cd -P "$c" && pwd -P)"
+    if under_hidden "$p"; then fail "$1 is under $hidden, which this script never enters"; fi
+    echo "$p"; return 0
+  done
+  return 1
 }
 # held LOCKFILE: true when the locks file has a FLOCK line for its device and inode (major:minor in hex, then the
-# inode), the id odin's lock.Held computes.
+# inode), the id odin's lock.Held computes. A locks file that cannot be read is a refusal, never "not held".
 held() {
-  local f="$1" d ino maj min id
+  local f="$1" d ino maj min id r=0
   [ -e "$f" ] || return 1
   read -r d ino < <(stat -c '%d %i' -- "$f")
   maj=$(( ((d >> 8) & 0xfff) | ((d >> 32) & ~0xfff) ))
   min=$(( (d & 0xff) | ((d >> 12) & ~0xff) ))
   printf -v id '%02x:%02x:%d' "$maj" "$min" "$ino"
-  awk -v id="$id" '$2 == "FLOCK" && $6 == id { found = 1 } END { exit !found }' "$locks" 2>/dev/null
+  awk -v id="$id" '$2 == "FLOCK" && $6 == id { found = 1 } END { exit found ? 0 : 1 }' "$locks" || r=$?
+  case "$r" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) fail "cannot tell whether a run is live: $locks could not be read (awk exit $r); nothing more was run" ;;
+  esac
+}
+# opened: the files the processes have open, one "PID TARGET" line each, from the PROC/PID/fd links. It is read
+# again for each project, so it is current when that project's doctor is decided. A process this user cannot read
+# is not listed; ygg runs as this user.
+opened() {
+  find "$proc"/[0-9]*/fd -mindepth 1 -maxdepth 1 -type l -printf '%h %l\n' 2>/dev/null |
+    awk -v n="${#proc}" '{ h = $1; pid = substr(h, n + 2); sub(/\/fd$/, "", pid); t = substr($0, length(h) + 2)
+      if (pid ~ /^[0-9]+$/ && t ~ /^\//) print pid, t }' || true
+}
+# open_by LOCKFILE: print the PID of a process that has LOCKFILE open, from $open_now; fails when none has.
+open_by() {
+  local f
+  [ -e "$1" ] || return 1
+  f="$(readlink -f -- "$1")"
+  awk -v f="$f" 'substr($0, index($0, " ") + 1) == f { print $1; found = 1; exit } END { exit !found }' <<<"$open_now"
 }
 
 # The projects. The folders under DIR are walked by name, so a folder that is skipped is never listed.
 projects=()
 if [ "${#named[@]}" -gt 0 ]; then
   for n in "${named[@]}"; do
-    p="$(abs "$n")" || fail "no folder $n (nor $dir/$n)"
+    p="$(abs "$n")" || { r=$?; [ "$r" -ne 2 ] || exit 2; fail "no folder $dir/$n (nor $n)"; }
     [ -d "$p/.factory/runs" ] || fail "$p holds no .factory/runs, so it is not a project"
     projects+=("$p")
   done
@@ -79,7 +134,7 @@ else
 fi
 keep_abs=()
 for k in "${keeps[@]}"; do
-  ka="$(abs "$k")" || fail "no folder $k (nor $dir/$k) to keep"
+  ka="$(abs "$k")" || { r=$?; [ "$r" -ne 2 ] || exit 2; fail "no folder $dir/$k (nor $k) to keep"; }
   keep_abs+=("$ka")
 done
 
@@ -111,16 +166,21 @@ for p in "${projects[@]}"; do
     case "$p" in "$k" | "$k"/*) is_kept=1 ;; esac
   done
   if [ "$is_kept" -eq 1 ]; then kept+=("$p"); echo "ygg-clean: keeping $p"; continue; fi
+  open_now="$(opened)"
   if held "$p/.factory/locks/runs.lock"; then
     skipped+=("$p: a ygg process holds the project's runs lock"); echo "ygg-clean: skipping $p: a ygg process holds its runs lock"; continue
+  fi
+  if pid="$(open_by "$p/.factory/locks/runs.lock")"; then
+    skipped+=("$p: a ygg process ($pid) has the project's runs lock open"); echo "ygg-clean: skipping $p: process $pid has its runs lock open"; continue
   fi
   live=""
   for r in "$p"/.factory/runs/*/; do
     [ -d "$r" ] || continue
-    if held "${r}lock"; then live="$(basename "$r")"; break; fi
+    if held "${r}lock"; then live="run $(basename "$r") is live (a process holds its lock)"; break; fi
+    if pid="$(open_by "${r}lock")"; then live="run $(basename "$r") is live (process $pid has its lock open)"; break; fi
   done
   if [ -n "$live" ]; then
-    skipped+=("$p: run $live is live (a process holds its lock)"); echo "ygg-clean: skipping $p: run $live is live"; continue
+    skipped+=("$p: $live"); echo "ygg-clean: skipping $p: $live"; continue
   fi
   if ! conf="$(config_of "$p")"; then
     skipped+=("$p: no config found (no config_path in a run.json, no factory.yaml in or beside the project)")

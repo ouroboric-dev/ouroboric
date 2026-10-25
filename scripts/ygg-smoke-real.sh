@@ -105,8 +105,8 @@ for tool in jq python3 git timeout sha256sum; do command -v "$tool" >/dev/null 2
 tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no mimir folder at $tasks (--tasks)"
 odin="$(cd "$odin" 2>/dev/null && pwd)" || fail "no odin folder at $odin (--odin)"
 # The stale-binary guard, before anything is made: only a ygg from PATH (YGG_CMD and a build from --odin are not).
-if [ -z "${YGG_CMD:-}" ] && guard_bin="$(command -v ygg 2>/dev/null)"; then
-  ygg_guard smoke-real "$guard_bin" "$odin" "$any_ygg" "$dry" || exit 2
+if [ -z "${YGG_CMD:-}" ] && command -v ygg >/dev/null 2>&1; then
+  ygg_guard smoke-real "$odin" "$any_ygg" "$dry" || exit 2
 fi
 realm="$odin/testdata/smoke-grade"
 public="$tasks/$task/sample-suite"
@@ -258,7 +258,7 @@ if [ "$built" -eq 1 ]; then
   gw="$(cd "$odin" && go env GOWORK 2>/dev/null || true)"
   case "$gw" in ""|off) gw="no go.work" ;; esac
   ygg_line="$ygg_line, built from $odin at commit $sha, $tree, go.work: $gw"
-elif [ -n "$bin" ] && facts_odin="$(ygg_facts_get "$bin" odin)"; then
+elif [ -n "$bin" ] && facts_odin="$(ygg_facts_get "$(readlink -f -- "$bin")" odin)"; then
   ygg_line="$ygg_line, built from odin $facts_odin (build facts)"
 else
   ygg_line="$ygg_line, odin commit unknown (not built by this script)"

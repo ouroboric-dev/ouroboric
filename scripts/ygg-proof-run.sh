@@ -315,7 +315,7 @@ fi
 # The stale-binary guard, before anything is made or run: only a ygg from PATH (YGG_CMD is not guarded).
 if [ -z "${YGG_CMD:-}" ]; then
   guard_odin="$(cd -P -- "$ygg_dir/odin" 2>/dev/null && pwd -P || echo "$ygg_dir/odin")"
-  ygg_guard proof-run "$(command -v ygg)" "$guard_odin" "$any_ygg" "$dry" || exit 2
+  ygg_guard proof-run "$guard_odin" "$any_ygg" "$dry" || exit 2
 fi
 # The baseline, found before anything is made or started: a bad one costs nothing. A baseline the proof run recorded
 # that is gone now only drops the comparison, so that the run can still be continued.
