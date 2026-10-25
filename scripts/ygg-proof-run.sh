@@ -9,10 +9,10 @@
 #                    [--retro-agent AGENT] [--retro-model MODEL]
 #                    [--reviewer-reasoning low|medium|high|off] [--run-turns N] [--run-tokens N] [--run-usd N]
 #                    [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run] [--build]
-#                    [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]
+#                    [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip] [--any-ygg]
 #   ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] |
 #                    --reject GATE (--reason TEXT | --decisions FILE) | --resume)
-#                    [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]
+#                    [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip] [--any-ygg]
 # AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>; a MODEL has only A-Za-z0-9._/:-
 # because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
 # opencode:openrouter/qwen/qwen3.8-27b with --reviewer-reasoning medium (the reviewer role's reasoning effort: a
@@ -71,14 +71,20 @@
 # steps 8 and 9, with the baseline the proof run recorded unless --baseline names another. The raw `ygg approve`,
 # `ygg reject` and `ygg resume` commands are printed too, as a fallback: they run without the wall clock, the filter
 # or the report.
+# The stale-binary guard: when YGG_CMD is not set, the ygg on PATH must have build facts (BINARY.build.txt, written by
+# scripts/ygg-build.sh) that name the HEAD of the umbrella's odin (--yggdrasil DIR/odin) and the binary's SHA-256.
+# A ygg with no facts, or other ones, is refused before anything is made ("run scripts/ygg-build.sh"); --any-ygg
+# skips the check and says so; a dry run prints the result and is not refused.
 # For tests and other machines: YGG_CMD (how ygg runs), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind).
 set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=ygg-build-facts.sh
+. "$HERE/ygg-build-facts.sh"
 usage() {
-  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--retro-agent AGENT] [--retro-model MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip]" >&2
+  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--retro-agent AGENT] [--retro-model MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip] [--any-ygg]" >&2
   echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] | --reject GATE (--reason TEXT | --decisions FILE) | --resume)" >&2
-  echo "                        [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip]" >&2
+  echo "                        [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip] [--any-ygg]" >&2
   exit 2
 }
 fail() { echo "proof-run: $*" >&2; exit 2; }
@@ -87,7 +93,7 @@ fail() { echo "proof-run: $*" >&2; exit 2; }
 # umask, as in the smoke scripts: no umask is set for the whole script.
 private() { (umask 077 && : >>"$1") && chmod 600 "$1"; } # FILE: made private; what it holds stays
 put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small control file, private
-name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h
+name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h any_ygg=0
 # --continue; setup_flags are the setup flags given (a continued run keeps its config)
 cont="" gate_in="" reject_in="" reason="" reason_set=0 note="" note_set=0 resume=0 setup_flags=""
 decisions="" decisions_set=0
@@ -102,6 +108,7 @@ while [ $# -gt 0 ]; do
   esac
   case "$1" in
     --dry-run) dry=1; shift ;;
+    --any-ygg) any_ygg=1; shift ;;
     --build) build=1; shift ;;
     --resume) resume=1; shift ;;
     --continue) [ $# -ge 2 ] || usage; cont="$2"; shift 2 ;;
@@ -304,6 +311,11 @@ else
     if [ -n "$baseline" ] && ! [[ $baseline =~ $run_id_re ]]; then fail "$work/proof.meta records a baseline that is not a run id"; fi
   fi
   if [ "$baseline" = "$cont" ]; then fail "--baseline $baseline is the run being continued; a run is not its own baseline"; fi
+fi
+# The stale-binary guard, before anything is made or run: only a ygg from PATH (YGG_CMD is not guarded).
+if [ -z "${YGG_CMD:-}" ]; then
+  guard_odin="$(cd -P -- "$ygg_dir/odin" 2>/dev/null && pwd -P || echo "$ygg_dir/odin")"
+  ygg_guard proof-run "$(command -v ygg)" "$guard_odin" "$any_ygg" "$dry" || exit 2
 fi
 # The baseline, found before anything is made or started: a bad one costs nothing. A baseline the proof run recorded
 # that is gone now only drops the comparison, so that the run can still be continued.

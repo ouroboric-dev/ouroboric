@@ -2,11 +2,14 @@
 # Run the real-agent smoke (v0-H17): the task smoke-notes built by the real Claude Code and the real OpenCode on
 # OpenRouter, then graded. IT COSTS MONEY: the caps are in odin/testdata/smoke-grade/factory.real.example.yaml.
 #   ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip]
-#                     [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE]
+#                     [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE] [--any-ygg]
 # The suite is the PUBLIC sample suite of the task (no hidden suite of smoke-notes exists); the agents never mount
 # it. Needs DIR/factory.yaml (it names the engine; this script never writes it), the credentials file, the
 # devcontainer CLI 0.89.0, jq and python3, the engine up, the bind mount present, and a checkout of `mimir`. It
-#   1. checks the engine, the tools and the task;
+#   1. checks the engine, the tools and the task, and that a ygg from PATH is not stale: when neither YGG_CMD nor a
+#      build from --odin gives the ygg, its build facts (BINARY.build.txt, written by scripts/ygg-build.sh) must name
+#      the HEAD of the odin checkout and the binary's SHA-256. A ygg with no facts, or other ones, is refused
+#      ("run scripts/ygg-build.sh"); --any-ygg skips the check and says so; a dry run prints the result only;
 #   2. checks the credentials file WITHOUT reading it: the file exists, and each of the two names
 #      CLAUDE_CODE_OAUTH_TOKEN and OPENROUTER_API_KEY is on one line with a value after it (grep -c counts the
 #      lines; no value is printed or kept);
@@ -31,7 +34,8 @@
 #      version" say which file was used and the version and hash, in the terminal and in report.txt.
 #      FILE must exist and have text. See scripts/testdata/reviewer-bench/P4-note.md;
 #   4. prints which ygg runs (path, modified time; for a build from --odin, the odin commit, the tree state and
-#      the go.work file the build used, or "no go.work"; GOWORK=off turns go.work off), then
+#      the go.work file the build used, or "no go.work"; GOWORK=off turns go.work off; else the odin commit of its
+#      build facts), then
 #      runs `ygg doctor` on that config. A config that doctor refuses stops the script before any money is spent;
 #   5. with --dry-run, stops here and prints what it would run, and what it would do after the run;
 #   6. otherwise runs `ygg run` under `timeout` (--wall, default 90m) with the credentials loaded in a subshell
@@ -48,10 +52,13 @@
 # (default 0.89.0). The engine environment comes from ygg-engine.sh (YGG_ENGINE_CHECK=0 skips it).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=ygg-build-facts.sh
+. "$HERE/ygg-build-facts.sh"
+any_ygg=0
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=0
 leaf="" implementer="" note=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
-usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE]" >&2; exit 2; }
+usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE] [--any-ygg]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -65,6 +72,7 @@ while [ $# -gt 0 ]; do
     --from-leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
     --brief-note) [ $# -ge 2 ] || usage; note="$2"; shift 2 ;;
+    --any-ygg) any_ygg=1; shift ;;
     *) usage ;;
   esac
 done
@@ -96,6 +104,10 @@ case "$engine" in unix://*) ;; *) fail "sandbox.engine in $dir/factory.yaml is '
 for tool in jq python3 git timeout sha256sum; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
 tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no mimir folder at $tasks (--tasks)"
 odin="$(cd "$odin" 2>/dev/null && pwd)" || fail "no odin folder at $odin (--odin)"
+# The stale-binary guard, before anything is made: only a ygg from PATH (YGG_CMD and a build from --odin are not).
+if [ -z "${YGG_CMD:-}" ] && guard_bin="$(command -v ygg 2>/dev/null)"; then
+  ygg_guard smoke-real "$guard_bin" "$odin" "$any_ygg" "$dry" || exit 2
+fi
 realm="$odin/testdata/smoke-grade"
 public="$tasks/$task/sample-suite"
 example="$realm/factory.real.example.yaml"
@@ -246,6 +258,8 @@ if [ "$built" -eq 1 ]; then
   gw="$(cd "$odin" && go env GOWORK 2>/dev/null || true)"
   case "$gw" in ""|off) gw="no go.work" ;; esac
   ygg_line="$ygg_line, built from $odin at commit $sha, $tree, go.work: $gw"
+elif [ -n "$bin" ] && facts_odin="$(ygg_facts_get "$bin" odin)"; then
+  ygg_line="$ygg_line, built from odin $facts_odin (build facts)"
 else
   ygg_line="$ygg_line, odin commit unknown (not built by this script)"
 fi
