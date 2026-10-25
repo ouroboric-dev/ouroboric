@@ -57,7 +57,7 @@ cat >"$FB/ygg" <<'EOF3'
 #!/bin/sh
 # Fake ygg (v0-T291): records its arguments and the credential NAMES in its environment, answers each subcommand.
 # FAKE_RUN_RC is the exit code of `run`; FAKE_PLANT is a value it prints from run, metrics, report, grade and status.
-# FAKE_CONT_RC is the exit code of `approve`, `resume` and `reject`.
+# FAKE_CONT_RC is the exit code of `approve`, `resume` and `reject`. `record` prints the path of record.json.
 echo "$*" >>"$FAKE_DIR/ygg.calls"
 printf '%s: %s\n' "$1" "$(env | grep -E '^(CLAUDE_CODE_OAUTH_TOKEN|OPENROUTER_API_KEY)=' | cut -d= -f1 | sort | tr '\n' ' ')" >>"$FAKE_DIR/ygg.env"
 proj="" prev=""
@@ -103,6 +103,9 @@ case "$1" in
   grade | report | status)
     echo "$1 output"
     [ -z "${FAKE_PLANT:-}" ] || echo "$1 leaked $FAKE_PLANT"
+    exit 0 ;;
+  record)
+    echo "$proj/.factory/runs/$2/record.json"
     exit 0 ;;
   sandbox)
     if [ -n "${FAKE_BUILD_SLEEP:-}" ]; then echo $$ >"$FAKE_DIR/build.pid"; exec sleep "$FAKE_BUILD_SLEEP"; fi
@@ -186,7 +189,7 @@ check "the script never evals" bash -c '! grep -E "^[^#]*\beval \"\$ygg" "$1"' _
 printf 'CLAUDE_CODE_OAUTH_TOKEN=fake-claude-VALUE-1\n' >"$T/env-claude"
 printf 'OPENROUTER_API_KEY=fake-router-VALUE-2\n' >"$T/env-router"
 AC=(--planner claude-code:sonnet --implementer claude-code:sonnet --reviewer claude-code:opus)
-AO=(--planner opencode:openrouter/a/b --implementer opencode:openrouter/c/d --reviewer opencode:openrouter/e/f)
+AO=(--planner opencode:openrouter/a/b --implementer opencode:openrouter/c/d --reviewer opencode:openrouter/e/f --retro-agent opencode --retro-model openrouter/g/h)
 run proof --name allclaude --dry-run --env "$T/env-claude" "${AC[@]}"
 check "all-Claude without the OpenRouter key goes through" test "$rc" -eq 0
 check "all-Claude does not ask for OPENROUTER_API_KEY" hasnt OPENROUTER_API_KEY
@@ -277,7 +280,7 @@ runit() { fresh; FAKE_RUN_RC="$1" run proof --name go "${@:2}"; }
 RUND() { find "$D" -maxdepth 1 -name 'proof-go-*' | head -n 1; }
 runit 0
 check "exit 0: the script exits 0" test "$rc" -eq 0
-check "exit 0: doctor, run, grade, metrics, report in that order" test "$(calls)" = "doctor,run,grade,metrics,report"
+check "exit 0: doctor, run, grade, metrics, report in that order" test "$(calls)" = "doctor,run,grade,metrics,report,record"
 check "run.txt holds the run's output" grep -q 'the run runs' "$(RUND)/run.txt"
 check "report.txt holds the metrics and the report" bash -c 'grep -q "metrics output" "$1" && grep -q "report output" "$1"' _ "$(RUND)/report.txt"
 check "the run's output was shown" has "the run runs"
@@ -332,7 +335,7 @@ check "a planted credential value is not in run.txt" bash -c '! grep -q -F fake-
 check "the planted value was replaced, not dropped" grep -q 'REDACTED' "$(RUND)/report.txt"
 fresh
 FAKE_RUN_RC=0 run proof --name go --build
-check "--build: sandbox build --all --config runs after doctor and before the run" test "$(calls)" = "doctor,sandbox,run,grade,metrics,report"
+check "--build: sandbox build --all --config runs after doctor and before the run" test "$(calls)" = "doctor,sandbox,run,grade,metrics,report,record"
 check "--build: the build call has --all and --config" grep -q -E '^sandbox build --all --config [^ ]*/factory.yaml$' "$T/ygg.calls"
 fresh
 FAKE_RUN_RC=0 run proof --name go --dry-run
@@ -562,7 +565,7 @@ check "exit 137: that doctor gets the project and the config" bash -c 'sed -n 3p
 check "exit 137: that doctor has no credential" test "$(grep -c -x 'doctor: ' "$T/ygg.env")" = 2
 check "exit 137: the doctor's output is in report.txt" grep -q -F '## ygg doctor' "$(RUND)/report.txt"
 runit 0
-check "exit 0: no doctor after the run" test "$(calls)" = "doctor,run,grade,metrics,report"
+check "exit 0: no doctor after the run" test "$(calls)" = "doctor,run,grade,metrics,report,record"
 
 # --- the ouroboric review (C2): a baseline is found in its own proof folder, or refused before anything starts
 nothing_started() { [ "$rc" -eq 2 ] && [ ! -s "$T/ygg.calls" ] && [ -z "$(find "$D" -maxdepth 1 -name 'proof-go-*')" ]; }
@@ -583,7 +586,7 @@ clearlogs() { rm -f "$T/ygg.calls" "$T/ygg.env" "$T/timeout.args"; }
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
 FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --approve ship-gate --note 'looks right'
 check "--continue --approve after 3: exit 0, the continuation's code" test "$rc" -eq 0
-check "--continue --approve: doctor, approve, grade, metrics, the compare, report" test "$(calls)" = "doctor,approve,grade,metrics,metrics,report"
+check "--continue --approve: doctor, approve, grade, metrics, the compare, report" test "$(calls)" = "doctor,approve,grade,metrics,metrics,report,record"
 check "--continue --approve: approve gets the run, the gate, the project and the note" grep -q -x -F "approve RUN-1 ship-gate --project $W/project --note looks right" "$T/ygg.calls"
 check "--continue --approve: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 approve RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
 check "--continue: only approve has the credentials" bash -c 'grep -q -x "approve: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^approve: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
@@ -600,7 +603,7 @@ check "--continue --resume ending 3: no grade, metrics and report" test "$(calls
 check "--continue --resume ending 3: the exit code is 3" test "$rc" -eq 3
 check "--continue --resume ending 3: the output ends with the next --continue command" bash -c 'tail -n 1 "$1" | grep -q -F "ygg-proof-run.sh --continue RUN-1 --approve ship-gate"' _ "$T/out"
 clearlogs; FAKE_CONT_RC=0 runc cont --continue RUN-1 --resume
-check "--continue --resume ending 0: doctor, resume, grade, metrics, report" test "$(calls)" = "doctor,resume,grade,metrics,report"
+check "--continue --resume ending 0: doctor, resume, grade, metrics, report" test "$(calls)" = "doctor,resume,grade,metrics,report,record"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --dry-run
 check "--continue --dry-run: exit 0, approve never called" bash -c '[ "$1" -eq 0 ] && ! grep -q "^approve" "$2"' _ "$rc" "$T/ygg.calls"
 check "--continue --dry-run: it shows the command under the timeout" bash -c 'grep "would run: timeout --signal=INT --kill-after=2m 8h" "$1" | grep -q -F "approve RUN-1 ship-gate --project"' _ "$T/out"
@@ -623,7 +626,7 @@ clearlogs; runc cont --continue RUN-1 --resume --reviewer-reasoning low; check "
 fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
 FAKE_PLANT=fake-claude-VALUE-1 runc cont --continue RUN-1 --reject ship-gate --reason 'the gallery has no empty state'
 check "--reject after 3: exit 0, the continuation's code" test "$rc" -eq 0
-check "--reject: doctor, reject, grade, metrics, the compare, report" test "$(calls)" = "doctor,reject,grade,metrics,metrics,report"
+check "--reject: doctor, reject, grade, metrics, the compare, report" test "$(calls)" = "doctor,reject,grade,metrics,metrics,report,record"
 check "--reject: ygg reject runs once, with the run, the gate, the reason and the project" bash -c '[ "$(grep -c "^reject " "$1")" = 1 ] && grep -q -x -F "reject RUN-1 ship-gate --reason the gallery has no empty state --project $2/project" "$1"' _ "$T/ygg.calls" "$W"
 check "--reject: it runs under the same timeout" bash -c 'head -n 1 "$1" | grep -q -F -- "--signal=INT --kill-after=2m 8h $2 reject RUN-1 ship-gate"' _ "$T/timeout.args" "$FB/ygg"
 check "--reject: only reject has the credentials" bash -c 'grep -q -x "reject: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$1" && [ "$(grep -c -v -E "^reject: " "$1")" = "$(grep -c -E "^[a-z]+: $" "$1")" ]' _ "$T/ygg.env"
@@ -663,6 +666,65 @@ sed 's/^reviewer_reasoning .*/reviewer_reasoning extreme/' "$T/meta.keep" >"$W/p
 clearlogs; runc cont --continue RUN-1 --resume --dry-run
 check "--continue on a proof.meta with a bad reviewer_reasoning is refused" refusesc "reviewer reasoning"
 cp "$T/meta.keep" "$W/proof.meta"
+
+# --- typed-boundaries T29: decisions files, the retrospective role, `ygg score`
+printf 'decisions: []\n' >"$T/dec.yaml"
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go --baseline "$OLD"; W="$(RUND)"; clearlogs
+runc cont --continue RUN-1 --approve ship-gate --decisions "$T/dec.yaml"
+check "--approve --decisions: exit 0" test "$rc" -eq 0
+check "--approve --decisions: ygg approve gets the file, after the project" grep -q -x -F "approve RUN-1 ship-gate --project $W/project --decisions $T/dec.yaml" "$T/ygg.calls"
+check "--approve --decisions: the plan says so" has "approve ship-gate"
+clearlogs; (cd "$T" && runc cont --continue RUN-1 --approve ship-gate --decisions dec.yaml)
+check "--decisions with a relative path: ygg gets the absolute one" grep -q -x -F "approve RUN-1 ship-gate --project $W/project --decisions $T/dec.yaml" "$T/ygg.calls"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --decisions "$T/dec.yaml"
+check "--reject --decisions with no --reason: valid, ygg reject gets the file" grep -q -x -F "reject RUN-1 ship-gate --project $W/project --decisions $T/dec.yaml" "$T/ygg.calls"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/dec.yaml" --note hi
+check "--decisions with --note: refused before ygg is called" bash -c '[ "$1" -eq 2 ] && ! test -s "$2" && grep -q -F -- "replaces --note and --reason" "$3"' _ "$rc" "$T/ygg.calls" "$T/out"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --decisions "$T/dec.yaml" --reason why
+check "--decisions with --reason: refused before ygg is called" bash -c '[ "$1" -eq 2 ] && ! test -s "$2" && grep -q -F -- "replaces --note and --reason" "$3"' _ "$rc" "$T/ygg.calls" "$T/out"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/nope.yaml";  check "--decisions with a missing file: refused" refusesc "nope.yaml"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T";            check "--decisions with a folder: refused" refusesc "--decisions"
+clearlogs; runc cont --continue RUN-1 --resume --decisions "$T/dec.yaml";              check "--decisions with --resume: refused" refusesc "--decisions goes with --approve or --reject"
+clearlogs; runc cont --decisions "$T/dec.yaml";                                         check "--decisions without --continue: refused" refusesc "go with --continue"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions;                  check "--decisions with no value: usage" bash -c '[ "$1" -eq 2 ]' _ "$rc"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/dec.yaml" --dry-run
+check "--decisions --dry-run: the command shows the file" bash -c 'grep "would run: timeout" "$1" | grep -q -F -- "--decisions $2"' _ "$T/out" "$T/dec.yaml"
+
+rm -rf "$D"/proof-*; run proof --name retro --dry-run
+FY="$(made)/factory.yaml"
+check "the config has the retrospective role, claude-code:opus by default" grep -q '^  retrospective: { agent: claude-code, model: opus }$' "$FY"
+check "the plan names the retrospective" has "retrospective claude-code:opus"
+check "proof.meta keeps the retrospective" grep -q -x 'retrospective claude-code:opus' "$(made)/proof.meta"
+rm -rf "$D"/proof-*; run proof --name retro2 --dry-run --retro-agent opencode --retro-model openrouter/a/b
+P="$(made)"
+check "--retro-agent and --retro-model are written to the config" grep -q '^  retrospective: { agent: opencode, model: openrouter/a/b }$' "$P/factory.yaml"
+check "an opencode retrospective makes the caps count usd" grep -q 'per_run: { tokens: 12000000, turns: 1500, usd: 5 }' "$P/factory.yaml"
+rm -rf "$D"/proof-*; run proof --name retro3 --dry-run --env "$T/env-claude" "${AC[@]}" --retro-agent opencode --retro-model openrouter/a/b
+check "an opencode retrospective needs OPENROUTER_API_KEY" bash -c '[ "$1" -eq 2 ] && grep -q OPENROUTER_API_KEY "$2"' _ "$rc" "$T/out"
+runq proof --name ok --retro-agent gemini;                 check "a retro agent that is not an adapter is refused" refuses "--retro"
+runq proof --name ok --retro-model 'a b';                  check "a retro model with a space is refused" refuses "--retro"
+runq proof --name ok --retro-agent opencode;               check "an opencode retro agent with the default model is refused" refuses "--retro"
+runq proof --name ok --retro-model 'x
+y: z';                                                      check "a retro model with a newline is refused" refuses "--retro"
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go; W="$(RUND)"
+clearlogs; runc cont --continue RUN-1 --resume --retro-model sonnet; check "--continue refuses --retro-model as a setup flag" refusesc "keeps the config"
+grep -v '^retrospective ' "$W/proof.meta" >"$T/meta.old"; cp "$T/meta.old" "$W/proof.meta"
+clearlogs; runc cont --continue RUN-1 --resume --dry-run;  check "--continue on a proof.meta without a retrospective goes on" test "$rc" -eq 0
+
+fresh; run proof --name go; W="$(RUND)"
+check "exit 0: ygg record runs after the report" test "$(calls)" = "doctor,run,grade,metrics,report,record"
+check "exit 0: the ready ygg score line has the real run id" has 'ygg score RUN-1 --score N --well "…" --wrong "…"'
+check "exit 0: the path of record.json is printed" has "$W/project/.factory/runs/RUN-1/record.json"
+check "exit 0: the score line is in the output, with the project" has "--project $W/project"
+for c in 1 3 4 5 124; do
+  fresh; FAKE_RUN_RC=$c run proof --name go
+  check "exit $c: no score line and no record" bash -c '! grep -q "ygg score" "$1" && ! grep -q "^record" "$2"' _ "$T/out" "$T/ygg.calls"
+done
+fresh; plant_base; FAKE_RUN_RC=3 run proof --name go; W="$(RUND)"; clearlogs
+runc cont --continue RUN-1 --approve ship-gate
+check "--continue ending 0: the score line and the record path are printed" bash -c 'grep -q -F "ygg score RUN-1 --score N" "$1" && grep -q -F "$2/project/.factory/runs/RUN-1/record.json" "$1"' _ "$T/out" "$W"
+clearlogs; FAKE_CONT_RC=3 runc cont --continue RUN-1 --approve ship-gate
+check "--continue ending 3: no score line" bash -c '! grep -q "ygg score" "$1"' _ "$T/out"
 
 [ "$fail" -eq 0 ] && echo "all ok"
 exit "$fail"
