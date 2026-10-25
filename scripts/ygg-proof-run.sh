@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, the roles
-# the operator names (planner, implementer, reviewer, retrospective) and caps the operator sets. Every proof run is set up the same way, so that `ygg metrics
-# --compare` compares two factories and not two setups. IT WILL COST MONEY (without --dry-run):
-# the script makes the project and the config, runs the factory, grades the run and prints the evidence.
+# Set up a proof run (v0-T290): the `software` graph on the real client-gallery-lite, with the realms, the roles the
+# operator names (planner, implementer, reviewer, retrospective) and caps the operator sets. Every proof run is set up
+# the same way, so that `ygg metrics --compare` compares two factories and not two setups. IT WILL COST MONEY (without
+# --dry-run): the script makes the project and the config, runs the factory, grades the run and prints the evidence.
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
 #                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL]
 #                    [--retro-agent AGENT] [--retro-model MODEL]
@@ -52,9 +52,9 @@
 #      path), ygg-cost.sh on the ledger and ygg-evidence.sh. Everything goes through a filter that
 #      replaces the credentials' exact values, and is added to DIR/proof-NAME-TIME/report.txt (--clip copies this
 #      report to the Windows clipboard);
-#      After a run that ended 0 the script prints the path of record.json and a line for the operator to fill,
-#      `ygg score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run
-#      can still go on;
+#      After a run that ended 0 the script prints the path of record.json and a line for the operator to fill, `ygg
+#      score RUN --score N --well "..." --wrong "..."`. A stop, a pause or a failure prints neither: that run can still
+#      go on;
 #   9. for a run that stopped (3) or paused (4), ends with this script's command that continues it. A stopped or
 #      paused run is not graded. The exit code is the run's.
 # --baseline RUN_ID names a run of an earlier proof run: exactly one DIR/proof-*/project/.factory/runs/RUN_ID must
@@ -63,9 +63,10 @@
 # flags are refused: the run keeps its config). It checks the credentials and runs `ygg doctor`, then `ygg approve
 # RUN_ID GATE --project P [--note TEXT]`, `ygg reject RUN_ID GATE --reason TEXT --project P` or `ygg resume RUN_ID
 # --project P` as step 7 runs `ygg run` (the same timeout, the credentials in that subshell only, the filter, the
-# output added to run.txt; --decisions FILE gives the gate's decisions as a file, in place of --note or --reason:
-# the script refuses the pair, and a file that is missing, and passes the file as an absolute path, made from the
-# caller's folder; a rejection may take a file and no reason; a rejection advances the run at once, so it starts sessions as an approval does), then
+# output added to run.txt; --decisions FILE gives the gate's decisions as a file, in place of --note or --reason: the
+# script refuses the pair, and a file that is missing, and passes the file as an absolute path, made from the caller's
+# folder; a rejection may take a file and no reason; a rejection advances the run at once, so it starts sessions as an
+# approval does), then
 # steps 8 and 9, with the baseline the proof run recorded unless --baseline names another. The raw `ygg approve`,
 # `ygg reject` and `ygg resume` commands are printed too, as a fallback: they run without the wall clock, the filter
 # or the report.
@@ -162,6 +163,7 @@ if [ -n "$cont" ]; then
   # U+2028, U+2029 and the C1 controls U+0080 to U+009F (odin refuses them) are matched as bytes, so the locale does not decide.
   sep_line=$'\xe2\x80\xa8' sep_para=$'\xe2\x80\xa9'
   c1_re=$'\xc2[\x80-\x9f]'
+  if [[ $decisions == *[[:cntrl:]]* || $decisions == *"$sep_line"* || $decisions == *"$sep_para"* || $decisions =~ $c1_re ]]; then fail "--decisions has a control character (or U+2028, U+2029, a C1 control) in its path"; fi
   if [[ $note == *[[:cntrl:]]* || $note == *"$sep_line"* || $note == *"$sep_para"* || $note =~ $c1_re ]]; then fail "--note has a control character (or U+2028, U+2029, a C1 control); a note is one line of text"; fi
   if [[ $reason == *[[:cntrl:]]* || $reason == *"$sep_line"* || $reason == *"$sep_para"* || $reason =~ $c1_re ]]; then fail "--reason has a control character (or U+2028, U+2029, a C1 control); a reason is one line of text"; fi
   if [ "$reason_set" -eq 1 ] && [[ $reason =~ ^[[:space:]]*$ ]]; then fail "--reason is blank; say why the gate is rejected"; fi
@@ -561,7 +563,7 @@ echo "proof-run: the folder is $work"
 if [ "$rc" -eq 0 ]; then
   echo "proof-run: the run is done; its record is $project/.factory/runs/$id/record.json"
   echo "proof-run: judge it (a score from 0 to 10, and what went well and what went wrong), then run:"
-  echo "  $(q "${ygg_arr[@]}")score $id --score N --well \"…\" --wrong \"…\" $(q --project "$project")"
+  echo "  $(q "${ygg_arr[@]}")score $(qt "$id") --score N --well \"…\" --wrong \"…\" $(q --project "$project")"
 fi
 
 # 9. How to continue a run that stopped or paused: this script's --continue, which keeps the wall clock, the filter,

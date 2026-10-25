@@ -689,6 +689,17 @@ clearlogs; runc cont --decisions "$T/dec.yaml";                                 
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions;                  check "--decisions with no value: usage" bash -c '[ "$1" -eq 2 ]' _ "$rc"
 clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/dec.yaml" --dry-run
 check "--decisions --dry-run: the command shows the file" bash -c 'grep "would run: timeout" "$1" | grep -q -F -- "--decisions $2"' _ "$T/out" "$T/dec.yaml"
+clearlogs; mkdir -p "$T/odd dir"; printf 'decisions: []\n' >"$T/odd dir/it's here.yaml"
+runc cont --continue RUN-1 --approve ship-gate --decisions "$T/odd dir/it's here.yaml"
+check "--decisions with a space and a single quote: ygg approve gets it as one argument" bash -c '[ "$(grep -c "^approve " "$1")" = 1 ] && grep -q -x -F "approve RUN-1 ship-gate --project $2/project --decisions $3" "$1" && grep -q -x -F "approve: CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY " "$4"' _ "$T/ygg.calls" "$W" "$T/odd dir/it's here.yaml" "$T/ygg.env"
+check "--decisions with a space and a single quote: the argument is one, by its count" bash -c 'n=$(grep -F "approve RUN-1" "$1" | wc -l); [ "$n" = 1 ]' _ "$T/ygg.calls"
+clearlogs; runc cont --continue RUN-1 --reject ship-gate --decisions "$T/odd dir/it's here.yaml"
+check "--decisions with a space and a single quote: ygg reject gets it as one argument" grep -q -x -F "reject RUN-1 ship-gate --project $W/project --decisions $T/odd dir/it's here.yaml" "$T/ygg.calls"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/odd dir/it's here.yaml" --dry-run
+check "--decisions with a space and a single quote: the dry run prints it quoted" has "it\\'s\\ here.yaml"
+printf 'x\n' >"$T/ctl"$'\n'"name.yaml"
+clearlogs; runc cont --continue RUN-1 --approve ship-gate --decisions "$T/ctl"$'\n'"name.yaml"
+check "--decisions with a control character in the path: refused" refusesc "--decisions has a control character"
 
 rm -rf "$D"/proof-*; run proof --name retro --dry-run
 FY="$(made)/factory.yaml"
