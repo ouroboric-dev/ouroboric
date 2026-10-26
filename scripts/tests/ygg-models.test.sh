@@ -571,6 +571,8 @@ creset() { # a server that runs, its network and image, state files, and the two
   mkdir -p "$ST" "$W2/MTP" "$T/cfg"
   for f in preset.ini allowed preset.ini.tmp .allowed-123 notes.txt; do echo x >"$ST/$f"; done
   for f in "$GG" "$MTP" chat-template.jinja extra.gguf MTP/other.gguf; do echo x >"$W2/$f"; done
+  mkdir -p "$W2/.cache/huggingface/download/MTP" "$W2/.cache/other"   # hf download's state, and another cache
+  echo x >"$W2/.cache/huggingface/download/MTP/mtp.metadata"; echo x >"$W2/.cache/other/keep"
   : >"$NL"
 }
 creset
@@ -578,7 +580,7 @@ run bash "$M" --models "$NL" clean
 check "clean: stops and removes the container, then the network, then the image, saying each" \
   eval '[ $rc = 0 ] && [ "$(grep -E "^(stop |rm -f |network rm |image rm )" "$T/podman.log" | cut -d" " -f1,2 | tr "\n" "|")" = "stop -t|rm -f|network rm|image rm|" ] && has "container ygg-models: removed" && has "network ygg-models: removed" && has "image ygg-models:abc123: removed"'
 check "clean: without --state or --weights, the state, the weights and the list stay" \
-  eval '[ "$(ls -A "$ST" | wc -l)" = 5 ] && [ -f "$W2/$GG" ] && [ -f "$W2/$MTP" ] && [ -f "$NL" ]'
+  eval '[ "$(ls -A "$ST" | wc -l)" = 5 ] && [ -f "$W2/$GG" ] && [ -f "$W2/$MTP" ] && [ -f "$NL" ] && [ -d "$W2/.cache/huggingface" ]'
 reset; sed -i "s|^WEIGHTS=.*|WEIGHTS=$W2|" "$T/server.out"
 run bash "$M" --models "$NL" clean
 check "clean: with nothing there, it says so for each and removes nothing" \
@@ -589,6 +591,8 @@ check "clean --state: removes preset.ini, allowed and their temporary files, and
   eval '[ $rc = 0 ] && [ -d "$ST" ] && [ "$(ls -A "$ST")" = notes.txt ] && [ -f "$W2/$GG" ]'
 creset
 run bash "$M" --models "$NL" clean --weights
+check "clean --weights: removes hf download's .cache/huggingface folder, and only that path" \
+  eval '[ ! -e "$W2/.cache/huggingface" ] && [ -f "$W2/.cache/other/keep" ] && [ -d "$W2/.cache" ] && has "$W2/.cache/huggingface"'
 check "clean --weights: deletes the files the list downloads, and only those" \
   eval '[ $rc = 0 ] && [ ! -e "$W2/$GG" ] && [ ! -e "$W2/$MTP" ] && [ -f "$W2/extra.gguf" ] && [ -f "$W2/chat-template.jinja" ] && [ -f "$W2/MTP/other.gguf" ] && [ -d "$W2/MTP" ] && [ "$(ls -A "$ST" | wc -l)" = 5 ] && has "deleted $W2/$GG"'
 creset; rm -f "${W2:?}/MTP/mtp-Qwen3.8-27B-Q4_0.gguf"
@@ -596,12 +600,12 @@ run bash "$M" --models "$NL" clean --weights --state
 check "clean --weights --state: a named file already gone is fine" eval '[ $rc = 0 ] && [ ! -e "$W2/$GG" ] && [ "$(ls -A "$ST")" = notes.txt ]'
 creset; printf 'qwen3.8-27b unsloth/Qwen3.8-27B-GGUF main ../outside.gguf\n' >"$T/sources.out"; echo x >"$T/outside.gguf"
 run bash "$M" --models "$NL" clean --weights
-check "clean --weights: a source path that leaves the weights folder is refused, and nothing is deleted" \
-  eval '[ $rc != 0 ] && has "not a plain path" && [ -f "$T/outside.gguf" ] && [ -f "$W2/$GG" ]'
+check "clean --weights: a source path that leaves the weights folder is refused before anything changes" \
+  eval '[ $rc != 0 ] && has "not a plain path" && [ -f "$T/outside.gguf" ] && [ -f "$W2/$GG" ] && [ -d "$W2/.cache/huggingface" ] && ! logged "stop" && ! logged "rm -f" && [ -e "$SD/container" ]'
 creset; export FAKE_NET_USERS="run-abc-sandbox run-def-sandbox"
-run bash "$M" --models "$NL" clean
-check "clean: another container on the network is named, and the network and the image stay" \
-  eval '[ $rc != 0 ] && has run-abc-sandbox && has run-def-sandbox && ! logged "network rm" && ! logged "image rm" && [ -e "$SD/network" ]'
+run bash "$M" --models "$NL" clean --state --weights
+check "clean: another container on the network is named, and nothing is touched: the server still runs, the network and the image stay" \
+  eval '[ $rc != 0 ] && has run-abc-sandbox && has run-def-sandbox && ! logged "stop" && ! logged "rm -f" && ! logged "network rm" && ! logged "image rm" && [ -e "$SD/container" ] && [ "$(cat "$SD/running")" = true ] && [ -e "$SD/network" ] && [ -e "$SD/image" ] && [ "$(ls -A "$ST" | wc -l)" = 5 ] && [ -f "$W2/$GG" ]'
 creset; export FAKE_NET_USERS="ygg-models"
 run bash "$M" --models "$NL" clean
 check "clean: the server itself on the network does not stop the network's removal" eval '[ $rc = 0 ] && logged "network rm ygg-models"'

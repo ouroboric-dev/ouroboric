@@ -27,13 +27,16 @@
 #                                             GPU step: the price, the folders, the new list (ygg reads it), the model,
 #                                             the template, the download paths, and hf or uvx when a file is missing.
 #   ygg-models.sh [--models FILE] [--folder DIR] clean [--state] [--weights]
-#                                             stop and remove the container, then remove the network, then the image,
-#                                             each only when it is there, each saying what it did. The network is kept,
-#                                             and clean stops, while another container is on it (they are named): a run
-#                                             still uses it. --state also removes preset.ini and allowed from the state
-#                                             folder, and their temporary files, never the folder. --weights also
-#                                             deletes the files the list's `download` names under the weights folder:
-#                                             never another file, never a folder. The list stays.
+#                                             decides first, then changes: while a container other than the server is
+#                                             on the network (a run still uses it), it refuses and names them, and
+#                                             touches nothing (the server keeps running); with --weights, a download
+#                                             path that is not plain is refused the same way. Then it stops and removes
+#                                             the container, removes the network, then the image, each only when it is
+#                                             there, each saying what it did. --state also removes preset.ini and
+#                                             allowed from the state folder, and their temporary files, never the
+#                                             folder. --weights also deletes the files the list's `download` names under
+#                                             the weights folder, and <weights>/.cache/huggingface (the state hf
+#                                             download leaves there): never another file or folder. The list stays.
 #   ygg-models.sh [--models FILE] [--folder DIR] start       build the image if its tag is missing, create the internal network if it is
 #                                             absent, write the preset into the state folder, run the container, wait
 #                                             until the server answers
@@ -569,13 +572,17 @@ do_clean() {
   local others tag f n i
   read_server "$list"
   check_names
-  do_stop
-  if [ "$stop_result" = absent ]; then echo "container $name: not there"; else echo "container $name: removed"; fi
+  # Decide first: a refusal changes nothing.
+  [ -z "$clean_weights" ] || read_sources "$list"
   if exists network "$network"; then
     others="$(pm container ls -a --filter "network=$network" --format '{{.Names}}')" || exit 2
     others="$(printf '%s\n' "$others" | grep -v -x -F -e "$name" -e '' || true)"
     [ -z "$others" ] ||
-      die "the network $network has other containers on it, so it stays (and the image too): $(printf '%s\n' "$others" | tr '\n' ' ')- let their runs end, then run clean again"
+      die "other containers are on the network $network, so nothing was removed (the server, the network and the image stay): $(printf '%s\n' "$others" | tr '\n' ' ')- let their runs end, then run clean again"
+  fi
+  do_stop
+  if [ "$stop_result" = absent ]; then echo "container $name: not there"; else echo "container $name: removed"; fi
+  if exists network "$network"; then
     pm network rm "$network" >/dev/null
     echo "network $network: removed"
   else
@@ -596,7 +603,6 @@ do_clean() {
     echo "state: removed $n files from $state (the folder stays)"
   fi
   if [ -n "$clean_weights" ]; then
-    read_sources "$list"
     [ "${#src_path[@]}" -gt 0 ] || echo "weights: the list downloads no file; nothing deleted"
     for i in "${!src_path[@]}"; do
       f="$weights/${src_path[$i]}"
@@ -605,6 +611,9 @@ do_clean() {
       else echo "weights: ${src_path[$i]}: not there"
       fi
     done
+    # hf download keeps its own state under the folder it downloads to: that exact folder, never another.
+    f="${weights:?}/.cache/huggingface"
+    if [ -d "$f" ] && [ ! -L "$f" ]; then rm -rf -- "$f"; echo "deleted $f (hf download's state)"; fi
   fi
 }
 
