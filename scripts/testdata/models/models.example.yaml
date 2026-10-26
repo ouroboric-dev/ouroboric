@@ -21,10 +21,10 @@ models:
       cache-type-v: q8_0
       parallel: "1"
       jinja: "true"
-      temp: "1.0"
-      top-p: "0.95"
-      top-k: "20"
-      min-p: "0"
+      # Sampling: llama-server takes temp, top-k and top-p from the model file (its general.sampling.* keys)
+      # unless a key here sets them, so the list sets only what the file lacks. Add temp, top-p or top-k here to
+      # override the model's own values.
+      min-p: "0"   # Qwen's recommendation; the model file has no min_p, and llama-server's own default is 0.05
       reasoning-effort: low
       # Out-of-memory-safe values for a WSL2 machine with limited RAM: a small prompt cache and few checkpoints.
       cache-ram: "2048"
