@@ -31,6 +31,8 @@ runline() { grep '^run ' "$T/podman.log" | head -n 1; }
 
 W="$T/weights dir"     # a path with a space: the lines of `ygg models server` are data
 ST="$T/state"
+EW="/mnt/engine/weights dir"   # where the engine sees the folders (sandbox.mounts)
+EST="/mnt/engine/state"
 SD="$T/st"             # the fakes' state: container, running, image, network, internal, up
 export FAKE_T="$T"
 mkdir -p "$W" "$T/fakes" "$SD"
@@ -40,7 +42,11 @@ cat >"$T/fakes/ygg" <<'FAKE'
 echo "ygg $*" >>"$FAKE_T/ygg.log"
 [ "$1" = models ] || exit 64
 case "$2" in
-  server) [ -f "$3" ] || { echo "ygg: $3: no such file" >&2; exit 1; }; cat "$FAKE_T/server.out" ;;
+  server) # models server --config CONFIG FILE
+    [ "$3" = --config ] || { echo "ygg: models server needs --config" >&2; exit 1; }
+    [ -z "$FAKE_YGG_REFUSE" ] || { echo "ygg: $FAKE_YGG_REFUSE" >&2; exit 1; }
+    [ -f "$5" ] || { echo "ygg: $5: no such file" >&2; exit 1; }
+    cat "$FAKE_T/server.out" ;;
   preset) [ -f "$3" ] || exit 1; printf 'version = 1\n[qwen3.8-27b]\nmodel = /models/model.gguf\n' ;;
   image) echo "ygg-models:abc123" ;;
   build) touch "$FAKE_T/st/image" ;;
@@ -79,6 +85,7 @@ case "$1 $2" in
   "stop "*) echo false >"$st/running"; rm -f "$st/up" ;;
   "rm "*) rm -f "$st/container" "$st/running" ;;
   "run -d")
+    [ -z "$FAKE_RUN_CDI" ] || { echo "Error: setting up CDI devices: unresolvable CDI devices nvidia.com/gpu=all" >&2; exit 125; }
     touch "$st/container"
     if [ -n "$FAKE_RUN_EXITS" ]; then echo false >"$st/running"; else echo true >"$st/running"; touch "$st/up"; fi
     echo "0123456789abcdef" ;;
@@ -107,6 +114,7 @@ url="${args[$((${#args[@]} - 1))]}"
 echo "$method $url $body" >>"$FAKE_T/curl.log"
 [ -e "$FAKE_T/st/up" ] || exit 7
 case "$method $url" in
+  "GET "*/props\?model=*) [ -z "$FAKE_NO_PROPS" ] || { printf 404; exit 0; }; cat "$FAKE_T/props.json" >"$out"; printf 200 ;;
   "GET "*/models) cat "$FAKE_T/models.json" >"$out"; printf 200 ;;
   "POST "*/models/load)
     code="$(cat "$FAKE_T/load.code" 2>/dev/null || echo 200)"
@@ -123,8 +131,9 @@ LIST="$T/models.yaml"; : >"$LIST"
 
 reset() { # a clean engine, and a list that names $W
   rm -rf "${SD:?}" "${ST:?}" "${T:?}"/*.log "${T:?}"/podman.args "${T:?}/gpu.state" "${T:?}/load.code" "${T:?}/load.body"; mkdir -p "$SD" "$W"
-  unset FAKE_RUN_EXITS FAKE_ENGINE_DOWN FAKE_ID_CLASH FAKE_IMAGE_ERR
-  printf 'NAME=ygg-models\nNETWORK=ygg-models\nPORT=8089\nHOST_PORT=8088\nWEIGHTS=%s\nSTATE=%s\n' "$W" "$ST" >"$T/server.out"
+  rm -f "$W/chat-template.jinja"
+  unset FAKE_RUN_EXITS FAKE_ENGINE_DOWN FAKE_ID_CLASH FAKE_IMAGE_ERR FAKE_YGG_REFUSE FAKE_NO_PROPS FAKE_RUN_CDI
+  printf 'NAME=ygg-models\nNETWORK=ygg-models\nPORT=8089\nHOST_PORT=8088\nWEIGHTS=%s\nSTATE=%s\nENGINE_WEIGHTS=%s\nENGINE_STATE=%s\n' "$W" "$ST" "$EW" "$EST" >"$T/server.out"
   printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"unloaded","preset":"version = 1\n[qwen]\nmodel = x"}}]}' >"$T/models.json"
   printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"loaded","preset":"version = 1\n[qwen]\nmodel = x"}}]}' >"$T/models.after.json"
 }
@@ -136,15 +145,15 @@ run bash "$M" --models "$LIST" start
 check "start: exits 0 and says where the server is" eval '[ $rc = 0 ] && has "http://127.0.0.1:8088"'
 check "start: podman run gets the GPU, the name, the internal network, and detaches" \
   eval 'runline | grep -q -F -- "--device nvidia.com/gpu=all" && runline | grep -q -F -- "--name ygg-models" && runline | grep -q -F -- "--network ygg-models" && runline | grep -q -F -- " -d "'
-check "start: both mounts are read-only, and the weights path keeps its space as one argument" \
-  eval 'arg_pair -v "$W:/models:ro,Z" && arg_pair -v "$ST:/etc/ygg-models:ro,Z" && arg_pair -p 127.0.0.1:8088:8080 && arg_pair -e YGG_MODELGATE_PORT=8089'
+check "start: both mounts are read-only, use the engine-side paths, and the weights path keeps its space as one argument" \
+  eval 'arg_pair -v "$EW:/models:ro,Z" && arg_pair -v "$EST:/etc/ygg-models:ro,Z" && ! arg_pair -v "$W:/models:ro,Z" && arg_pair -p 127.0.0.1:8088:8080 && arg_pair -e YGG_MODELGATE_PORT=8089'
 check "start: the only published port is 127.0.0.1:<host_port>:8080" \
   eval '[ "$(runline | grep -o -- "-p [^ ]*")" = "-p 127.0.0.1:8088:8080" ] && ! runline | grep -q -E -- "--publish|-P "'
 check "start: the gate learns its port from the environment" eval 'runline | grep -q -F -- "-e YGG_MODELGATE_PORT=8089"'
 check "start: the preset from ygg is in the state folder" \
   eval '[ "$(cat "$ST/preset.ini")" = "$(printf "version = 1\n[qwen3.8-27b]\nmodel = /models/model.gguf")" ]'
 check "start: it reads the list with ygg models server and models preset, from the file given" \
-  eval 'grep -q -F "ygg models server $LIST" "$T/ygg.log" && grep -q -F "ygg models preset $LIST" "$T/ygg.log"'
+  eval 'grep -q -F "ygg models server --config $HOME/ygg-it/factory.yaml $LIST" "$T/ygg.log" && grep -q -F "ygg models preset $LIST" "$T/ygg.log"'
 check "start: every podman call goes through ygg-engine.sh run" \
   eval '[ "$(grep -c -- "-- podman" "$T/engine.log")" = "$(wc -l <"$T/podman.log")" ]'
 check "start: it checks the GPU first" eval '[ "$(head -n 1 "$T/gpu.log")" = "gpu check --folder $HOME/ygg-it" ]'
@@ -163,6 +172,28 @@ reset; touch "$SD/network" "$SD/image"; echo false >"$SD/internal"
 run bash "$M" --models "$LIST" start
 check "start: a network that is not internal is refused, and nothing runs" \
   eval '[ $rc != 0 ] && has "not internal" && [ "$(count "run -d")" = 0 ]'
+
+# the argv of the server container: dropped capabilities, no new privileges
+reset; touch "$SD/image"
+run bash "$M" --models "$LIST" start
+check "start: the container drops all capabilities and gets no new privileges" \
+  eval 'runline | grep -q -F -- "--cap-drop=ALL" && runline | grep -q -F -- "--security-opt=no-new-privileges"'
+check "start: the preset is written to the host state folder, not the engine path" eval '[ -f "$ST/preset.ini" ] && [ ! -e "$EST" ]'
+reset; touch "$SD/image"
+run bash "$M" --models "$LIST" --folder "$T/fdir" start
+check "start --folder: ygg models server gets --config DIR/factory.yaml" eval 'grep -q -F "ygg models server --config $T/fdir/factory.yaml $LIST" "$T/ygg.log"'
+reset; touch "$SD/image"; export FAKE_YGG_REFUSE="the folder $W is under no sandbox.mounts entry"
+run bash "$M" --models "$LIST" start
+check "start: a ygg that refuses the folders (no sandbox.mounts covers them) passes its error through, and no engine call" \
+  eval '[ $rc != 0 ] && has "sandbox.mounts" && [ ! -e "$T/podman.log" ]'
+unset FAKE_YGG_REFUSE
+reset; touch "$SD/image"; sed -i '/^ENGINE_STATE=/d' "$T/server.out"
+run bash "$M" --models "$LIST" start
+check "start: a missing ENGINE_STATE line is an error" eval '[ $rc != 0 ] && has ENGINE_STATE'
+reset; touch "$SD/image"; export FAKE_RUN_CDI=1
+run bash "$M" --models "$LIST" start
+check "start: unresolvable CDI devices names ygg-gpu.sh setup" eval '[ $rc != 0 ] && has "ygg-gpu.sh setup" && has "unresolvable CDI"'
+unset FAKE_RUN_CDI
 
 # a list that names no weights folder fails before any call
 reset; rmdir "$W"
@@ -195,7 +226,7 @@ reset; touch "$SD/image"
 run bash "$M" --models "$LIST" start
 : >"$T/podman.log"
 run bash "$M" --models "$LIST" start
-check "start: a server that already runs is left alone" eval '[ $rc = 0 ] && has "already running" && [ "$(count "run -d")" = 0 ]'
+check "start: a server that already runs is left alone, and says to stop first to apply list changes" eval '[ $rc = 0 ] && has "already running" && has "stop first" && [ "$(count "run -d")" = 0 ]'
 reset; touch "$SD/image" "$SD/container"; echo false >"$SD/running"
 run bash "$M" --models "$LIST" start
 check "start: a stopped container of that name is removed, then the server starts" \
@@ -205,11 +236,11 @@ check "start: a stopped container of that name is removed, then the server start
 reset; touch "$SD/image"; mkdir -p "$HOME/.config/ygg"; : >"$HOME/.config/ygg/models.yaml"
 run bash "$M" start
 check "the list defaults to ~/.config/ygg/models.yaml" \
-  eval '[ $rc = 0 ] && grep -q -F "ygg models server $HOME/.config/ygg/models.yaml" "$T/ygg.log"'
+  eval '[ $rc = 0 ] && grep -q -F "ygg models server --config $HOME/ygg-it/factory.yaml $HOME/.config/ygg/models.yaml" "$T/ygg.log"'
 reset; touch "$SD/image"; mkdir -p "$T/xdg/ygg"; : >"$T/xdg/ygg/models.yaml"
 XDG_CONFIG_HOME="$T/xdg" run bash "$M" start
 check "XDG_CONFIG_HOME moves the default list" \
-  eval '[ $rc = 0 ] && grep -q -F "ygg models server $T/xdg/ygg/models.yaml" "$T/ygg.log"'
+  eval '[ $rc = 0 ] && grep -q -F "ygg models server --config $HOME/ygg-it/factory.yaml $T/xdg/ygg/models.yaml" "$T/ygg.log"'
 
 # the folder: factory.yaml names the engine; ygg models build needs it, and so do the engine and GPU scripts
 reset
@@ -309,6 +340,39 @@ run bash "$M" --models "$LIST" load qwen3.8-27b
 check "load: a model whose last load failed is posted again, and the retry succeeds" \
   eval '[ $rc = 0 ] && grep -q "POST .*/models/load" "$T/curl.log" && has "loaded qwen3.8-27b"'
 
+# --- template
+TPL_OLD="{{- raise_exception('System message must be at the beginning.') }}"
+mkprops() { python3 -I -c 'import json,sys; print(json.dumps({"chat_template": sys.argv[1]}))' "$1" >"$T/props.json"; }
+reset; up; cp "$T/models.after.json" "$T/models.json"
+mkprops "A
+{%- if x %}
+$TPL_OLD
+{%- endif %}
+B"
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: asks the server for /props?model=NAME" eval '[ $rc = 0 ] && grep -q -F "GET http://127.0.0.1:8088/props?model=qwen3.8-27b" "$T/curl.log"'
+check "template: saves the fixed template in the host weights folder, with the system turn in place of the raise" \
+  eval '[ -f "$W/chat-template.jinja" ] && ! grep -q "System message must be" "$W/chat-template.jinja" && grep -q -F "<|im_start|>system" "$W/chat-template.jinja" && head -n 1 "$W/chat-template.jinja" | grep -qx A'
+check "template: no temporary file is left, and it tells to uncomment chat-template-file, then stop and start" \
+  eval '! ls "$W" | grep -q tmp && has chat-template-file && has "ygg-models.sh stop" && has "ygg-models.sh start"'
+reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "no such line here"
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: a template without the line is refused, and nothing is saved" eval '[ $rc != 0 ] && has "did not find" && [ ! -e "$W/chat-template.jinja" ]'
+reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "$TPL_OLD $TPL_OLD"
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: a line found twice is refused" eval '[ $rc != 0 ] && has "did not find" && [ ! -e "$W/chat-template.jinja" ]'
+reset; up; mkprops "$TPL_OLD"
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: a model that is not loaded is refused with the load command" eval '[ $rc != 0 ] && has "ygg-models.sh load qwen3.8-27b" && [ ! -e "$W/chat-template.jinja" ]'
+reset
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: a server that is not running says to start it" eval '[ $rc != 0 ] && has "ygg-models.sh start"'
+reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "$TPL_OLD"
+run bash "$M" --models "$LIST" template 'a b&c'
+check "template: a name that is not plain is refused" eval '[ $rc != 0 ] && [ ! -e "$T/curl.log" ]'
+run bash "$M" --models "$LIST" template
+check "template: needs a name" eval '[ $rc = 2 ] && has usage'
+
 # --- stop
 reset; touch "$SD/network" "$SD/image"; up
 run bash "$M" --models "$LIST" stop
@@ -328,5 +392,7 @@ check "the script never sets CONTAINER_HOST, and never evals or sources the line
 EX="$S/testdata/models/models.example.yaml"
 check "the example list exists, and names no local path or operator" \
   eval '[ -f "$EX" ] && ! grep -E "/home/|/Users/|/mnt/|/root/" "$EX" && ! grep -w -F -e "$(id -un)" -e "$(basename "$HOME")" "$EX" && grep -q "weights: /abs/" "$EX" && grep -q "state: /abs/" "$EX"'
+check "the example list holds the MTP, memory-safe and template keys, and every args key is a valid preset key name" \
+  eval 'grep -q "cache-ram: \"2048\"" "$EX" && grep -q "ctx-checkpoints: \"4\"" "$EX" && grep -q "spec-type: draft-mtp" "$EX" && grep -q "model-draft: /models/mtp.gguf" "$EX" && grep -q "n-gpu-layers-draft: all" "$EX" && grep -q "cache-type-k-draft: q8_0" "$EX" && grep -q "cache-type-v-draft: q8_0" "$EX" && grep -q "# chat-template-file: /models/chat-template.jinja" "$EX" && ! grep -E "^      [A-Za-z0-9_-]+:" "$EX" | grep -v -E "^      [a-z][a-z0-9-]*:"'
 hermetic_done
 exit $fail

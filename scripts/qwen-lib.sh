@@ -8,6 +8,7 @@
 #   QWEN_ALIAS      the model's name in the list (qwen3.8-27b); the name OpenCode and Claude Code ask for
 #   QWEN_MODELS_SH  the script that reports the server (ygg-models.sh next to this file)
 #   QWEN_MODELS     the model list, passed as --models (ygg-models.sh's default list when unset)
+#   QWEN_FOLDER     the factory folder (factory.yaml), passed as --folder (ygg-models.sh's default, ~/ygg-it, when unset)
 # The server's URL comes from `ygg-models.sh status`, which prints `running on <URL>, loaded: <name|none>`.
 
 QWEN_HOME="${QWEN_HOME:-$HOME/.local/share/qwen-local}"
@@ -15,11 +16,12 @@ QWEN_CTX="${QWEN_CTX:-102400}"
 QWEN_ALIAS="${QWEN_ALIAS:-qwen3.8-27b}"
 QWEN_MODELS_SH="${QWEN_MODELS_SH:-$(dirname "${BASH_SOURCE[0]}")/ygg-models.sh}"
 
-# qwen_status: run `ygg-models.sh status` (with --models "$QWEN_MODELS" when set), print its line, pass its exit code on.
+# qwen_status: run `ygg-models.sh status` (with --models "$QWEN_MODELS" and --folder "$QWEN_FOLDER" when set), print its line, pass its exit code on.
 # Its stderr is not hidden: an engine that does not answer says why.
 qwen_status() {
   local args=()
-  [ -z "${QWEN_MODELS:-}" ] || args=(--models "$QWEN_MODELS")
+  [ -z "${QWEN_MODELS:-}" ] || args+=(--models "$QWEN_MODELS")
+  [ -z "${QWEN_FOLDER:-}" ] || args+=(--folder "$QWEN_FOLDER")
   "$QWEN_MODELS_SH" "${args[@]}" status
 }
 

@@ -89,6 +89,8 @@ check "engine check failed: its message is passed through, and it is not reporte
 rm -f "$T/engine-down"
 QWEN_MODELS="$T/my models.yaml" run bash "$C" -p hi
 check "QWEN_MODELS is passed to ygg-models.sh as --models" eval 'grep -q -F -- "--models $T/my models.yaml status" "$T/models.args"'
+QWEN_FOLDER="$T/my folder" run bash "$C" -p hi
+check "QWEN_FOLDER is passed to ygg-models.sh as --folder" eval 'grep -q -F -- "--folder $T/my folder status" "$T/models.args"'
 
 touch "$T/healthy"
 QWEN_CLAUDE_DIR="$HOME/.claude" run bash "$C" -p hi

@@ -1,5 +1,7 @@
 # An example model list for scripts/ygg-models.sh and `ygg models`. Copy it to ~/.config/ygg/models.yaml and
 # change the two folders to absolute paths on your machine. Never commit your own list.
+# The engine is a Podman machine that sees host files only through the `sandbox.mounts` of factory.yaml, so both
+# folders must be under a folder of those mounts (for the founder's setup, under ~/ygg-it).
 server:
   name: ygg-models        # the container's name and its name on the network
   network: ygg-models     # an internal podman network
@@ -24,4 +26,17 @@ models:
       top-k: "20"
       min-p: "0"
       reasoning-effort: low
+      # Out-of-memory-safe values for a WSL2 machine with limited RAM: a small prompt cache and few checkpoints.
+      cache-ram: "2048"
+      ctx-checkpoints: "4"
+      # MTP: the draft model speeds up decoding. The draft file sits next to the model, under weights.
+      spec-type: draft-mtp
+      model-draft: /models/mtp.gguf
+      n-gpu-layers-draft: all
+      cache-type-k-draft: q8_0
+      cache-type-v-draft: q8_0
+      # Claude Code sends a later system message that the model's own template refuses. `scripts/ygg-models.sh
+      # template NAME` writes a fixed template to weights/chat-template.jinja; then uncomment the next line, and
+      # stop and start the server.
+      # chat-template-file: /models/chat-template.jinja
     price: {input: 0.10, output: 0.40}   # example values: OpenRouter's price, dollars per million tokens
