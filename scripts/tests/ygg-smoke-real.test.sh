@@ -318,6 +318,40 @@ for bad in opencode qwen opencode: :sonnet scripted:x gemini:x opencode:qwen/qwe
 done
 check "a refusal says what is allowed" has "--implementer is AGENT:MODEL"
 
+# --- local-models LM-T13: opencode:local/<name> with --models FILE
+printf 'models: []\n' >"$T/models.yaml"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --implementer opencode:local/qwen3.8-27b --models "$T/models.yaml"
+W="$(work)"
+check "a local implementer with --models: exit 0" test "$rc" -eq 0
+check "the config has the local implementer" grep -q -x '  implementer: { agent: opencode, model: local/qwen3.8-27b } # set by ygg-smoke-real.sh --implementer' "$W/factory.yaml"
+check "the config has models.file" grep -q -x "  file: $T/models.yaml" "$W/factory.yaml"
+check "the models section is the file's last" bash -c 'tail -n 2 "$1" | head -n 1 | grep -q -x "models:"' _ "$W/factory.yaml"
+check "it prints the implementer" has "smoke-real: the implementer: { agent: opencode, model: local/qwen3.8-27b }"
+before="$(find "$D" -maxdepth 1 -name 'smoke-real-*' | wc -l)"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --implementer opencode:local/qwen3.8-27b
+check "a local role without --models is refused" test "$rc" -eq 2
+check "and says --models FILE is needed" has "--models FILE"
+check "and made nothing" test "$(find "$D" -maxdepth 1 -name 'smoke-real-*' | wc -l)" -eq "$before"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --models "$T/models.yaml"
+check "--models with no local role is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --implementer opencode:local/qwen3.8-27b --models "$T/nope.yaml"
+check "a models file that is missing is refused" test "$rc" -eq 2
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --implementer opencode:local/Bad --models "$T/models.yaml"
+check "a bad local name is refused" test "$rc" -eq 2
+# A local implementer beside an OpenRouter reviewer still needs the OpenRouter key (the example's reviewer is on it).
+printf 'CLAUDE_CODE_OAUTH_TOKEN=made-up-a\n' >"$T/env-claude"
+run "$S/ygg-smoke-real.sh" "${rargs[@]}" --env "$T/env-claude" --implementer opencode:local/qwen3.8-27b --models "$T/models.yaml"
+check "the OpenRouter reviewer still needs OPENROUTER_API_KEY" has "OPENROUTER_API_KEY"
+# An example with no OpenRouter role: no OPENROUTER_API_KEY, and no usd cap.
+O2="$T/odin2"; cp -r "$O" "$O2"
+printf 'roles:\n  implementer: { agent: claude-code, model: sonnet }\n  reviewer: { agent: claude-code, model: opus }\nbudget:\n  per_run: { tokens: 400000, turns: 100, usd: 3 }\n  per_day: { tokens: 1000000, turns: 200, usd: 6 }\nsandbox:\n  engine: @ENGINE@\n  mounts:\n    - { host: @FOLDER@, engine: @BIND@ }\ngrader: { tasks_dir: @TASKS@, suite_dir: @SUITES@ }\n' \
+  >"$O2/testdata/smoke-grade/factory.real.example.yaml"
+run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$O2" --env "$T/env-claude" --dry-run
+W="$(work)"
+check "no OpenRouter role: no OPENROUTER_API_KEY asked, exit 0" test "$rc" -eq 0
+check "and no usd cap in the config" bash -c '! grep -q "usd:" "$1"' _ "$W/factory.yaml"
+check "and the other caps stay" grep -q -x '  per_run: { tokens: 400000, turns: 100 }' "$W/factory.yaml"
+
 # --- --brief-note: the brief is the note, a blank line, then the task's instruction (B-109). A changed brief is
 # another task version, so the run builds and is graded against a derived copy of the task in the run's folder.
 mkdir -p "$T/suites0/smoke-notes/v1"; cp -r "$M/smoke-notes/sample-suite/tests" "$T/suites0/smoke-notes/v1/tests"

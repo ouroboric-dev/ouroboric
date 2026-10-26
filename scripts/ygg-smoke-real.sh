@@ -2,7 +2,7 @@
 # Run the real-agent smoke (v0-H17): the task smoke-notes built by the real Claude Code and the real OpenCode on
 # OpenRouter, then graded. IT COSTS MONEY: the caps are in odin/testdata/smoke-grade/factory.real.example.yaml.
 #   ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip]
-#                     [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE] [--any-ygg]
+#                     [--from-leaf LEAF] [--implementer AGENT:MODEL] [--models FILE] [--brief-note FILE] [--any-ygg]
 # The suite is the PUBLIC sample suite of the task (no hidden suite of smoke-notes exists); the agents never mount
 # it. Needs DIR/factory.yaml (it names the engine; this script never writes it), the credentials file, the
 # devcontainer CLI 0.89.0, jq and python3, the engine up, the bind mount present, and a checkout of `mimir`. It
@@ -10,12 +10,18 @@
 #      build from --odin gives the ygg, its build facts (BINARY.build.txt, written by scripts/ygg-build.sh) must name
 #      the HEAD of the odin checkout and the binary's SHA-256. A ygg with no facts, or other ones, is refused
 #      ("run scripts/ygg-build.sh"); --any-ygg skips the check and says so; a dry run prints the result only;
-#   2. checks the credentials file WITHOUT reading it: the file exists, and each of the two names
-#      CLAUDE_CODE_OAUTH_TOKEN and OPENROUTER_API_KEY is on one line with a value after it (grep -c counts the
-#      lines; no value is printed or kept);
+#   2. checks the credentials file WITHOUT reading it: the file exists, and each name the roles need is on one line
+#      with a value after it (grep -c counts the lines; no value is printed or kept). A claude-code role needs
+#      CLAUDE_CODE_OAUTH_TOKEN and an opencode role on openrouter/... needs OPENROUTER_API_KEY; a local role needs
+#      none. The roles are the example's, with --implementer applied. If none is on OpenRouter, the "usd" caps
+#      are taken out of the config (only a paid API bills dollars);
 #   3. makes DIR/smoke-real-<time> with the project, the public suite and the factory.yaml filled from the
 #      example (its caps are the real ones). With --implementer AGENT:MODEL, its implementer line is replaced
-#      (AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>), so one role changes (B-110).
+#      (AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model> or local/<name>, a model of the
+#      operator's model list), so one role changes (B-110). A local role needs --models FILE, the model list: the
+#      config then ends with `models:` and `  file: FILE`. FILE must exist; a relative path is made absolute from
+#      the caller's folder. A local role without --models is refused before anything is made, and so is --models
+#      when no role is local. A local role sets no `reasoning` (the example's roles have none);
 #      With --from-leaf LEAF, the leaf repos/notes starts from the files of LEAF (without .git) instead of the
 #      pack's template (B-109): the pack is copied to DIR/smoke-real-<time>/pack, LEAF becomes the copy's
 #      template, and every file of LEAF goes in the leaf's first commit. odin writes those files without the
@@ -56,9 +62,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/ygg-build-facts.sh"
 any_ygg=0
 dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/../../mimir" wall=90m dry=0 build=0 clip=0
-leaf="" implementer="" note=""
+leaf="" implementer="" note="" models=""
 odin="${YGG_ODIN:-$HERE/../../yggdrasil/odin}"
-usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL] [--brief-note FILE] [--any-ygg]" >&2; exit 2; }
+usage() { echo "usage: ygg-smoke-real.sh [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--odin DIR] [--wall TIME] [--clip] [--from-leaf LEAF] [--implementer AGENT:MODEL] [--models FILE] [--brief-note FILE] [--any-ygg]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -71,6 +77,7 @@ while [ $# -gt 0 ]; do
     --clip) clip=1; shift ;;
     --from-leaf) [ $# -ge 2 ] || usage; leaf="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
+    --models) [ $# -ge 2 ] || usage; models="$2"; shift 2 ;;
     --brief-note) [ $# -ge 2 ] || usage; note="$2"; shift 2 ;;
     --any-ygg) any_ygg=1; shift ;;
     *) usage ;;
@@ -87,10 +94,10 @@ if [ -n "$implementer" ]; then
   if [[ $implementer == *:* ]] && [[ $impl_model =~ ^[A-Za-z0-9._/:-]+$ ]]; then
     case "$impl_agent" in
       claude-code) ok=1 ;;
-      opencode) [[ $impl_model == openrouter/?* ]] && ok=1 ;;
+      opencode) { [[ $impl_model == openrouter/?* ]] || [[ $impl_model =~ ^local/[a-z0-9][a-z0-9._-]{0,63}$ ]]; } && ok=1 ;;
     esac
   fi
-  [ "$ok" = 1 ] || fail "--implementer is AGENT:MODEL, with AGENT claude-code or opencode; an opencode MODEL is openrouter/<model>, such as opencode:openrouter/qwen/qwen3.8-27b"
+  [ "$ok" = 1 ] || fail "--implementer is AGENT:MODEL, with AGENT claude-code or opencode; an opencode MODEL is openrouter/<model> or local/<name>, such as opencode:openrouter/qwen/qwen3.8-27b"
 fi
 
 export PATH="$dir/dc/node_modules/.bin:$PATH"
@@ -152,7 +159,26 @@ fi
 # The credentials file: its existence, and the two names. grep -c prints a count and nothing else; the file's
 # lines are never shown, stored or compared. A name needs one line, with something after the equals sign.
 [ -f "$envfile" ] || fail "the credentials file $envfile is missing"
-for name in CLAUDE_CODE_OAUTH_TOKEN OPENROUTER_API_KEY; do
+# The roles the config will have: the example's, with the implementer given. The names and the model list follow.
+roles_text="$(sed -n '/^roles:/,/^[^ ]/p' "$example" | grep -E '^  [a-z]+:' || true)"
+if [ -n "$implementer" ]; then
+  roles_text="$(printf '%s\n' "$roles_text" | grep -v '^  implementer:' || true)"$'\n'"  implementer: { agent: $impl_agent, model: $impl_model }"
+fi
+need_claude=0 need_router=0 need_local=0
+grep -q -E 'agent:[[:space:]]*claude-code' <<<"$roles_text" && need_claude=1
+grep -q -E 'model:[[:space:]]*openrouter/' <<<"$roles_text" && need_router=1
+grep -q -E 'model:[[:space:]]*local/' <<<"$roles_text" && need_local=1
+if [ "$need_local" -eq 1 ] && [ -z "$models" ]; then fail "a role is on a local model (opencode:local/<name>): --models FILE, the model list, is needed"; fi
+if [ "$need_local" -eq 0 ] && [ -n "$models" ]; then fail "--models goes with a role on a local model (opencode:local/<name>); no role is on one"; fi
+if [ -n "$models" ]; then
+  [ -f "$models" ] || fail "--models $models: no such file"
+  models="$(readlink -f -- "$models")"
+  [[ $models =~ ^[A-Za-z0-9._/@+-]+$ ]] || fail "--models '$models' has a character outside A-Za-z0-9._/@+- (no spaces); it goes into factory.yaml"
+fi
+names=()
+[ "$need_claude" -eq 0 ] || names+=(CLAUDE_CODE_OAUTH_TOKEN)
+[ "$need_router" -eq 0 ] || names+=(OPENROUTER_API_KEY)
+for name in ${names[@]+"${names[@]}"}; do
   n="$(grep -c -E "^(export[[:space:]]+)?${name}=[^[:space:]]" "$envfile" || true)"
   [ "$n" = 1 ] || fail "$envfile has $n line(s) that set $name with a value; it needs exactly 1"
 done
@@ -221,6 +247,11 @@ text="${text//@FOLDER@/$dir}"
 text="${text//@BIND@/$bind}"
 text="${text//@TASKS@/$grader_tasks}"
 text="${text//@SUITES@/$work/suites}"
+if [ "$need_router" -eq 0 ]; then
+  # No role is paid per token: the dollar caps stay out of the config.
+  text="$(sed -E '/^  per_(run|day):/ s/,[[:space:]]*usd:[[:space:]]*[0-9.]+//' <<<"$text")"
+fi
+if [ "$need_local" -eq 1 ]; then text+=$'\nmodels:\n'"  file: $models"; fi
 printf '%s\n' "$text" >"$work/factory.yaml"
 if grep -q '@[A-Z]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
 if [ -n "$implementer" ]; then
