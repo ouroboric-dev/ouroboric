@@ -23,14 +23,20 @@
 #                                             of the preset (llama-server cannot load a model whose template file is
 #                                             missing), then template NAME saves it, and setup stops, starts and loads
 #                                             again with the whole preset. Any other missing template file is refused
-#                                             before anything changes. Everything setup refuses is checked before the
+#                                             before anything changes, and so is making the template while a container
+#                                             other than the server is on the network (a run uses the server: it is
+#                                             never stopped under it). A failed template step says the server runs
+#                                             without the template. Everything setup refuses is checked before the
 #                                             GPU step: the price, the folders, the new list (ygg reads it), the model,
-#                                             the template, the download paths, and hf or uvx when a file is missing.
+#                                             the template, the download paths (gungnir's patterns: each part starts
+#                                             with a letter or digit), hf or uvx when a file is missing, and the network.
 #   ygg-models.sh [--models FILE] [--folder DIR] clean [--state] [--weights]
 #                                             decides first, then changes: while a container other than the server is
 #                                             on the network (a run still uses it), it refuses and names them, and
 #                                             touches nothing (the server keeps running); with --weights, a download
-#                                             path that is not plain is refused the same way. Then it stops and removes
+#                                             path that is not plain, or a symlinked <weights>/.cache or
+#                                             .cache/huggingface (it may be the operator's own Hugging Face cache, with
+#                                             its token), is refused the same way. Then it stops and removes
 #                                             the container, removes the network, then the image, each only when it is
 #                                             there, each saying what it did. --state also removes preset.ini and
 #                                             allowed from the state folder, and their temporary files, never the
@@ -398,10 +404,25 @@ do_template() {
   template_result=saved
 }
 
-# A path the list downloads: relative, plain, and it stays under the weights folder (no . or .. part).
-plain_rel() {
-  [[ "$1" =~ ^[A-Za-z0-9._+-][A-Za-z0-9._/+-]*$ ]] || return 1
-  case "/$1/" in */../* | */./* | *//*) return 1 ;; esac
+# A path the list downloads: relative, and each part starts with a letter or digit, so none is an option, . or ..
+# (gungnir's pattern; the script checks it too, so a ygg that let one through still cannot reach outside weights).
+plain_rel() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*(/[A-Za-z0-9][A-Za-z0-9._+-]*)*$ ]]; }
+
+# network_users: print the containers on the model network other than the server, one per line (nothing when the
+# network is absent). Reading only: it changes nothing.
+network_users() {
+  local users
+  exists network "$network" || return 0
+  users="$(pm container ls -a --filter "network=$network" --format '{{.Names}}')" || exit 2
+  printf '%s\n' "$users" | grep -v -x -F -e "$name" -e '' || true
+}
+# refuse_if_used WHAT: stop with exit 1, naming the containers, when another container is on the network. WHAT says
+# what was not done.
+refuse_if_used() {
+  local others
+  others="$(network_users)" || exit $?
+  [ -z "$others" ] ||
+    die "other containers are on the network $network, so $1: $(printf '%s\n' "$others" | tr '\n' ' ')- let their runs end, then run this again (scripts/ygg-clean.sh removes the leftover containers of runs that have ended)"
 }
 
 # read_sources FILE: fill src_model, src_repo, src_rev and src_path from `ygg models sources FILE`, each checked.
@@ -412,8 +433,8 @@ read_sources() {
   while read -r m repo rev path extra; do
     [ -n "$m" ] || continue
     [ -n "$path" ] && [ -z "$extra" ] || die "ygg models sources $1 printed a line that is not <model> <repo> <revision> <path>: $m $repo $rev $path $extra"
-    [[ "$repo" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "model $m: the download repo '$repo' is not <owner>/<name>"
-    [[ "$rev" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die "model $m: the download revision '$rev' is not plain"
+    [[ "$repo" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "model $m: the download repo '$repo' is not a plain <owner>/<name>"
+    [[ "$rev" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || die "model $m: the download revision '$rev' is not plain"
     plain_rel "$path" || die "model $m: the download file '$path' is not a plain path under the weights folder"
     src_model+=("$m") src_repo+=("$repo") src_rev+=("$rev") src_path+=("$path")
   done <<<"$out"
@@ -493,6 +514,8 @@ do_setup() {
     else die "a file of the list is missing, and neither hf nor uvx is on PATH to download it: install one (uv: https://docs.astral.sh/uv/; hf: pip install -U huggingface_hub)"
     fi
   fi
+  # Making the template stops and starts the server: never under a run that uses it.
+  [ -z "$tpl_make" ] || refuse_if_used "setup changed nothing (making the chat template stops and starts the server)"
 
   # 1. The GPU.
   rc=0
@@ -557,8 +580,10 @@ do_setup() {
   elif [ -z "$tpl_make" ]; then
     echo "template: already in place ($tpl_host)"
   else
-    do_template "$model" keep
+    ( do_template "$model" keep ) ||
+      die "the server runs without the chat template: Claude Code's later system messages fail; run setup again once the template step works (the error is above)"
     echo "template: saved $tpl_host"
+    refuse_if_used "the server was not restarted: it runs without the chat template, which Claude Code's later system messages need; run setup again"
     do_stop
     do_start skip
     echo "server: started again on $url, with the chat template"
@@ -569,17 +594,18 @@ do_setup() {
 
 # clean: the container, the network and the image; with --state and --weights, those files too.
 do_clean() {
-  local others tag f n i
+  local tag f n i
   read_server "$list"
   check_names
   # Decide first: a refusal changes nothing.
-  [ -z "$clean_weights" ] || read_sources "$list"
-  if exists network "$network"; then
-    others="$(pm container ls -a --filter "network=$network" --format '{{.Names}}')" || exit 2
-    others="$(printf '%s\n' "$others" | grep -v -x -F -e "$name" -e '' || true)"
-    [ -z "$others" ] ||
-      die "other containers are on the network $network, so nothing was removed (the server, the network and the image stay): $(printf '%s\n' "$others" | tr '\n' ' ')- let their runs end, then run clean again"
+  if [ -n "$clean_weights" ]; then
+    read_sources "$list"
+    # A symlinked cache may be the operator's own Hugging Face cache, with its token: never removed through a link.
+    for f in "$weights/.cache" "$weights/.cache/huggingface"; do
+      [ ! -L "$f" ] || die "$f is a symlink (it may be your own Hugging Face cache, with its token), so nothing was removed; remove the link yourself, then run clean again"
+    done
   fi
+  refuse_if_used "nothing was removed (the server, the network and the image stay)"
   do_stop
   if [ "$stop_result" = absent ]; then echo "container $name: not there"; else echo "container $name: removed"; fi
   if exists network "$network"; then

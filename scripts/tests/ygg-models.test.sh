@@ -551,6 +551,32 @@ PATH="$T/hfbin:$PATH" run bash "$M" --models "$NL" setup "${SETUP[@]}"
 check "setup: a running server with the template missing is stopped, started without it, then made and started with it" \
   eval '[ $rc = 0 ] && [ "$(steps)" = "gpu check list=absent|gpu setup list=absent|stop|run|load|props|stop|run|load|" ]'
 
+# a live run on the network: setup never stops or restarts the server under it
+sreset; touch "$SD/image" "$SD/network"; echo true >"$SD/internal"; up; mkdir -p "$W2/MTP"; touch "$W2/$GG" "$W2/$MTP"
+export FAKE_NET_USERS="run-live-sandbox"
+PATH="$T/hfbin:$PATH" run bash "$M" --models "$NL" setup "${SETUP[@]}"
+check "setup: with the template missing and a run on the network, it refuses naming the run, before anything changes" \
+  eval '[ $rc != 0 ] && has run-live-sandbox && has ygg-clean.sh && ! logged "stop" && ! logged "rm -f" && ! logged "run -d" && [ ! -e "$T/gpu.log" ] && [ ! -e "$T/cfg" ] && [ "$(cat "$SD/running")" = true ]'
+unset FAKE_NET_USERS
+sreset; mkdir -p "$W2/MTP"; touch "$W2/$GG" "$W2/$MTP" "$W2/chat-template.jinja"; touch "$SD/image" "$SD/network"; echo true >"$SD/internal"; up
+cp "$T/models.after.json" "$T/models.json"; export FAKE_NET_USERS="run-live-sandbox"
+PATH="$T/hfbin:$PATH" run bash "$M" --models "$NL" setup "${SETUP[@]}"
+check "setup: with everything in place, a run on the network does not stop setup, and nothing is stopped" \
+  eval '[ $rc = 0 ] && ! logged "stop" && has "server: already running"'
+unset FAKE_NET_USERS
+sreset; export FAKE_NO_PROPS=1
+PATH="$T/hfbin:$PATH" run bash "$M" --models "$NL" setup "${SETUP[@]}"
+check "setup: a template step that fails says the server runs without the chat template, and to run setup again" \
+  eval '[ $rc != 0 ] && has "runs without the chat template" && has "run setup again" && [ "$(grep -c "^run$" "$T/all.log")" = 1 ]'
+unset FAKE_NO_PROPS
+
+# a leading dash, or another character gungnir refuses, in a source
+for bad in "x -bad/r main a.gguf" "x o/-r main a.gguf" "x -o/r main a.gguf" "x o/r -main a.gguf" "x o/r main -a.gguf" "x o/r main d/-a.gguf" "x o/r refs/pr/1 a.gguf" "x o/r main .hidden"; do
+  sreset; echo "$bad" >"$T/sources.out"
+  PATH="$T/hfbin:$PATH" run bash "$M" --models "$NL" setup "${SETUP[@]}"
+  check "setup: the source line '$bad' is refused before anything changes" eval '[ $rc != 0 ] && [ ! -e "$T/dl.log" ] && [ ! -e "$T/gpu.log" ] && [ ! -e "$T/cfg" ]'
+done
+
 # the model to load
 sreset; printf '\n[a-model]\nmodel = /models/a.gguf\nctx-size = 1\n' >>"$T/preset.out"
 printf '{"data":[{"id":"a-model","status":{"value":"unloaded"}},{"id":"qwen3.8-27b","status":{"value":"unloaded"}}]}' >"$T/models.unloaded.json"
@@ -605,7 +631,18 @@ check "clean --weights: a source path that leaves the weights folder is refused 
 creset; export FAKE_NET_USERS="run-abc-sandbox run-def-sandbox"
 run bash "$M" --models "$NL" clean --state --weights
 check "clean: another container on the network is named, and nothing is touched: the server still runs, the network and the image stay" \
-  eval '[ $rc != 0 ] && has run-abc-sandbox && has run-def-sandbox && ! logged "stop" && ! logged "rm -f" && ! logged "network rm" && ! logged "image rm" && [ -e "$SD/container" ] && [ "$(cat "$SD/running")" = true ] && [ -e "$SD/network" ] && [ -e "$SD/image" ] && [ "$(ls -A "$ST" | wc -l)" = 5 ] && [ -f "$W2/$GG" ]'
+  eval '[ $rc != 0 ] && has run-abc-sandbox && has run-def-sandbox && has ygg-clean.sh && ! logged "stop" && ! logged "rm -f" && ! logged "network rm" && ! logged "image rm" && [ -e "$SD/container" ] && [ "$(cat "$SD/running")" = true ] && [ -e "$SD/network" ] && [ -e "$SD/image" ] && [ "$(ls -A "$ST" | wc -l)" = 5 ] && [ -f "$W2/$GG" ]'
+creset; rm -rf "${W2:?}/.cache"; mkdir -p "$T/hfhome/hub"; echo secret >"$T/hfhome/token"; ln -s "$T/hfhome" "$W2/.cache"
+run bash "$M" --models "$NL" clean --weights
+check "clean --weights: a symlinked .cache is refused before anything changes, and what it points to stays" \
+  eval '[ $rc != 0 ] && has "symlink" && [ -f "$T/hfhome/token" ] && [ -d "$T/hfhome/hub" ] && ! logged "stop" && [ -f "$W2/$GG" ]'
+creset; rm -rf "${W2:?}/.cache/huggingface"; ln -s "$T/hfhome" "$W2/.cache/huggingface"
+run bash "$M" --models "$NL" clean --weights
+check "clean --weights: a symlinked .cache/huggingface is refused before anything changes, and what it points to stays" \
+  eval '[ $rc != 0 ] && has "symlink" && [ -f "$T/hfhome/token" ] && ! logged "stop" && [ -f "$W2/$GG" ]'
+creset; rm -rf "${W2:?}/.cache/huggingface"; ln -s "$T/hfhome" "$W2/.cache/huggingface"
+run bash "$M" --models "$NL" clean
+check "clean without --weights: a symlinked .cache/huggingface does not matter" eval '[ $rc = 0 ] && [ -f "$T/hfhome/token" ]'
 creset; export FAKE_NET_USERS="ygg-models"
 run bash "$M" --models "$NL" clean
 check "clean: the server itself on the network does not stop the network's removal" eval '[ $rc = 0 ] && logged "network rm ygg-models"'
@@ -627,6 +664,8 @@ check "the example list holds the MTP, memory-safe and template keys, and every 
   eval 'grep -q "cache-ram: \"2048\"" "$EX" && grep -q "ctx-checkpoints: \"4\"" "$EX" && grep -q "spec-type: draft-mtp" "$EX" && grep -q "model-draft: /models/MTP/mtp-Qwen3.8-27B-Q4_0.gguf" "$EX" && grep -q "n-gpu-layers-draft: all" "$EX" && grep -q "cache-type-k-draft: q8_0" "$EX" && grep -q "cache-type-v-draft: q8_0" "$EX" && grep -q "^      chat-template-file: /models/chat-template.jinja" "$EX" && ! grep -E "^      [A-Za-z0-9_-]+:" "$EX" | grep -v -E "^      [a-z][a-z0-9-]*:"'
 check "the example list names the founder's files and where they come from" \
   eval 'grep -q "^    file: Qwen3.8-27B-UD-Q4_K_M.gguf" "$EX" && grep -q "^      repo: unsloth/Qwen3.8-27B-GGUF" "$EX" && grep -q -F "files: [Qwen3.8-27B-UD-Q4_K_M.gguf, MTP/mtp-Qwen3.8-27B-Q4_0.gguf]" "$EX"'
+check "the example header says to use setup, or to comment out chat-template-file until template has run" \
+  eval 'sed -n "1,8p" "$EX" | grep -q "setup" && sed -n "1,8p" "$EX" | grep -q "comment out" && sed -n "1,8p" "$EX" | grep -q "chat-template-file"'
 check "the example price is marked as an example" eval 'grep -E "^    price:" "$EX" | grep -q "example"'
 check "the header names setup and clean and their flags" \
   eval '(for w in "setup " "clean " --weights --state --price --model; do grep -q -F -- "$w" <(sed -n "2,60p" "$M") || exit 1; done)'

@@ -1,6 +1,8 @@
 # An example model list for scripts/ygg-models.sh and `ygg models`. `scripts/ygg-models.sh setup --price IN:OUT`
 # writes it to ~/.config/ygg/models.yaml with your folders and price; or copy it there and change the two folders
-# to absolute paths on your machine. Never commit your own list.
+# to absolute paths on your machine. Never commit your own list. When you copy it, comment out chat-template-file
+# below until `scripts/ygg-models.sh template NAME` has made the file: a model whose template file is missing does not
+# load (setup does this for you).
 # The engine is a Podman machine that sees host files only through the `sandbox.mounts` of factory.yaml, so both
 # folders must be under a folder of those mounts (for the founder's setup, under ~/ygg-it).
 server:
