@@ -34,6 +34,13 @@ if [ "$1" = "-l" ]; then printf 'Ubuntu\r\n%s\r\n' "$(cat "$FAKE_M/distro")" | s
 cmd="$8"
 echo "$2: $cmd" >>"$FAKE_LOG"
 case "$cmd" in
+  *"echo toolkit"*) # the in-distro probe: run it for real against the fake distro's files
+    [ -z "$FAKE_WSL_FAIL" ] || { echo "wsl: the distro does not start" >&2; exit 1; }
+    [ -z "$FAKE_WSL_EMPTY" ] || exit 0
+    probe="${cmd//\/etc\/cdi\/nvidia.yaml/$FAKE_M/spec}"
+    probe="${probe//command -v nvidia-ctk >\/dev\/null 2>&1/test -e $FAKE_M/toolkit}"
+    probe="${probe//\[ -d \"\$d\" \]/[ -d \"$FAKE_M/fs/\$(basename \"\$d\")\" ]}"
+    exec sh -c "$probe" ;;
   *"dnf install"*) touch "$FAKE_M/toolkit"; exit 0 ;;
   *"cdi generate"*) { echo "devices:"; for d in "$FAKE_M"/fs/*; do echo "  path: /usr/lib/wsl/drivers/$(basename "$d")/x.so"; done; } >"$FAKE_M/spec"; exit 0 ;;
   "command -v nvidia-ctk"*) [ -e "$FAKE_M/toolkit" ]; exit $? ;;
@@ -125,6 +132,36 @@ reset have-toolkit stale
 run "$S/ygg-gpu.sh" setup
 check "setup with a stale spec generates it again, without dnf" bash -c "[ $rc = 0 ] && ! grep -q 'dnf' '$FAKE_LOG' && grep -q 'cdi generate' '$FAKE_LOG' && grep -q 'gpu:' '$T/out'"
 check "and the new spec names no gone folder" bash -c "! grep -q gone_c '$M/spec'"
+
+# the engine is checked before any wsl.exe -d call (a wsl.exe -d boots a stopped distro)
+reset no-toolkit none
+FAKE_ENGINE_DOWN=1 run "$S/ygg-gpu.sh" setup
+check "setup with an engine that does not answer exits 2 and made no wsl.exe -d call" bash -c "[ $rc = 2 ] && grep -q 'engine socket' '$T/out' && [ ! -s '$FAKE_LOG' ]"
+reset have-toolkit current
+FAKE_ENGINE_DOWN=1 run "$S/ygg-gpu.sh" check
+check "check with an engine that does not answer made no wsl.exe -d call either" bash -c "[ $rc = 2 ] && [ ! -s '$FAKE_LOG' ]"
+
+# state: a transport failure is not a missing state
+reset have-toolkit current
+FAKE_WSL_FAIL=1 run "$S/ygg-gpu.sh" check
+check "check: a wsl.exe that fails is exit 2, not missing: toolkit" bash -c "[ $rc = 2 ] && ! grep -q 'missing' '$T/out'"
+reset have-toolkit current
+FAKE_WSL_FAIL=1 run "$S/ygg-gpu.sh" setup
+check "setup: a wsl.exe that fails is exit 2, and installs and generates nothing" bash -c "[ $rc = 2 ] && ! grep -q -e dnf -e 'cdi generate' '$FAKE_LOG'"
+reset have-toolkit current
+FAKE_WSL_EMPTY=1 run "$S/ygg-gpu.sh" check
+check "check: an empty answer from the probe is exit 2" bash -c "[ $rc = 2 ] && ! grep -q 'missing' '$T/out'"
+reset have-toolkit none
+printf 'devices:\n  path: /opt/other/x.so\n' >"$M/spec"
+run "$S/ygg-gpu.sh" check
+check "check: a spec that names no /usr/lib/wsl/drivers/ folder is stale" bash -c "[ $rc = 3 ] && grep -q -F 'missing: stale spec' '$T/out'"
+reset have-toolkit stale
+run "$S/ygg-gpu.sh" check --folder "$T/it2"
+check "the printed fix keeps --folder when one was given" bash -c "grep -q -F -- 'fix: ' '$T/out' && grep -F 'fix: ' '$T/out' | grep -q -F -- '--folder $T/it2'"
+reset have-toolkit stale
+run "$S/ygg-gpu.sh" check
+check "and the fix has no --folder when none was given" bash -c "grep -F 'fix: ' '$T/out' | grep -q -v -F -- '--folder'"
+check "the probe is one script: the state function interpolates nothing into sh -c" bash -c "! grep -E 'root \"(cat|test -d)' '$S/ygg-gpu.sh'"
 
 # --- refusals: nothing changes
 reset no-toolkit none
