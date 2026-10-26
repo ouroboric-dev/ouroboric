@@ -8,6 +8,11 @@ related: [2026-10-19-local-qwen-design.md, 2026-10-19-local-qwen-notes.md]
 
 # Run Qwen 3.8 27B locally and repeat the experiment
 
+> **To set up and run the local model server, follow the operations guide instead:**
+> [Local models](https://github.com/ouroboric-dev/yggdrasil/blob/main/docs/3-using/operations/local-models.md)
+> (`scripts/ygg-models.sh setup`). This page keeps the experiment: the measurements and the three-way
+> comparison.
+
 This guide sets up Qwen 3.8 27B on one NVIDIA RTX 4090 under WSL2. Then you use it from OpenCode and
 from Claude Code, and repeat the measurements and the three-way comparison in
 [the notes](2026-10-19-local-qwen-notes.md). Every command runs in zsh, from the root of the
