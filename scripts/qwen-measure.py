@@ -29,7 +29,7 @@ def post(path, body, timeout=1800):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.load(r)
     except (urllib.error.URLError, ConnectionError) as e:
-        sys.exit(f"the local model server does not answer on {URL} ({e}); start it with scripts/qwen-local.sh start")
+        sys.exit(f"the local model server does not answer on {URL} ({e}); start it with scripts/ygg-models.sh start")
 
 
 def ntokens(text):

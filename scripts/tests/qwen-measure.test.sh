@@ -72,6 +72,6 @@ check "growth: a pid that does not exist is an error" eval '[ $rc = 2 ] && has "
 
 QWEN_URL="http://127.0.0.1:1" run python3 -I "$M" speed --runs 1 "$T/prompt.txt"
 check "speed: a server that does not answer is a clear error, not a traceback" \
-  eval '[ $rc = 2 ] && has "qwen-local.sh start" && ! has Traceback'
+  eval '[ $rc = 2 ] && has "ygg-models.sh start" && ! has Traceback'
 
 exit $fail

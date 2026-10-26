@@ -7,7 +7,7 @@
 # Tools are approved without asking: OpenCode gets `run --auto`, and Claude Code gets acceptEdits with the
 # --allow Bash patterns (by default Go's: "Bash(go *)", "Bash(GOWORK=off go *)", "Bash(gofmt *)", plus
 # "Bash(git diff*)" and "Bash(git status*)"). The worktrees are throwaway, but the agents run on this host.
-# Start the server first (qwen-local.sh start) for the local runs. The hosted run uses the personal config
+# Start the server first (ygg-models.sh start) for the local runs. The hosted run uses the personal config
 # dir (QWEN_HOSTED_CONFIG_DIR, $HOME/.claude-personal) and MODEL (sonnet), so it uses that subscription.
 # DIR, which must be new or empty, gets for each run <name>.out and <name>.err (the tool's output),
 # <name>.patch (its diff, new files included) and <name>.server.log (the server log lines written during the

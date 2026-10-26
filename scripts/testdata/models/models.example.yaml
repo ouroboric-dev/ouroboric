@@ -1,0 +1,27 @@
+# An example model list for scripts/ygg-models.sh and `ygg models`. Copy it to ~/.config/ygg/models.yaml and
+# change the two folders to absolute paths on your machine. Never commit your own list.
+server:
+  name: ygg-models        # the container's name and its name on the network
+  network: ygg-models     # an internal podman network
+  port: 8089              # the gate's port on that network
+  host_port: 8088         # llama-server on 127.0.0.1 of the host
+  weights: /abs/path/to/weights   # mounted read-only at /models
+  state: /abs/path/to/state       # the preset and the allow file; mounted read-only at /etc/ygg-models
+models:
+  qwen3.8-27b:
+    file: model.gguf      # under weights
+    context: 102400       # the context size; becomes ctx-size in the preset
+    output: 32768         # the most output tokens OpenCode asks for
+    args:                 # llama-server preset keys, written as given
+      n-gpu-layers: "999"
+      flash-attn: "on"
+      cache-type-k: q8_0
+      cache-type-v: q8_0
+      parallel: "1"
+      jinja: "true"
+      temp: "1.0"
+      top-p: "0.95"
+      top-k: "20"
+      min-p: "0"
+      reasoning-effort: low
+    price: {input: 0.10, output: 0.40}   # example values: OpenRouter's price, dollars per million tokens
