@@ -41,7 +41,10 @@ EOF2
 # A fake ygg-models.sh (QWEN_MODELS_SH) stands in for the real one: `status` answers while $T/healthy exists.
 cat > "$T/ygg-models.sh" <<EOF2
 #!/usr/bin/env bash
+echo "\$*" > "$T/models.args"
+[ "\$1" != --models ] || shift 2
 [ "\$1" = status ] || exit 64
+[ ! -e "$T/engine-down" ] || { echo "ygg-engine: the engine socket is not there" >&2; exit 2; }
 [ -e "$T/healthy" ] || { echo "not running"; exit 3; }
 echo "running on http://127.0.0.1:8088, loaded: none"
 EOF2
@@ -80,6 +83,12 @@ check "init again keeps an existing .claude.json and the skills link" \
 run bash "$C" -p hi
 check "run with the server down: refuses with the start hint; claude does not run" \
   eval '[ $rc = 2 ] && has "ygg-models.sh start" && [ ! -e "$T/calls" ]'
+touch "$T/engine-down"; run bash "$C" -p hi
+check "engine check failed: its message is passed through, and it is not reported as 'not running'" \
+  eval '[ $rc = 2 ] && has "engine socket is not there" && ! has "ygg-models.sh start" && [ ! -e "$T/calls" ]'
+rm -f "$T/engine-down"
+QWEN_MODELS="$T/my models.yaml" run bash "$C" -p hi
+check "QWEN_MODELS is passed to ygg-models.sh as --models" eval 'grep -q -F -- "--models $T/my models.yaml status" "$T/models.args"'
 
 touch "$T/healthy"
 QWEN_CLAUDE_DIR="$HOME/.claude" run bash "$C" -p hi

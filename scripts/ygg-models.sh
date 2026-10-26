@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Start, stop and check the local model server: llama-server (router mode) and the model gate in one container, on
 # the factory's engine, with the GPU (yggdrasil docs/2-engineering/specs/2026-10-25-local-models.md, 3.4 and 3.10).
-#   ygg-models.sh [--models FILE] start       build the image if its tag is missing, create the internal network if it is
+#   ygg-models.sh [--models FILE] [--folder DIR] start       build the image if its tag is missing, create the internal network if it is
 #                                             absent, write the preset into the state folder, run the container, wait
 #                                             until the server answers
 #   ygg-models.sh [--models FILE] stop        stop and remove the container; the network and the image stay
 #   ygg-models.sh [--models FILE] status      print `running on http://127.0.0.1:<host_port>, loaded: <name|none>` and
 #                                             exit 0; print `not running` and exit 3 when the container is absent or stopped
 #   ygg-models.sh [--models FILE] load NAME   load the model and wait until it is loaded
+# DIR (default $HOME/ygg-it) holds factory.yaml, which names the engine (sandbox.engine): it is passed to ygg-engine.sh
+# and ygg-gpu.sh as --folder, and `ygg models build` reads DIR/factory.yaml.
 # FILE is the operator's model list (default ${XDG_CONFIG_HOME:-$HOME/.config}/ygg/models.yaml; an example is
 # scripts/testdata/models/models.example.yaml). This script never parses it: `ygg models server FILE` prints the
 # server's six lines NAME=, NETWORK=, PORT=, HOST_PORT=, WEIGHTS=, STATE= (read as data, never evaluated), and
@@ -33,10 +35,17 @@ start_timeout="${YGG_MODELS_START_TIMEOUT:-120}"
 load_timeout="${YGG_MODELS_TIMEOUT:-300}"
 poll="${YGG_MODELS_POLL:-1}"
 
-usage() { echo "usage: ygg-models.sh [--models FILE] start|stop|status|load NAME" >&2; exit 2; }
+usage() { echo "usage: ygg-models.sh [--models FILE] [--folder DIR] start|stop|status|load NAME" >&2; exit 2; }
 die() { echo "ygg-models: $*" >&2; exit 1; }
 list="${XDG_CONFIG_HOME:-$HOME/.config}/ygg/models.yaml"
-if [ "${1:-}" = --models ]; then list="${2:?--models needs a file}"; shift 2; fi
+dir="$HOME/ygg-it"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --models) [ $# -ge 2 ] || usage; list="$2"; shift 2 ;;
+    --folder) [ $# -ge 2 ] || usage; dir="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
 [ $# -ge 1 ] || usage
 cmd="$1"; shift
 case "$cmd" in
@@ -63,19 +72,25 @@ for v in name network port host_port weights state; do
 done
 url="http://127.0.0.1:$host_port"
 
-pm() { "$engine_sh" run -- podman "$@"; }
+pm() { "$engine_sh" run --folder "$dir" -- podman "$@"; }
 
-# container_state: print absent, stopped or running. An engine that does not answer ends the script with exit 2.
+# container_state: print absent, stopped or running. The name is matched exactly: podman also resolves a name as the
+# prefix of a container ID, so a name such as `cafe` could otherwise reach another container. An engine that does not
+# answer ends the script with exit 2.
 container_state() {
-  local rc=0 running
-  pm container exists "$name" >/dev/null || rc=$?
-  case "$rc" in
-    0) ;;
-    1) echo absent; return 0 ;;
-    *) exit 2 ;;
-  esac
-  running="$(pm inspect -f '{{.State.Running}}' "$name")" || exit 2
+  local names running
+  names="$(pm container ls -a --filter "name=^$name\$" --format '{{.Names}}')" || exit 2
+  printf '%s\n' "$names" | grep -qx -F -- "$name" || { echo absent; return 0; }
+  running="$(pm container inspect -f '{{.State.Running}}' "$name")" || exit 2
   if [ "$running" = true ]; then echo running; else echo stopped; fi
+}
+
+# exists KIND REF: exit 0 when `podman KIND exists REF` says so, 1 when it says no; any other answer is an engine
+# error, and ends the script with exit 2 (it is not a reason to build or create).
+exists() {
+  local rc=0
+  pm "$1" exists "$2" >/dev/null || rc=$?
+  case "$rc" in 0 | 1) return "$rc" ;; *) echo "ygg-models: podman $1 exists $2 failed (exit $rc)" >&2; exit 2 ;; esac
 }
 
 # http METHOD PATH [BODY]: sets code and body (the answer's text). A server that does not answer sets code to 000.
@@ -142,8 +157,9 @@ case "$cmd" in
       case "$st" in
         absent) die "model $model: the model server does not list it" ;;
         loaded) echo "loaded $model"; exit 0 ;;
-        failed*) die "model $model: the load failed, exit_code ${st#failed }" ;;
       esac
+      # The router keeps `failed: true` until a new load attempt, so a model that is not loaded is asked to load
+      # (as odin's Ready does); a failure counts only after that.
       if [ -z "$sent" ]; then
         http POST /models/load "$(python3 -I -c 'import json,sys; print(json.dumps({"model": sys.argv[1]}, separators=(",", ":")))' "$model")"
         case "$code" in
@@ -152,24 +168,34 @@ case "$cmd" in
           *) die "model $model: the load request answered $code: $body" ;;
         esac
         sent=1
+        sleep "$poll"
+        continue
       fi
+      case "$st" in failed*) die "model $model: the load failed, exit_code ${st#failed }" ;; esac
       [ "$SECONDS" -lt "$deadline" ] || die "model $model: not loaded within ${load_timeout}s (status $st, wanted loaded)"
       sleep "$poll"
     done
     ;;
   start)
+    # Names go to podman as they are: a network such as host would ignore -p, and a name that starts with - is a flag.
+    for v in "$name" "$network"; do
+      [[ "$v" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || die "the name '$v' in $list is not a plain container or network name"
+    done
+    case "$network" in
+      host | none | bridge | pasta | private | slirp4netns) die "the network '$network' in $list is a reserved podman network, not an internal one; name your own" ;;
+    esac
     [ -d "$weights" ] || die "the weights folder $weights does not exist (weights in $list); put the model files there"
     tag="$("$ygg" models image)" || exit 1
     preset="$("$ygg" models preset "$list")" || exit 1
     # The GPU: the engine resolves the CDI device before the container exists.
     rc=0
-    gpu_out="$("$gpu_sh" check 2>&1)" || rc=$?
+    gpu_out="$("$gpu_sh" check --folder "$dir" 2>&1)" || rc=$?
     case "$rc" in
-      0) ;;
+      0) printf '%s\n' "$gpu_out" | tail -n 1 ;;
       3)
-        if printf '%s\n' "$gpu_out" | grep -q 'stale spec'; then
+        if printf '%s\n' "$gpu_out" | grep -qx 'missing: stale spec'; then
           echo "ygg-models: the CDI spec is stale; setting it up again"
-          "$gpu_sh" setup || die "scripts/ygg-gpu.sh setup failed"
+          "$gpu_sh" setup --folder "$dir" || die "scripts/ygg-gpu.sh setup failed"
         else
           printf '%s\n' "$gpu_out" >&2
           die "the GPU is not ready for the engine; run scripts/ygg-gpu.sh setup"
@@ -181,11 +207,11 @@ case "$cmd" in
       running) echo "already running on $url"; exit 0 ;;
       stopped) pm rm -f "$name" >/dev/null ;;
     esac
-    if ! pm image exists "$tag" >/dev/null 2>&1; then
+    if ! exists image "$tag"; then
       echo "ygg-models: building the image $tag (the first build takes a long time: CUDA)"
-      "$engine_sh" run -- "$ygg" models build || die "ygg models build failed"
+      "$engine_sh" run --folder "$dir" -- "$ygg" models build --config "$dir/factory.yaml" || die "ygg models build failed"
     fi
-    if pm network exists "$network" >/dev/null 2>&1; then
+    if exists network "$network"; then
       [ "$(pm network inspect -f '{{.Internal}}' "$network")" = true ] ||
         die "the network $network exists but is not internal; remove it (podman network rm $network) or name another in $list"
     else
@@ -195,6 +221,7 @@ case "$cmd" in
     printf '%s\n' "$preset" >"$state/preset.ini.tmp"
     mv -f "$state/preset.ini.tmp" "$state/preset.ini"
     rc=0
+    # ,Z relabels the mounts for SELinux, as the sandbox driver does for its own read-only mounts.
     out="$(pm run -d --name "$name" --network "$network" --device nvidia.com/gpu=all \
       -v "$weights:/models:ro,Z" -v "$state:/etc/ygg-models:ro,Z" \
       -p "127.0.0.1:$host_port:8080" -e "YGG_MODELGATE_PORT=$port" "$tag" 2>&1)" || rc=$?

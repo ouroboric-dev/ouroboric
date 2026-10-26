@@ -78,7 +78,7 @@ def rss_gb(pid):
 
 def growth(a):
     if not os.path.exists(f"/proc/{a.pid}/status"):
-        print(f"no process {a.pid}; pass the pid of llama-server ($QWEN_HOME/run/server.pid)", file=sys.stderr)
+        print(f"no process {a.pid}; pass the host pid of a llama-server process; the ygg-models.sh container's process has a pid the host shows only in its own process list", file=sys.stderr)
         sys.exit(2)
     src = open(a.source_file).read()
     msgs = []

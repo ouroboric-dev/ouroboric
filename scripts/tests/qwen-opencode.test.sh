@@ -31,7 +31,10 @@ EOF2
 # A fake ygg-models.sh (QWEN_MODELS_SH) stands in for the real one: `status` answers while $T/healthy exists.
 cat > "$T/ygg-models.sh" <<EOF2
 #!/usr/bin/env bash
+echo "\$*" > "$T/models.args"
+[ "\$1" != --models ] || shift 2
 [ "\$1" = status ] || exit 64
+[ ! -e "$T/engine-down" ] || { echo "ygg-engine: the engine socket is not there" >&2; exit 2; }
 [ -e "$T/healthy" ] || { echo "not running"; exit 3; }
 echo "running on http://127.0.0.1:9000, loaded: none"
 EOF2
@@ -43,6 +46,12 @@ O="$S/qwen-opencode.sh"
 run bash "$O" run hi
 check "server down: refuses with the start hint, and opencode does not run" \
   eval '[ $rc = 2 ] && has "ygg-models.sh start" && [ ! -e "$T/args" ]'
+touch "$T/engine-down"; run bash "$O" run hi
+check "engine check failed: its message is passed through, and it is not reported as 'not running'" \
+  eval '[ $rc = 2 ] && has "engine socket is not there" && ! has "ygg-models.sh start" && [ ! -e "$T/args" ]'
+rm -f "$T/engine-down"
+QWEN_MODELS="$T/my models.yaml" run bash "$O" run hi
+check "QWEN_MODELS is passed to ygg-models.sh as --models" eval 'grep -q -F -- "--models $T/my models.yaml status" "$T/models.args"'
 
 touch "$T/healthy"; export QWEN_CTX=65536
 ANTHROPIC_API_KEY=a CLAUDE_CODE_OAUTH_TOKEN=b OPENROUTER_API_KEY=c run bash "$O" run "hi there"

@@ -68,22 +68,18 @@ outside every repo.
    ln -sfn MTP/mtp-Qwen3.8-27B-Q4_0.gguf mtp.gguf
    ```
 
-1. Start the server: `scripts/qwen-local.sh start`. It is ready in about 25 seconds. To see the
-   flags, run `scripts/qwen-local.sh cmd`.
-1. Save the fixed chat template, then restart, so Claude Code works:
-
-   ```zsh
-   scripts/qwen-local.sh template
-   scripts/qwen-local.sh stop && scripts/qwen-local.sh start
-   ```
-
+1. Write your model list from `scripts/testdata/models/models.example.yaml` to
+   `~/.config/ygg/models.yaml` (the weights folder holds `model.gguf`), then start the server:
+   `scripts/ygg-models.sh start`. It builds the image on the first start, which takes long. The flags are
+   the list's `args`; the preset `ygg models preset` prints shows them.
 1. Set up the local Claude Code config dir, `~/.claude-qwen`: `scripts/qwen-claude.sh init`. It
    installs the personal setup's three plugins and links its skills. It never touches `~/.claude` or
    `~/.claude-personal`.
 
-The server's settings come from environment variables: `QWEN_CTX` (102400), `QWEN_EFFORT` (`low`,
-`medium`, `xhigh` or `off`), `QWEN_MTP_ARGS` (empty turns MTP off), `QWEN_CACHE_RAM` (2048) and
-`QWEN_CTX_CHECKPOINTS` (4). The comment block at the top of `scripts/qwen-local.sh` explains each one.
+The server's settings are the model list's `context` and `args` (reasoning effort, cache and checkpoint
+keys). The launchers read `QWEN_CTX` (102400; keep it equal to `context`), `QWEN_ALIAS` (the list's model
+name) and `QWEN_MODELS` (the list file, when it is not the default). The comment block at the top of
+`scripts/ygg-models.sh` explains the commands.
 
 ## Use it
 
@@ -92,8 +88,8 @@ The server's settings come from environment variables: `QWEN_CTX` (102400), `QWE
   approval that it cannot get.
 - **Claude Code:** `scripts/qwen-claude.sh` opens the interactive session, and
   `scripts/qwen-claude.sh -p "..."` runs one prompt headless. It asks before it acts. Claude Code's own
-  effort setting has no effect here; restart the server with another `QWEN_EFFORT` instead.
-- **Status and stop:** `scripts/qwen-local.sh status` and `scripts/qwen-local.sh stop`.
+  effort setting has no effect here; change `reasoning-effort` in the list and restart the server instead.
+- **Status and stop:** `scripts/ygg-models.sh status` and `scripts/ygg-models.sh stop`.
 
 Both launchers send model calls only to the local server, and remove `ANTHROPIC_API_KEY`,
 `CLAUDE_CODE_OAUTH_TOKEN` and `OPENROUTER_API_KEY` from the session. `qwen-claude.sh` also removes the
@@ -110,8 +106,7 @@ Start the server, then run these commands. The figures in each answer come from 
    python3 -I scripts/qwen-measure.py speed --runs 3 --max-tokens 512 /tmp/short.txt
    ```
 
-   To measure without MTP, restart with `QWEN_MTP_ARGS="" scripts/qwen-local.sh start` and run it
-   again.
+   To measure without MTP, remove its keys from the list's `args`, restart and run it again.
 
 1. Speed with about 95K tokens of context:
 
@@ -121,16 +116,16 @@ Start the server, then run these commands. The figures in each answer come from 
    python3 -I scripts/qwen-measure.py speed --runs 1 --max-tokens 256 /tmp/long.txt
    ```
 
-1. Reasoning effort: restart with `QWEN_EFFORT=low`, `medium` and `xhigh` in turn, and run
+1. Reasoning effort: set `reasoning-effort` to `low`, `medium` and `xhigh` in the list in turn, restarting each time, and run
    `speed --runs 1 --max-tokens 20000 /tmp/short.txt` each time.
 1. The server's memory over a growing conversation:
 
    ```zsh
-   python3 -I scripts/qwen-measure.py growth --turns 20 --pid "$(cat ~/.local/share/qwen-local/run/server.pid)" /tmp/long.txt
+   python3 -I scripts/qwen-measure.py growth --turns 20 --pid "$(pgrep -o llama-server)" /tmp/long.txt
    ```
 
-   To see the problem the defaults fix, restart with `QWEN_CTX_CHECKPOINTS=32 QWEN_CACHE_RAM=8192`
-   and run it again.
+   To see the problem the defaults fix, set `ctx-checkpoints` to 32 and `cache-ram` to 8192 in the
+   list's `args`, restart and run it again.
 
 ## Repeat the comparison
 
@@ -138,7 +133,7 @@ The comparison runs one task three times. Each run gets a throwaway worktree of 
 the same prompt. Tools are approved without asking, so use a task you trust the agents with.
 
 ```zsh
-scripts/qwen-local.sh start
+scripts/ygg-models.sh start
 scripts/qwen-compare.sh --repo ../yggdrasil/odin --commit bc973e3 \
   --prompt docs/5-research/2026-10-19-local-qwen-comparison/prompt.txt --out /tmp/qwen-compare-b071
 ```
@@ -173,11 +168,11 @@ provider's `baseURL` to `http://127.0.0.1:8099/v1`, and pass `--standalone`.
 - **Every Claude Code request fails with HTTP 500, "System message must be at the beginning".** The
   fixed chat template is missing. Run the template step in [Set up the server](#set-up-the-server).
 - **The server disappears in a long session, and `dmesg` shows `Out of memory: Killed process
-  (llama-server)`.** WSL ran out of system RAM. Keep `QWEN_CACHE_RAM` and `QWEN_CTX_CHECKPOINTS` low,
+  (llama-server)`.** WSL ran out of system RAM. Keep `cache-ram` and `ctx-checkpoints` low in the list's `args`,
   or raise `memory=` in `C:\Users\<you>\.wslconfig`. Run `wsl --shutdown` from Windows to apply it; this
   closes every WSL session.
 - **OpenCode ignores a changed config.** A background `opencode serve --service` from an earlier
   session holds the old one. `scripts/qwen-opencode.sh` avoids it with `--standalone`. To stop the
   service, run `opencode service stop`.
-- **`start` says the port already answers.** Another program uses port 8088. Stop it, or set
-  `QWEN_PORT`.
+- **`start` fails to publish the port.** Another program uses `host_port` (8088). Stop it, or change
+  `host_port` in the list.

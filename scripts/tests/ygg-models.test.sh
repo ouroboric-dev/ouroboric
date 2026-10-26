@@ -25,6 +25,8 @@ run() {
 has() { grep -q -F -- "$1" "$T/out"; }
 logged() { grep -q -F -- "$1" "$T/podman.log" 2>/dev/null; }
 count() { grep -c -F -- "$1" "$T/podman.log" 2>/dev/null || true; }
+# arg_pair FLAG VALUE: the run call has FLAG and then VALUE as two whole arguments (one per line in podman.args)
+arg_pair() { awk -v f="$1" -v v="$2" 'prev == f && $0 == v { ok = 1 } { prev = $0 } END { exit !ok }' "$T/podman.args"; }
 runline() { grep '^run ' "$T/podman.log" | head -n 1; }
 
 W="$T/weights dir"     # a path with a space: the lines of `ygg models server` are data
@@ -61,13 +63,17 @@ cat >"$T/fakes/podman" <<'FAKE'
 #!/bin/bash
 st="$FAKE_T/st"
 echo "$*" >>"$FAKE_T/podman.log"
+{ printf '%s\n' "$@"; echo ---; } >>"$FAKE_T/podman.args"   # one argument per line
 case "$1 $2" in
-  "container exists") [ -e "$st/container" ] ;;
-  "image exists") [ -e "$st/image" ] ;;
+  "container ls")  # --filter name=^NAME$ matches the name exactly; FAKE_ID_CLASH lists another container's name
+    [ -e "$st/container" ] && echo ygg-models
+    [ -z "$FAKE_ID_CLASH" ] || echo "$FAKE_ID_CLASH"
+    exit 0 ;;
+  "image exists") [ -z "$FAKE_IMAGE_ERR" ] || exit 125; [ -e "$st/image" ] ;;
   "network exists") [ -e "$st/network" ] ;;
   "network inspect") cat "$st/internal" ;;
   "network create") touch "$st/network"; echo true >"$st/internal" ;;
-  "inspect -f") cat "$st/running" ;;
+  "container inspect") cat "$st/running" ;;
   "logs --tail") echo "fake log: unknown key 'bogus' in the preset" ;;
   "rm -f") rm -f "$st/container" "$st/running" "$st/up" ;;
   "stop "*) echo false >"$st/running"; rm -f "$st/up" ;;
@@ -116,8 +122,8 @@ export YGG_MODELS_POLL=0.1 YGG_MODELS_TIMEOUT=2
 LIST="$T/models.yaml"; : >"$LIST"
 
 reset() { # a clean engine, and a list that names $W
-  rm -rf "${SD:?}" "${ST:?}" "${T:?}"/*.log "${T:?}/gpu.state" "${T:?}/load.code" "${T:?}/load.body"; mkdir -p "$SD" "$W"
-  unset FAKE_RUN_EXITS FAKE_ENGINE_DOWN
+  rm -rf "${SD:?}" "${ST:?}" "${T:?}"/*.log "${T:?}"/podman.args "${T:?}/gpu.state" "${T:?}/load.code" "${T:?}/load.body"; mkdir -p "$SD" "$W"
+  unset FAKE_RUN_EXITS FAKE_ENGINE_DOWN FAKE_ID_CLASH FAKE_IMAGE_ERR
   printf 'NAME=ygg-models\nNETWORK=ygg-models\nPORT=8089\nHOST_PORT=8088\nWEIGHTS=%s\nSTATE=%s\n' "$W" "$ST" >"$T/server.out"
   printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"unloaded","preset":"version = 1\n[qwen]\nmodel = x"}}]}' >"$T/models.json"
   printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"loaded","preset":"version = 1\n[qwen]\nmodel = x"}}]}' >"$T/models.after.json"
@@ -130,8 +136,8 @@ run bash "$M" --models "$LIST" start
 check "start: exits 0 and says where the server is" eval '[ $rc = 0 ] && has "http://127.0.0.1:8088"'
 check "start: podman run gets the GPU, the name, the internal network, and detaches" \
   eval 'runline | grep -q -F -- "--device nvidia.com/gpu=all" && runline | grep -q -F -- "--name ygg-models" && runline | grep -q -F -- "--network ygg-models" && runline | grep -q -F -- " -d "'
-check "start: both mounts are read-only, and the weights path keeps its space" \
-  eval 'runline | grep -q -F -- "-v $W:/models:ro,Z" && runline | grep -q -F -- "-v $ST:/etc/ygg-models:ro,Z"'
+check "start: both mounts are read-only, and the weights path keeps its space as one argument" \
+  eval 'arg_pair -v "$W:/models:ro,Z" && arg_pair -v "$ST:/etc/ygg-models:ro,Z" && arg_pair -p 127.0.0.1:8088:8080 && arg_pair -e YGG_MODELGATE_PORT=8089'
 check "start: the only published port is 127.0.0.1:<host_port>:8080" \
   eval '[ "$(runline | grep -o -- "-p [^ ]*")" = "-p 127.0.0.1:8088:8080" ] && ! runline | grep -q -E -- "--publish|-P "'
 check "start: the gate learns its port from the environment" eval 'runline | grep -q -F -- "-e YGG_MODELGATE_PORT=8089"'
@@ -141,7 +147,7 @@ check "start: it reads the list with ygg models server and models preset, from t
   eval 'grep -q -F "ygg models server $LIST" "$T/ygg.log" && grep -q -F "ygg models preset $LIST" "$T/ygg.log"'
 check "start: every podman call goes through ygg-engine.sh run" \
   eval '[ "$(grep -c -- "-- podman" "$T/engine.log")" = "$(wc -l <"$T/podman.log")" ]'
-check "start: it checks the GPU first" eval '[ "$(head -n 1 "$T/gpu.log")" = "gpu check" ]'
+check "start: it checks the GPU first" eval '[ "$(head -n 1 "$T/gpu.log")" = "gpu check --folder $HOME/ygg-it" ]'
 check "start: the image existed, so it was not built" eval '! grep -q "models build" "$T/ygg.log"'
 check "start: the image is looked up by the tag ygg models image prints" eval 'logged "image exists ygg-models:abc123"'
 check "start: it creates the network, internal, when it is absent" eval 'logged "network create --internal ygg-models"'
@@ -205,6 +211,48 @@ XDG_CONFIG_HOME="$T/xdg" run bash "$M" start
 check "XDG_CONFIG_HOME moves the default list" \
   eval '[ $rc = 0 ] && grep -q -F "ygg models server $T/xdg/ygg/models.yaml" "$T/ygg.log"'
 
+# the folder: factory.yaml names the engine; ygg models build needs it, and so do the engine and GPU scripts
+reset
+run bash "$M" --models "$LIST" --folder "$T/fdir" start
+check "start --folder DIR: DIR goes to ygg-engine.sh, ygg-gpu.sh and ygg models build --config DIR/factory.yaml" \
+  eval '[ $rc = 0 ] && ! grep -v -F -e "--folder $T/fdir" "$T/engine.log" && grep -q -F -- "--folder $T/fdir" "$T/gpu.log" && grep -q -F "models build --config $T/fdir/factory.yaml" "$T/engine.log"'
+reset
+run bash "$M" --models "$LIST" start
+check "start without --folder: the folder defaults to ~/ygg-it, in the build too" \
+  eval 'grep -q -F "models build --config $HOME/ygg-it/factory.yaml" "$T/engine.log" && grep -q -F -- "--folder $HOME/ygg-it" "$T/engine.log"'
+run bash "$M" --models
+check "--models with no file is a usage error" eval '[ $rc = 2 ] && has usage'
+run bash "$M" --folder
+check "--folder with no folder is a usage error" eval '[ $rc = 2 ] && has usage'
+
+# reserved and odd names are refused before any call
+for n in host none bridge pasta private slirp4netns ns:/proc/1/ns/net container:abc pasta:-T,80 slirp4netns:cidr=10.0.0.0/24; do
+  reset; sed -i "s|^NETWORK=.*|NETWORK=$n|" "$T/server.out"
+  run bash "$M" --models "$LIST" start
+  check "start: the network '$n' is refused before any engine call" eval '[ $rc != 0 ] && has "$n" && [ ! -e "$T/podman.log" ] && [ ! -e "$T/engine.log" ] && [ ! -e "$T/gpu.log" ]'
+done
+reset; sed -i "s|^NAME=.*|NAME=-rf|" "$T/server.out"
+run bash "$M" --models "$LIST" start
+check "start: a name that starts with a dash is refused before any engine call" eval '[ $rc != 0 ] && [ ! -e "$T/engine.log" ]'
+
+# exact names
+reset; touch "$SD/image"; export FAKE_ID_CLASH=other
+run bash "$M" --models "$LIST" start
+check "start: the name is matched exactly: another container in the listing is not ours" \
+  eval '[ $rc = 0 ] && logged "run -d" && ! logged "rm -f"' 
+unset FAKE_ID_CLASH
+reset; export FAKE_ID_CLASH=cafe0123
+run bash "$M" --models "$LIST" status
+check "status: a listing with only another name means absent (exit 3)" eval '[ $rc = 3 ]'
+unset FAKE_ID_CLASH
+check "container lookups are by exact name filter and container inspect (not a bare inspect)" \
+  eval 'logged "container ls -a --filter name=^ygg-models\$ --format {{.Names}}" && ! grep -q "^inspect" "$T/podman.log"'
+reset; touch "$SD/image"; export FAKE_IMAGE_ERR=1
+run bash "$M" --models "$LIST" start
+check "start: an engine error from image exists is an error, not a build" \
+  eval '[ $rc = 2 ] && ! grep -q "models build" "$T/ygg.log" 2>/dev/null && [ "$(count "run -d")" = 0 ]'
+unset FAKE_IMAGE_ERR
+
 # --- status
 reset
 run bash "$M" --models "$LIST" status
@@ -254,6 +302,13 @@ printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"unloaded","failed":true,
 run bash "$M" --models "$LIST" load qwen3.8-27b
 check "load: a load that failed says the exit code" eval '[ $rc != 0 ] && has "exit_code 1"'
 
+# a failed load can be asked again: the router keeps failed: true until a new attempt
+reset; up
+printf '{"data":[{"id":"qwen3.8-27b","status":{"value":"unloaded","failed":true,"exit_code":1}}]}' >"$T/models.json"
+run bash "$M" --models "$LIST" load qwen3.8-27b
+check "load: a model whose last load failed is posted again, and the retry succeeds" \
+  eval '[ $rc = 0 ] && grep -q "POST .*/models/load" "$T/curl.log" && has "loaded qwen3.8-27b"'
+
 # --- stop
 reset; touch "$SD/network" "$SD/image"; up
 run bash "$M" --models "$LIST" stop
@@ -272,6 +327,6 @@ check "the script never sets CONTAINER_HOST, and never evals or sources the line
   eval '! grep -v "^[[:space:]]*#" "$M" | grep -E "CONTAINER_HOST|\beval\b|^[[:space:]]*(source|\.)[[:space:]]"'
 EX="$S/testdata/models/models.example.yaml"
 check "the example list exists, and names no local path or operator" \
-  eval '[ -f "$EX" ] && ! grep -E "/home/|/Users/|/mnt/|brunogbv|valerio" "$EX" && grep -q "weights: /abs/" "$EX" && grep -q "state: /abs/" "$EX"'
+  eval '[ -f "$EX" ] && ! grep -E "/home/|/Users/|/mnt/|/root/" "$EX" && ! grep -w -F -e "$(id -un)" -e "$(basename "$HOME")" "$EX" && grep -q "weights: /abs/" "$EX" && grep -q "state: /abs/" "$EX"'
 hermetic_done
 exit $fail
