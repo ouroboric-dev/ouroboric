@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run OpenCode against the local Qwen 3.8 27B server, and nothing else
-# (docs/5-research/2026-10-19-local-qwen-design.md). Start the server first: qwen-local.sh start.
+# (docs/5-research/2026-10-19-local-qwen-design.md). Start the server first: ygg-models.sh start.
 #   qwen-opencode.sh [OPENCODE ARGS...]     for example: qwen-opencode.sh, or qwen-opencode.sh run "..."
 # The configuration goes in through OPENCODE_CONFIG_CONTENT, with the running server's port and
 # context. Only the local provider is enabled, and the cloud credentials of the caller's shell are

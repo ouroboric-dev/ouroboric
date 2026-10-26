@@ -255,6 +255,53 @@ done
 runq proof --name ok --reviewer-reasoning extreme;    check "a reasoning outside low, medium, high and off is refused" refuses "--reviewer-reasoning"
 runq proof --name ok --reviewer-reasoning 'low }';    check "a reasoning with YAML characters is refused" refuses "--reviewer-reasoning"
 
+# --- local-models LM-T13: opencode:local/<name> with --models FILE
+printf 'models: []\n' >"$T/models.yaml"; : >"$T/env-none"
+LR=(--planner claude-code:sonnet --implementer claude-code:sonnet --reviewer opencode:local/qwen3.8-27b)
+run proof --name local --dry-run --env "$T/env-claude" --models "$T/models.yaml" "${LR[@]}"
+P="$(made)"
+check "a local reviewer with --models: exit 0" test "$rc" -eq 0
+check "the config has the local reviewer, with no reasoning" grep -q -x '  reviewer: { agent: opencode, model: local/qwen3.8-27b }' "$P/factory.yaml"
+check "the config has models.file" grep -q -x "  file: $T/models.yaml" "$P/factory.yaml"
+check "the models section is the file's last" bash -c 'tail -n 2 "$1" | head -n 1 | grep -q -x "models:"' _ "$P/factory.yaml"
+check "no usd line when the other roles are claude-code" bash -c '! grep -q "usd:" "$1"' _ "$P/factory.yaml"
+check "no reasoning in the roles" bash -c '! grep -q "^  [a-z]*: {.*reasoning" "$1"' _ "$P/factory.yaml"
+check "it does not ask for OPENROUTER_API_KEY" hasnt OPENROUTER_API_KEY
+check "it says the reasoning is left out" has "the reviewer is a local model, so its reasoning is left out"
+check "the plan says no reasoning" has "reviewer opencode:local/qwen3.8-27b (no reasoning: a local model sets none)"
+check "ygg doctor ran on it" grep -q -- "^doctor --project .*/project --config $P/factory.yaml\$" "$T/ygg.calls"
+check "proof.meta keeps the local reviewer" grep -q '^reviewer opencode:local/qwen3.8-27b$' "$P/proof.meta"
+runq proof --name local --dry-run --env "$T/env-claude" "${LR[@]}"
+check "a local role without --models is refused" refuses "--models FILE"
+runq proof --name local --dry-run --env "$T/env-claude" --models "$T/nope.yaml" "${LR[@]}"
+check "a models file that is missing is refused" refuses "no such file"
+runq proof --name local --dry-run --env "$T/env-claude" --models "$T/models.yaml" "${AC[@]}"
+check "--models with no local role is refused" refuses "no role is on one"
+runq proof --name local --dry-run --env "$T/env-claude" --models "$T/models.yaml" --planner claude-code:sonnet --implementer claude-code:sonnet --reviewer opencode:local/Bad
+check "a bad local name is refused" refuses "local/<name>"
+rm -rf "$D"/proof-*
+(cd "$T" && run proof --name localrel --dry-run --env "$T/env-claude" --models models.yaml "${LR[@]}")
+check "a relative --models path is made absolute" grep -q -x "  file: $T/models.yaml" "$(made)/factory.yaml"
+rm -rf "$D"/proof-*
+run proof --name localmix --dry-run --env "$T/env-claude" --models "$T/models.yaml" --reviewer-reasoning high --planner claude-code:sonnet --implementer claude-code:sonnet --reviewer opencode:local/qwen3.8-27b
+check "a local reviewer ignores --reviewer-reasoning" bash -c '! grep -q "^  [a-z]*: {.*reasoning" "$1"' _ "$(made)/factory.yaml"
+rm -rf "$D"/proof-*
+run proof --name localpaid --dry-run --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a
+check "a role on OpenRouter beside local ones: exit 0" test "$rc" -eq 0
+check "it keeps the usd lines" grep -q 'per_run: { tokens: 12000000, turns: 1500, usd: 5 }' "$(made)/factory.yaml"
+check "and the reviewer's reasoning" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$(made)/factory.yaml"
+runq proof --name localpaid --dry-run --env "$T/env-claude" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a
+check "and asks for OPENROUTER_API_KEY" refuses "OPENROUTER_API_KEY"
+run proof --name alllocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a --reviewer opencode:local/a --retro-agent opencode --retro-model local/a
+check "all-local roles need no credentials: exit 0" test "$rc" -eq 0
+check "all-local asks for neither name" bash -c '! grep -q -e CLAUDE_CODE_OAUTH_TOKEN -e OPENROUTER_API_KEY "$1"' _ "$T/out"
+
+runq proof --name twolocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/b --reviewer opencode:local/a
+check "roles on two different local models are refused" refuses "two different local models"
+check "and nothing was made" bash -c '! ls "$1"/proof-twolocal-* >/dev/null 2>&1' _ "$D"
+runq proof --name twolocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a --reviewer opencode:local/a --retro-agent opencode --retro-model local/b
+check "the retrospective role counts too" refuses "two different local models"
+
 # --- the dry run
 rm -rf "$D"/proof-* "$T/ygg.calls"
 run proof --name dry --dry-run

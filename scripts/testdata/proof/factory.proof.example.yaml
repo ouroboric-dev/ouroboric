@@ -9,7 +9,7 @@ privacy: strict
 roles:
   planner: { agent: @PLANNER_AGENT@, model: @PLANNER_MODEL@ }
   implementer: { agent: @IMPLEMENTER_AGENT@, model: @IMPLEMENTER_MODEL@ }
-  reviewer: { agent: @REVIEWER_AGENT@, model: @REVIEWER_MODEL@, reasoning: @REVIEWER_REASONING@ }
+  reviewer: { agent: @REVIEWER_AGENT@, model: @REVIEWER_MODEL@@REVIEWER_REASONING@ }
   retrospective: { agent: @RETRO_AGENT@, model: @RETRO_MODEL@ }
 budget:
   per_run: { tokens: @RUN_TOKENS@, turns: @RUN_TURNS@@RUN_USD@ }

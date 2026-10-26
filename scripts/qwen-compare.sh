@@ -7,11 +7,13 @@
 # Tools are approved without asking: OpenCode gets `run --auto`, and Claude Code gets acceptEdits with the
 # --allow Bash patterns (by default Go's: "Bash(go *)", "Bash(GOWORK=off go *)", "Bash(gofmt *)", plus
 # "Bash(git diff*)" and "Bash(git status*)"). The worktrees are throwaway, but the agents run on this host.
-# Start the server first (qwen-local.sh start) for the local runs. The hosted run uses the personal config
+# Start the server first (ygg-models.sh start) for the local runs. The hosted run uses the personal config
 # dir (QWEN_HOSTED_CONFIG_DIR, $HOME/.claude-personal) and MODEL (sonnet), so it uses that subscription.
 # DIR, which must be new or empty, gets for each run <name>.out and <name>.err (the tool's output),
-# <name>.patch (its diff, new files included) and <name>.server.log (the server log lines written during the
-# run); summary.tsv (name, exit code, wall seconds); and rss.log (llama-server's memory every 30 seconds).
+# <name>.patch (its diff, new files included) and summary.tsv (name, exit code, wall seconds); and, only when a
+# llama-server runs on this host with a pid file and a log under QWEN_HOME (not the ygg-models.sh container, which has
+# neither: read `podman logs` through ygg-engine.sh), <name>.server.log and rss.log (its memory every 30 seconds).
+# Both are skipped otherwise.
 # The worktrees stay in DIR/wt-<name> for review; the cleanup commands are printed at the end.
 # QWEN_COMPARE_TIMEOUT caps each run (1800 seconds). QWEN_COMPARE_OPENCODE, QWEN_COMPARE_QWEN_CLAUDE and
 # QWEN_CLAUDE_BIN override the three commands.

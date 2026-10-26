@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run Claude Code against the local Qwen 3.8 27B server, in a config dir of its own that has no
-# account (docs/5-research/2026-10-19-local-qwen-design.md). Start the server first: qwen-local.sh start.
+# account (docs/5-research/2026-10-19-local-qwen-design.md). Start the server first: ygg-models.sh start.
 #   qwen-claude.sh init                set up the config dir: the personal setup's plugins, skills and
 #                                      merge hook, without its account, memory or account guard
 #   qwen-claude.sh [CLAUDE ARGS...]    run Claude Code on the local model

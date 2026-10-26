@@ -1,0 +1,42 @@
+# An example model list for scripts/ygg-models.sh and `ygg models`. Copy it to ~/.config/ygg/models.yaml and
+# change the two folders to absolute paths on your machine. Never commit your own list.
+# The engine is a Podman machine that sees host files only through the `sandbox.mounts` of factory.yaml, so both
+# folders must be under a folder of those mounts (for the founder's setup, under ~/ygg-it).
+server:
+  name: ygg-models        # the container's name and its name on the network
+  network: ygg-models     # an internal podman network
+  port: 8089              # the gate's port on that network
+  host_port: 8088         # llama-server on 127.0.0.1 of the host
+  weights: /abs/path/to/weights   # mounted read-only at /models
+  state: /abs/path/to/state       # the preset and the allow file; mounted read-only at /etc/ygg-models
+models:
+  qwen3.8-27b:
+    file: model.gguf      # under weights
+    context: 102400       # the context size; becomes ctx-size in the preset
+    output: 32768         # the most output tokens OpenCode asks for
+    args:                 # llama-server preset keys, written as given
+      n-gpu-layers: "999"
+      flash-attn: "on"
+      cache-type-k: q8_0
+      cache-type-v: q8_0
+      parallel: "1"
+      jinja: "true"
+      # Sampling: llama-server takes temp, top-k and top-p from the model file (its general.sampling.* keys)
+      # unless a key here sets them, so the list sets only what the file lacks. Add temp, top-p or top-k here to
+      # override the model's own values.
+      min-p: "0"   # Qwen's recommendation; the model file has no min_p, and llama-server's own default is 0.05
+      reasoning-effort: low
+      # Out-of-memory-safe values for a WSL2 machine with limited RAM: a small prompt cache and few checkpoints.
+      cache-ram: "2048"
+      ctx-checkpoints: "4"
+      # MTP: the draft model speeds up decoding. The draft file sits next to the model, under weights.
+      spec-type: draft-mtp
+      model-draft: /models/mtp.gguf
+      n-gpu-layers-draft: all
+      cache-type-k-draft: q8_0
+      cache-type-v-draft: q8_0
+      # Claude Code sends a later system message that the model's own template refuses. `scripts/ygg-models.sh
+      # template NAME` writes a fixed template to weights/chat-template.jinja; then uncomment the next line, and
+      # stop and start the server.
+      # chat-template-file: /models/chat-template.jinja
+    price: {input: 0.10, output: 0.40}   # example values: OpenRouter's price, dollars per million tokens

@@ -3,7 +3,7 @@
 # the linter cannot see them used.
 # shellcheck disable=SC2016,SC2034,SC2329
 # Tests for qwen-claude.sh.   scripts/tests/qwen-claude.test.sh
-# A fake `claude` and a fake `curl` stand in for the real tools: no server, no account, no network.
+# A fake `claude` and a fake ygg-models.sh stand in for the real tools: no server, no account, no network.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S="$HERE/.."
@@ -38,13 +38,19 @@ cat > "$T/bin/claude" <<EOF2
 echo "\${CLAUDE_CONFIG_DIR:-none} \$*" >> "$T/calls"
 env > "$T/env"
 EOF2
-cat > "$T/bin/curl" <<EOF2
+# A fake ygg-models.sh (QWEN_MODELS_SH) stands in for the real one: `status` answers while $T/healthy exists.
+cat > "$T/ygg-models.sh" <<EOF2
 #!/usr/bin/env bash
-[ -e "$T/healthy" ] || exit 7
-echo '{"status":"ok"}'
+echo "\$*" > "$T/models.args"
+[ "\$1" != --models ] || shift 2
+[ "\$1" = status ] || exit 64
+[ ! -e "$T/engine-down" ] || { echo "ygg-engine: the engine socket is not there" >&2; exit 2; }
+[ -e "$T/healthy" ] || { echo "not running"; exit 3; }
+echo "running on http://127.0.0.1:8088, loaded: none"
 EOF2
-chmod +x "$T/bin/claude" "$T/bin/curl"
-export PATH="$T/bin:$PATH" QWEN_HOME="$T/qh" QWEN_CLAUDE_BIN="$T/bin/claude"
+chmod +x "$T/ygg-models.sh"
+chmod +x "$T/bin/claude"
+export PATH="$T/bin:$PATH" QWEN_HOME="$T/qh" QWEN_MODELS_SH="$T/ygg-models.sh" QWEN_CLAUDE_BIN="$T/bin/claude"
 C="$S/qwen-claude.sh"
 
 run bash "$C" -p hi
@@ -76,7 +82,15 @@ check "init again keeps an existing .claude.json and the skills link" \
 
 run bash "$C" -p hi
 check "run with the server down: refuses with the start hint; claude does not run" \
-  eval '[ $rc = 2 ] && has "qwen-local.sh start" && [ ! -e "$T/calls" ]'
+  eval '[ $rc = 2 ] && has "ygg-models.sh start" && [ ! -e "$T/calls" ]'
+touch "$T/engine-down"; run bash "$C" -p hi
+check "engine check failed: its message is passed through, and it is not reported as 'not running'" \
+  eval '[ $rc = 2 ] && has "engine socket is not there" && ! has "ygg-models.sh start" && [ ! -e "$T/calls" ]'
+rm -f "$T/engine-down"
+QWEN_MODELS="$T/my models.yaml" run bash "$C" -p hi
+check "QWEN_MODELS is passed to ygg-models.sh as --models" eval 'grep -q -F -- "--models $T/my models.yaml status" "$T/models.args"'
+QWEN_FOLDER="$T/my folder" run bash "$C" -p hi
+check "QWEN_FOLDER is passed to ygg-models.sh as --folder" eval 'grep -q -F -- "--folder $T/my folder status" "$T/models.args"'
 
 touch "$T/healthy"
 QWEN_CLAUDE_DIR="$HOME/.claude" run bash "$C" -p hi

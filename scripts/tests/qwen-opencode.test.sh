@@ -3,7 +3,7 @@
 # the linter cannot see them used.
 # shellcheck disable=SC2016,SC2034,SC2329
 # Tests for qwen-opencode.sh.   scripts/tests/qwen-opencode.test.sh
-# A fake `opencode` and a fake `curl` stand in for the real tools: no server, no network.
+# A fake `opencode` and a fake ygg-models.sh stand in for the real tools: no server, no network.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S="$HERE/.."
@@ -28,22 +28,36 @@ cat > "$T/bin/opencode" <<EOF2
 printf '%s\n' "\$@" > "$T/args"
 env > "$T/env"
 EOF2
-cat > "$T/bin/curl" <<EOF2
+# A fake ygg-models.sh (QWEN_MODELS_SH) stands in for the real one: `status` answers while $T/healthy exists.
+cat > "$T/ygg-models.sh" <<EOF2
 #!/usr/bin/env bash
-[ -e "$T/healthy" ] || exit 7
-echo '{"status":"ok"}'
+echo "\$*" > "$T/models.args"
+[ "\$1" != --models ] || shift 2
+[ "\$1" = status ] || exit 64
+[ ! -e "$T/engine-down" ] || { echo "ygg-engine: the engine socket is not there" >&2; exit 2; }
+[ -e "$T/healthy" ] || { echo "not running"; exit 3; }
+echo "running on http://127.0.0.1:9000, loaded: none"
 EOF2
-chmod +x "$T/bin/opencode" "$T/bin/curl"
-export PATH="$T/bin:$PATH" QWEN_HOME="$T/qh"
+chmod +x "$T/ygg-models.sh"
+chmod +x "$T/bin/opencode"
+export PATH="$T/bin:$PATH" QWEN_HOME="$T/qh" QWEN_MODELS_SH="$T/ygg-models.sh"
 O="$S/qwen-opencode.sh"
 
 run bash "$O" run hi
 check "server down: refuses with the start hint, and opencode does not run" \
-  eval '[ $rc = 2 ] && has "qwen-local.sh start" && [ ! -e "$T/args" ]'
+  eval '[ $rc = 2 ] && has "ygg-models.sh start" && [ ! -e "$T/args" ]'
+touch "$T/engine-down"; run bash "$O" run hi
+check "engine check failed: its message is passed through, and it is not reported as 'not running'" \
+  eval '[ $rc = 2 ] && has "engine socket is not there" && ! has "ygg-models.sh start" && [ ! -e "$T/args" ]'
+rm -f "$T/engine-down"
+QWEN_MODELS="$T/my models.yaml" run bash "$O" run hi
+check "QWEN_MODELS is passed to ygg-models.sh as --models" eval 'grep -q -F -- "--models $T/my models.yaml status" "$T/models.args"'
+QWEN_FOLDER="$T/my folder" run bash "$O" run hi
+check "QWEN_FOLDER is passed to ygg-models.sh as --folder" eval 'grep -q -F -- "--folder $T/my folder status" "$T/models.args"'
 
-touch "$T/healthy"; mkdir -p "$T/qh/run"; printf 'QWEN_PORT=9000\nQWEN_CTX=65536\n' > "$T/qh/run/server.env"
+touch "$T/healthy"; export QWEN_CTX=65536
 ANTHROPIC_API_KEY=a CLAUDE_CODE_OAUTH_TOKEN=b OPENROUTER_API_KEY=c run bash "$O" run "hi there"
-check "the config points at the running server's port and context, and only at the local provider" \
+check "the config points at the running server's port and QWEN_CTX, and only at the local provider" \
   eval '[ $rc = 0 ] && conf "c[\"provider\"][\"qwen-local\"][\"options\"][\"baseURL\"] == \"http://127.0.0.1:9000/v1\"" && conf "c[\"provider\"][\"qwen-local\"][\"models\"][\"qwen3.8-27b\"][\"limit\"][\"context\"] == 65536" && conf "c[\"enabled_providers\"] == [\"qwen-local\"]"'
 check "the model and the small model are both the local one; sharing and updates are off" \
   eval 'conf "c[\"model\"] == c[\"small_model\"] == \"qwen-local/qwen3.8-27b\"" && conf "c[\"share\"] == \"disabled\" and c[\"autoupdate\"] is False"'

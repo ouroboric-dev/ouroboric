@@ -7,20 +7,28 @@
 #   ygg-proof-run.sh --name NAME [--mode key-points|unattended|step-by-step] [--planner AGENT:MODEL]
 #                    [--implementer AGENT:MODEL] [--reviewer AGENT:MODEL]
 #                    [--retro-agent AGENT] [--retro-model MODEL]
-#                    [--reviewer-reasoning low|medium|high|off] [--run-turns N] [--run-tokens N] [--run-usd N]
+#                    [--models FILE] [--reviewer-reasoning low|medium|high|off] [--run-turns N] [--run-tokens N] [--run-usd N]
 #                    [--day-turns N] [--day-tokens N] [--day-usd N] [--baseline RUN_ID] [--dry-run] [--build]
 #                    [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip] [--any-ygg]
 #   ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] |
 #                    --reject GATE (--reason TEXT | --decisions FILE) | --resume)
 #                    [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip] [--any-ygg]
-# AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model>; a MODEL has only A-Za-z0-9._/:-
-# because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
+# AGENT is claude-code or opencode; an opencode MODEL is openrouter/<model> or local/<name> (a model of the operator's
+# model list, served by scripts/ygg-models.sh); a MODEL has only A-Za-z0-9._/:- because it goes into a YAML line. Defaults: key-points; planner and implementer claude-code:sonnet; reviewer
 # opencode:openrouter/qwen/qwen3.8-27b with --reviewer-reasoning medium (the reviewer role's reasoning effort: a
 # Qwen reviewer at the default high stalled a whole session in the rehearsal; a claude-code agent ignores the
 # setting, and the line is written for every agent); the retrospective role claude-code:opus (--retro-agent and
 # --retro-model; the role that writes the run's retrospective); a run 1,500 turns, 12,000,000 tokens, $5; a day 2,000
 # turns, 24,000,000 tokens, $10; --wall 8h; DIR $HOME/ygg-it; FILE $HOME/.config/ouroboric/factory.env;
 # --tasks ../mimir; --suites $HOME/ygg-it/hidden-suites; --yggdrasil the umbrella beside this repo.
+# A local role (opencode:local/<name>, for the planner, the implementer, the reviewer or the retrospective) needs
+# --models FILE, the model list: the config then has `models: { file: FILE }`. FILE must exist; a relative path is made
+# absolute from the caller's folder (the config takes a clean absolute path). A local role without --models is refused
+# before anything is made, and so is --models with no local role; so are roles on two different local models (the
+# server holds one). A local role sets no `reasoning` (ygg refuses it), so a
+# local reviewer gets no reasoning line whatever --reviewer-reasoning says, and the plan says so. Only an
+# opencode role on openrouter/... is paid per token: only then does the config have usd lines and the credentials
+# file need OPENROUTER_API_KEY (claude-code needs CLAUDE_CODE_OAUTH_TOKEN; a local role needs no credential).
 # The task is client-gallery-lite (YGG_PROOF_TASK names another, for tests); its suite is the `suite` key of its
 # task.toml.
 # In order, it
@@ -31,11 +39,11 @@
 #   3. checks the suites folder with `test -d SUITES/TASK/SUITE` and nothing more: it is never listed, read or
 #      searched, and neither it nor the tasks folder is inside the other or inside the project;
 #   4. checks the credentials file WITHOUT reading it, for the adapters the roles name only: claude-code needs
-#      CLAUDE_CODE_OAUTH_TOKEN, opencode needs OPENROUTER_API_KEY, each on one line with a value after the equals
+#      CLAUDE_CODE_OAUTH_TOKEN, opencode on openrouter needs OPENROUTER_API_KEY, each on one line with a value after the equals
 #      sign (grep -c counts the lines; no value is printed or kept);
 #   5. makes DIR/proof-NAME-TIME/project (a git repository, umbrella.yaml with root: true) and
 #      DIR/proof-NAME-TIME/factory.yaml, filled from scripts/testdata/proof/factory.proof.example.yaml (a "usd"
-#      line only when a role is an opencode role, which pays per token);
+#      line only when a role is an opencode role on openrouter, which pays per token);
 #   6. runs `ygg doctor` on that config and prints the plan: what would run.
 # --dry-run stops there with exit 0. Without it (v0-T291) the script then
 #   7. with --build runs `ygg sandbox build --all --config C`; runs `ygg run --project P --config C --graph software
@@ -82,7 +90,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR source=ygg-build-facts.sh
 . "$HERE/ygg-build-facts.sh"
 usage() {
-  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--retro-agent AGENT] [--retro-model MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip] [--any-ygg]" >&2
+  echo "usage: ygg-proof-run.sh --name NAME [--mode MODE] [--planner|--implementer|--reviewer AGENT:MODEL] [--models FILE] [--retro-agent AGENT] [--retro-model MODEL] [--reviewer-reasoning low|medium|high|off] [--run-turns|--run-tokens|--run-usd|--day-turns|--day-tokens|--day-usd N] [--baseline RUN_ID] [--dry-run] [--build] [--folder DIR] [--env FILE] [--tasks DIR] [--suites DIR] [--yggdrasil DIR] [--wall TIME] [--clip] [--any-ygg]" >&2
   echo "       ygg-proof-run.sh --continue RUN_ID (--approve GATE [--note TEXT | --decisions FILE] | --reject GATE (--reason TEXT | --decisions FILE) | --resume)" >&2
   echo "                        [--baseline RUN_ID] [--dry-run] [--folder DIR] [--env FILE] [--wall TIME] [--clip] [--any-ygg]" >&2
   exit 2
@@ -93,7 +101,7 @@ fail() { echo "proof-run: $*" >&2; exit 2; }
 # umask, as in the smoke scripts: no umask is set for the whole script.
 private() { (umask 077 && : >>"$1") && chmod 600 "$1"; } # FILE: made private; what it holds stays
 put() { (umask 077 && printf '%s\n' "$2" >"$1"); }         # FILE TEXT: a small control file, private
-name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h any_ygg=0
+models="" name="" mode=key-points dry=0 build=0 clip=0 baseline="" wall=8h any_ygg=0
 # --continue; setup_flags are the setup flags given (a continued run keeps its config)
 cont="" gate_in="" reject_in="" reason="" reason_set=0 note="" note_set=0 resume=0 setup_flags=""
 decisions="" decisions_set=0
@@ -104,7 +112,7 @@ dir="$HOME/ygg-it" envfile="$HOME/.config/ouroboric/factory.env" tasks="$HERE/..
 suites="$HOME/ygg-it/hidden-suites" ygg_dir="$HERE/../../yggdrasil"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name | --mode | --planner | --implementer | --reviewer | --reviewer-reasoning | --retro-* | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
+    --name | --mode | --planner | --implementer | --reviewer | --models | --reviewer-reasoning | --retro-* | --run-* | --day-* | --build | --tasks | --suites | --yggdrasil) setup_flags+=" $1" ;;
   esac
   case "$1" in
     --dry-run) dry=1; shift ;;
@@ -125,6 +133,7 @@ while [ $# -gt 0 ]; do
     --planner) [ $# -ge 2 ] || usage; planner="$2"; shift 2 ;;
     --implementer) [ $# -ge 2 ] || usage; implementer="$2"; shift 2 ;;
     --reviewer) [ $# -ge 2 ] || usage; reviewer="$2"; shift 2 ;;
+    --models) [ $# -ge 2 ] || usage; models="$2"; shift 2 ;;
     --reviewer-reasoning) [ $# -ge 2 ] || usage; reviewer_reasoning="$2"; shift 2 ;;
     --run-turns) [ $# -ge 2 ] || usage; run_turns="$2"; shift 2 ;;
     --run-tokens) [ $# -ge 2 ] || usage; run_tokens="$2"; shift 2 ;;
@@ -206,11 +215,16 @@ role_ok() { # FLAG VALUE: sets agent_of and model_of
   [[ $model =~ ^[A-Za-z0-9._/:-]+$ && $model != *: ]] || fail "$flag has a MODEL with characters outside A-Za-z0-9._/:- or ends in a colon"
   case "$agent" in
     claude-code) ;;
-    opencode) [[ $model == openrouter/?* ]] || fail "$flag: an opencode MODEL is openrouter/<model>, such as opencode:openrouter/qwen/qwen3.8-27b" ;;
+    opencode)
+      if [[ $model == local/* ]]; then
+        [[ ${model#local/} =~ ^[a-z0-9][a-z0-9._-]{0,63}$ ]] || fail "$flag: a local MODEL is local/<name>, with a name of a-z0-9._- that starts with a-z0-9 (at most 64), such as opencode:local/qwen3.8-27b"
+      else
+        [[ $model == openrouter/?* ]] || fail "$flag: an opencode MODEL is openrouter/<model> or local/<name>, such as opencode:openrouter/qwen/qwen3.8-27b"
+      fi ;;
     *) fail "$flag is AGENT:MODEL, with AGENT claude-code or opencode, not '$agent'" ;;
   esac
 }
-roles_ok() { # sets paid, need_claude and need_router
+roles_ok() { # sets paid, need_claude, need_router and need_local
   role_ok --planner "$planner"; role_ok --implementer "$implementer"; role_ok --reviewer "$reviewer"
   # A proof folder from before the retrospective role has none: retro stays empty and the role is left out.
   retro=""
@@ -219,12 +233,31 @@ roles_ok() { # sets paid, need_claude and need_router
     retro="$retro_agent:$retro_model"
     role_ok --retro-agent/--retro-model "$retro"
   fi
-  paid=0 need_claude=0 need_router=0
+  paid=0 need_claude=0 need_router=0 need_local=0
+  local_models=""
   for r in "$planner" "$implementer" "$reviewer" ${retro:+"$retro"}; do
-    case "${r%%:*}" in claude-code) need_claude=1 ;; opencode) need_router=1; paid=1 ;; esac
+    case "${r%%:*}" in
+      claude-code) need_claude=1 ;;
+      opencode) if [[ ${r#*:} == local/* ]]; then need_local=1; local_models+="${r#*:}"$'\n'; else need_router=1; paid=1; fi ;;
+    esac
   done
+  # The server holds one model at a time (spec 5.2.1): roles on two local models are refused before anything is made.
+  [ "$(printf '%s' "$local_models" | sort -u | grep -c .)" -le 1 ] || fail "roles on two different local models ($(printf '%s' "$local_models" | sort -u | paste -sd' ')): the local model server holds one; name the same local/<name> for every local role"
+  # A local reviewer sets no reasoning (ygg refuses it): --reviewer-reasoning does not apply to it.
+  reviewer_is_local=0
+  [[ ${reviewer#*:} != local/* ]] || reviewer_is_local=1
 }
 [ -n "$cont" ] || roles_ok
+if [ -z "$cont" ]; then
+  # The model list: needed by a local role, and only then. The config takes a clean absolute path.
+  if [ "$need_local" -eq 1 ] && [ -z "$models" ]; then fail "a role is on a local model (opencode:local/<name>): --models FILE, the model list, is needed"; fi
+  if [ "$need_local" -eq 0 ] && [ -n "$models" ]; then fail "--models goes with a role on a local model (opencode:local/<name>); no role is on one"; fi
+  if [ -n "$models" ]; then
+    [ -f "$models" ] || fail "--models $models: no such file"
+    models="$(readlink -f -- "$models")"
+    safe_path --models "$models"
+  fi
+fi
 
 # The engine, the tools.
 export PATH="$dir/dc/node_modules/.bin:$PATH"
@@ -332,7 +365,7 @@ fi
 names=()
 [ "$need_claude" -eq 0 ] || names+=(CLAUDE_CODE_OAUTH_TOKEN)
 [ "$need_router" -eq 0 ] || names+=(OPENROUTER_API_KEY)
-for n_ in "${names[@]}"; do
+for n_ in ${names[@]+"${names[@]}"}; do
   n="$(grep -c -E "^(export[[:space:]]+)?${n_}=[^[:space:]]" "$envfile" || true)"
   [ "$n" = 1 ] || fail "$envfile has $n line(s) that set $n_ with a value; the roles need exactly 1"
 done
@@ -354,17 +387,21 @@ if [ -z "$cont" ]; then
   fill MODE "$mode"
   fill PLANNER_AGENT "${planner%%:*}"; fill PLANNER_MODEL "${planner#*:}"
   fill IMPLEMENTER_AGENT "${implementer%%:*}"; fill IMPLEMENTER_MODEL "${implementer#*:}"
-  fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"; fill REVIEWER_REASONING "$reviewer_reasoning"
+  fill REVIEWER_AGENT "${reviewer%%:*}"; fill REVIEWER_MODEL "${reviewer#*:}"
+  if [ "$reviewer_is_local" -eq 1 ]; then fill REVIEWER_REASONING ""; else fill REVIEWER_REASONING ", reasoning: $reviewer_reasoning"; fi
   fill RETRO_AGENT "$retro_agent"; fill RETRO_MODEL "$retro_model"
   fill RUN_TOKENS "$run_tokens"; fill RUN_TURNS "$run_turns"; fill RUN_USD "$usd_run"
   fill DAY_TOKENS "$day_tokens"; fill DAY_TURNS "$day_turns"; fill DAY_USD "$usd_day"
   fill ENGINE "$engine"; fill FOLDER "$dir_abs"; fill BIND "${YGG_BIND:-/mnt/wsl/ygg-bind}"
   fill REALMS "$ygg_dir"; fill GRAPHS "$ygg_dir/voluspa"
   fill TASKS "$tasks"; fill SUITES "$suites"
+  if [ "$need_local" -eq 1 ]; then text+=$'\nmodels:\n'"  file: $models"; fi
   printf '%s\n' "$text" >"$work/factory.yaml"
   if grep -q '@[A-Z_]*@' "$work/factory.yaml"; then fail "$work/factory.yaml still has a place to fill: $(grep -o '@[A-Z_]*@' "$work/factory.yaml" | sort -u | tr '\n' ' ')"; fi
   echo "proof-run: made $work"
   echo "proof-run: the task is $task, suite $suite; the brief is the frozen one (SHA-256 $have)"
+  [ "$reviewer_is_local" -eq 0 ] || echo "proof-run: the reviewer is a local model, so its reasoning is left out of the config (--reviewer-reasoning does not apply)"
+  [ "$need_local" -eq 0 ] || echo "proof-run: the model list is $models (models.file)"
   [ "$paid" -eq 1 ] || echo "proof-run: no role is paid per token, so the config has no usd line"
   # What --continue needs to know about this proof run, one "key value" a line; every value was checked above.
   private "$work/proof.meta"
@@ -404,7 +441,9 @@ build_cmd="$(q "${build_argv[@]}")"
 timeout_argv=(timeout --signal=INT --kill-after=2m "$wall")
 reasoning_note="" # for an old folder, why the reasoning is unset
 [ "$reviewer_reasoning" != unset ] || reasoning_note=": a folder from before --reviewer-reasoning"
-echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning${reasoning_note})${retro:+; retrospective $retro}"
+reasoning_desc="reasoning $reviewer_reasoning${reasoning_note}"
+[ "$reviewer_is_local" -eq 0 ] || reasoning_desc="no reasoning: a local model sets none"
+echo "proof-run: the plan: mode $mode; planner $planner, implementer $implementer, reviewer $reviewer ($reasoning_desc)${retro:+; retrospective $retro}"
 echo "proof-run: the caps in $work/factory.yaml:"
 { grep -E '^  per_(run|day):' "$work/factory.yaml" || true; } | sed 's/^/  /'
 [ -z "$cont_what" ] || echo "proof-run: the continuation: $cont_what"
@@ -536,7 +575,7 @@ step() { # TITLE CMD...: a heading, then the command's output; its exit code is 
 }
 evidence_part() {
   echo "# proof run $name: run $id, exit code $rc${cont_what:+ (continued: $cont_what)}"
-  echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer (reasoning $reviewer_reasoning); brief SHA-256 $have"
+  echo "mode $mode; planner $planner, implementer $implementer, reviewer $reviewer ($reasoning_desc); brief SHA-256 $have"
   echo
   case "$rc" in
     0 | 3 | 4 | 5) ;;
