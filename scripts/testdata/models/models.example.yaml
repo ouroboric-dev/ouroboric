@@ -1,5 +1,8 @@
-# An example model list for scripts/ygg-models.sh and `ygg models`. Copy it to ~/.config/ygg/models.yaml and
-# change the two folders to absolute paths on your machine. Never commit your own list.
+# An example model list for scripts/ygg-models.sh and `ygg models`. `scripts/ygg-models.sh setup --price IN:OUT`
+# writes it to ~/.config/ygg/models.yaml with your folders and price; or copy it there and change the two folders
+# to absolute paths on your machine. Never commit your own list. When you copy it, comment out chat-template-file
+# below until `scripts/ygg-models.sh template NAME` has made the file: a model whose template file is missing does not
+# load (setup does this for you).
 # The engine is a Podman machine that sees host files only through the `sandbox.mounts` of factory.yaml, so both
 # folders must be under a folder of those mounts (for the founder's setup, under ~/ygg-it).
 server:
@@ -11,7 +14,7 @@ server:
   state: /abs/path/to/state       # the preset and the allow file; mounted read-only at /etc/ygg-models
 models:
   qwen3.8-27b:
-    file: model.gguf      # under weights
+    file: Qwen3.8-27B-UD-Q4_K_M.gguf   # under weights
     context: 102400       # the context size; becomes ctx-size in the preset
     output: 32768         # the most output tokens OpenCode asks for
     args:                 # llama-server preset keys, written as given
@@ -29,14 +32,16 @@ models:
       # Out-of-memory-safe values for a WSL2 machine with limited RAM: a small prompt cache and few checkpoints.
       cache-ram: "2048"
       ctx-checkpoints: "4"
-      # MTP: the draft model speeds up decoding. The draft file sits next to the model, under weights.
+      # MTP: the draft model speeds up decoding. The draft file is under weights, at the path it has in the repo.
       spec-type: draft-mtp
-      model-draft: /models/mtp.gguf
+      model-draft: /models/MTP/mtp-Qwen3.8-27B-Q4_0.gguf
       n-gpu-layers-draft: all
       cache-type-k-draft: q8_0
       cache-type-v-draft: q8_0
       # Claude Code sends a later system message that the model's own template refuses. `scripts/ygg-models.sh
-      # template NAME` writes a fixed template to weights/chat-template.jinja; then uncomment the next line, and
-      # stop and start the server.
-      # chat-template-file: /models/chat-template.jinja
+      # setup` (or `template NAME`) writes a fixed template to weights/chat-template.jinja, which this line uses.
+      chat-template-file: /models/chat-template.jinja
+    download:             # where setup downloads the files from (Hugging Face), each to its own path under weights
+      repo: unsloth/Qwen3.8-27B-GGUF
+      files: [Qwen3.8-27B-UD-Q4_K_M.gguf, MTP/mtp-Qwen3.8-27B-Q4_0.gguf]
     price: {input: 0.10, output: 0.40}   # example values: OpenRouter's price, dollars per million tokens
