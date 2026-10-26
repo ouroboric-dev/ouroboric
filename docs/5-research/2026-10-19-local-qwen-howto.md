@@ -19,49 +19,24 @@ You need:
 
 - An RTX 4090, or another 24 GB NVIDIA card, with a Windows driver that offers CUDA 13.3 or newer in
   WSL. Check with `nvidia-smi`.
-- WSL2 with Ubuntu 22.04, about 25 GB of free disk, Homebrew, `uv`, and `sudo` for one step.
+- WSL2 with Ubuntu 22.04, about 25 GB of free disk, Homebrew, `uv`, and the factory's engine (a Podman machine
+  with GPU access: `scripts/ygg-gpu.sh setup` prepares it). The server image builds `llama-server` itself, so the
+  host needs no CUDA toolkit, no cmake and no build.
 - Claude Code (`claude`) on `PATH`, and the personal Claude Code config in `~/.claude-personal`.
 
-The model, the llama.cpp build and the run state live in `~/.local/share/qwen-local` (`QWEN_HOME`),
-outside every repo.
+The model and the run state of the measurement scripts live in `~/.local/share/qwen-local` (`QWEN_HOME`),
+outside every repo. The engine sees host files only through the `sandbox.mounts` of the factory folder's
+`factory.yaml` (for the founder's setup, `~/ygg-it`), so the weights and the state folder of the model list must
+be under a folder of those mounts: put the model under `~/ygg-it` and link it from there.
 
 ## Set up the server
 
-1. Install the CUDA toolkit. This is the only step that needs `sudo`. Install only
-   `cuda-toolkit-13-3`. Never install `cuda`, `cuda-drivers` or `nvidia-driver-*`: in WSL, the Windows
-   driver is the GPU driver.
-
-   ```zsh
-   cd /tmp && wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
-   sudo dpkg -i cuda-keyring_1.1-1_all.deb
-   sudo apt-get update
-   sudo apt-get install -y cuda-toolkit-13-3
-   ```
-
-   `/usr/local/cuda/bin/nvcc --version` now prints `release 13.3`.
-
-1. Install cmake and OpenCode: `brew install cmake opencode`.
-1. Build `llama-server` with CUDA. Keep Homebrew off `PATH` for the build: Homebrew's linker misses
-   the CUDA libraries, and Homebrew's OpenSSL needs a newer glibc than Ubuntu 22.04 has.
-
-   ```zsh
-   git clone https://github.com/ggml-org/llama.cpp ~/.local/share/qwen-local/llama.cpp
-   cd ~/.local/share/qwen-local/llama.cpp
-   git checkout 4c3c581   # the build the notes measured; leave this out for the latest
-   export PATH=/usr/local/cuda/bin:/usr/bin:/bin
-   /home/linuxbrew/.linuxbrew/bin/cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=89 \
-     -DCMAKE_BUILD_TYPE=Release -DLLAMA_OPENSSL=OFF
-   /home/linuxbrew/.linuxbrew/bin/cmake --build build --config Release -j 6 --target llama-server
-   ```
-
-   Open a new terminal afterwards, to get your usual `PATH` back. `-j 6` keeps the build inside a
-   12 GB WSL memory cap.
-
+1. Install OpenCode: `brew install opencode`.
 1. Download the model (16.5 GB) and its MTP draft file (1.4 GB), and link them to the names the
    scripts use:
 
    ```zsh
-   mkdir -p ~/.local/share/qwen-local/models && cd ~/.local/share/qwen-local/models
+   mkdir -p ~/ygg-it/models/weights && cd ~/ygg-it/models/weights
    uvx --from huggingface_hub hf download unsloth/Qwen3.8-27B-GGUF \
      Qwen3.8-27B-UD-Q4_K_M.gguf MTP/mtp-Qwen3.8-27B-Q4_0.gguf --local-dir .
    ln -sfn Qwen3.8-27B-UD-Q4_K_M.gguf model.gguf
@@ -69,16 +44,28 @@ outside every repo.
    ```
 
 1. Write your model list from `scripts/testdata/models/models.example.yaml` to
-   `~/.config/ygg/models.yaml` (the weights folder holds `model.gguf`), then start the server:
-   `scripts/ygg-models.sh start`. It builds the image on the first start, which takes long. The flags are
-   the list's `args`; the preset `ygg models preset` prints shows them.
+   `~/.config/ygg/models.yaml`. Set `weights` to the folder from the last step and `state` to another folder under
+   `~/ygg-it` (both must be under a folder of `sandbox.mounts`; `ygg models server --config` refuses others), then
+   start the server: `scripts/ygg-models.sh start`. It builds the image on the first start, which takes long. The
+   flags are the list's `args`; the preset `ygg models preset` prints shows them.
+1. Fix the chat template. Claude Code sends a system message after the first, which the model's own template
+   refuses. With the server running, load the model and save the fixed template:
+
+   ```zsh
+   scripts/ygg-models.sh load qwen3.8-27b
+   scripts/ygg-models.sh template qwen3.8-27b
+   ```
+
+   It saves `chat-template.jinja` in the weights folder. Uncomment `chat-template-file` in the list, then run
+   `scripts/ygg-models.sh stop && scripts/ygg-models.sh start`.
 1. Set up the local Claude Code config dir, `~/.claude-qwen`: `scripts/qwen-claude.sh init`. It
    installs the personal setup's three plugins and links its skills. It never touches `~/.claude` or
    `~/.claude-personal`.
 
 The server's settings are the model list's `context` and `args` (reasoning effort, cache and checkpoint
 keys). The launchers read `QWEN_CTX` (102400; keep it equal to `context`), `QWEN_ALIAS` (the list's model
-name) and `QWEN_MODELS` (the list file, when it is not the default). The comment block at the top of
+name), `QWEN_MODELS` (the list file, when it is not the default) and `QWEN_FOLDER` (the factory folder, when it
+is not `~/ygg-it`). The comment block at the top of
 `scripts/ygg-models.sh` explains the commands.
 
 ## Use it
@@ -118,14 +105,17 @@ Start the server, then run these commands. The figures in each answer come from 
 
 1. Reasoning effort: set `reasoning-effort` to `low`, `medium` and `xhigh` in the list in turn, restarting each time, and run
    `speed --runs 1 --max-tokens 20000 /tmp/short.txt` each time.
-1. The server's memory over a growing conversation:
+1. The server's memory over a growing conversation. The server's process runs in the Podman machine's own
+   WSL distro, so `/proc` on the host does not show it, and `qwen-measure.py growth` (which needs a host
+   pid) does not apply. Watch the container instead, through the engine script, while a long OpenCode or
+   Claude Code session runs in another terminal:
 
    ```zsh
-   python3 -I scripts/qwen-measure.py growth --turns 20 --pid "$(pgrep -o llama-server)" /tmp/long.txt
+   watch -n 10 'scripts/ygg-engine.sh run -- podman stats --no-stream ygg-models'
    ```
 
    To see the problem the defaults fix, set `ctx-checkpoints` to 32 and `cache-ram` to 8192 in the
-   list's `args`, restart and run it again.
+   list's `args`, restart and watch again.
 
 ## Repeat the comparison
 
@@ -166,7 +156,8 @@ provider's `baseURL` to `http://127.0.0.1:8099/v1`, and pass `--standalone`.
 ## Troubleshooting
 
 - **Every Claude Code request fails with HTTP 500, "System message must be at the beginning".** The
-  fixed chat template is missing. Run the template step in [Set up the server](#set-up-the-server).
+  fixed chat template is missing. Run `scripts/ygg-models.sh template` and restart, as in
+  [Set up the server](#set-up-the-server).
 - **The server disappears in a long session, and `dmesg` shows `Out of memory: Killed process
   (llama-server)`.** WSL ran out of system RAM. Keep `cache-ram` and `ctx-checkpoints` low in the list's `args`,
   or raise `memory=` in `C:\Users\<you>\.wslconfig`. Run `wsl --shutdown` from Windows to apply it; this

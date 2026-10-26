@@ -286,15 +286,21 @@ rm -rf "$D"/proof-*
 run proof --name localmix --dry-run --env "$T/env-claude" --models "$T/models.yaml" --reviewer-reasoning high --planner claude-code:sonnet --implementer claude-code:sonnet --reviewer opencode:local/qwen3.8-27b
 check "a local reviewer ignores --reviewer-reasoning" bash -c '! grep -q "^  [a-z]*: {.*reasoning" "$1"' _ "$(made)/factory.yaml"
 rm -rf "$D"/proof-*
-run proof --name localpaid --dry-run --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/b
+run proof --name localpaid --dry-run --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a
 check "a role on OpenRouter beside local ones: exit 0" test "$rc" -eq 0
 check "it keeps the usd lines" grep -q 'per_run: { tokens: 12000000, turns: 1500, usd: 5 }' "$(made)/factory.yaml"
 check "and the reviewer's reasoning" grep -q 'reviewer: { agent: opencode, model: openrouter/qwen/qwen3.8-27b, reasoning: medium }' "$(made)/factory.yaml"
-runq proof --name localpaid --dry-run --env "$T/env-claude" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/b
+runq proof --name localpaid --dry-run --env "$T/env-claude" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a
 check "and asks for OPENROUTER_API_KEY" refuses "OPENROUTER_API_KEY"
-run proof --name alllocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/b --reviewer opencode:local/c --retro-agent opencode --retro-model local/d
+run proof --name alllocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a --reviewer opencode:local/a --retro-agent opencode --retro-model local/a
 check "all-local roles need no credentials: exit 0" test "$rc" -eq 0
 check "all-local asks for neither name" bash -c '! grep -q -e CLAUDE_CODE_OAUTH_TOKEN -e OPENROUTER_API_KEY "$1"' _ "$T/out"
+
+runq proof --name twolocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/b --reviewer opencode:local/a
+check "roles on two different local models are refused" refuses "two different local models"
+check "and nothing was made" bash -c '! ls "$1"/proof-twolocal-* >/dev/null 2>&1' _ "$D"
+runq proof --name twolocal --dry-run --env "$T/env-none" --models "$T/models.yaml" --planner opencode:local/a --implementer opencode:local/a --reviewer opencode:local/a --retro-agent opencode --retro-model local/b
+check "the retrospective role counts too" refuses "two different local models"
 
 # --- the dry run
 rm -rf "$D"/proof-* "$T/ygg.calls"

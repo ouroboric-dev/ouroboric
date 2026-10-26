@@ -24,7 +24,8 @@
 # A local role (opencode:local/<name>, for the planner, the implementer, the reviewer or the retrospective) needs
 # --models FILE, the model list: the config then has `models: { file: FILE }`. FILE must exist; a relative path is made
 # absolute from the caller's folder (the config takes a clean absolute path). A local role without --models is refused
-# before anything is made, and so is --models with no local role. A local role sets no `reasoning` (ygg refuses it), so a
+# before anything is made, and so is --models with no local role; so are roles on two different local models (the
+# server holds one). A local role sets no `reasoning` (ygg refuses it), so a
 # local reviewer gets no reasoning line whatever --reviewer-reasoning says, and the plan says so. Only an
 # opencode role on openrouter/... is paid per token: only then does the config have usd lines and the credentials
 # file need OPENROUTER_API_KEY (claude-code needs CLAUDE_CODE_OAUTH_TOKEN; a local role needs no credential).
@@ -233,12 +234,15 @@ roles_ok() { # sets paid, need_claude, need_router and need_local
     role_ok --retro-agent/--retro-model "$retro"
   fi
   paid=0 need_claude=0 need_router=0 need_local=0
+  local_models=""
   for r in "$planner" "$implementer" "$reviewer" ${retro:+"$retro"}; do
     case "${r%%:*}" in
       claude-code) need_claude=1 ;;
-      opencode) if [[ ${r#*:} == local/* ]]; then need_local=1; else need_router=1; paid=1; fi ;;
+      opencode) if [[ ${r#*:} == local/* ]]; then need_local=1; local_models+="${r#*:}"$'\n'; else need_router=1; paid=1; fi ;;
     esac
   done
+  # The server holds one model at a time (spec 5.2.1): roles on two local models are refused before anything is made.
+  [ "$(printf '%s' "$local_models" | sort -u | grep -c .)" -le 1 ] || fail "roles on two different local models ($(printf '%s' "$local_models" | sort -u | paste -sd' ')): the local model server holds one; name the same local/<name> for every local role"
   # A local reviewer sets no reasoning (ygg refuses it): --reviewer-reasoning does not apply to it.
   reviewer_is_local=0
   [[ ${reviewer#*:} != local/* ]] || reviewer_is_local=1

@@ -21,7 +21,7 @@
 #      operator's model list), so one role changes (B-110). A local role needs --models FILE, the model list: the
 #      config then ends with `models:` and `  file: FILE`. FILE must exist; a relative path is made absolute from
 #      the caller's folder. A local role without --models is refused before anything is made, and so is --models
-#      when no role is local. A local role sets no `reasoning` (the example's roles have none);
+#      when no role is local, and so are roles on two different local models. A local role sets no `reasoning` (the example's roles have none);
 #      With --from-leaf LEAF, the leaf repos/notes starts from the files of LEAF (without .git) instead of the
 #      pack's template (B-109): the pack is copied to DIR/smoke-real-<time>/pack, LEAF becomes the copy's
 #      template, and every file of LEAF goes in the leaf's first commit. odin writes those files without the
@@ -168,6 +168,9 @@ need_claude=0 need_router=0 need_local=0
 grep -q -E 'agent:[[:space:]]*claude-code' <<<"$roles_text" && need_claude=1
 grep -q -E 'model:[[:space:]]*openrouter/' <<<"$roles_text" && need_router=1
 grep -q -E 'model:[[:space:]]*local/' <<<"$roles_text" && need_local=1
+# The server holds one model at a time (spec 5.2.1): roles on two local models are refused before anything is made.
+local_models="$(grep -o -E 'model:[[:space:]]*local/[^ ,}]*' <<<"$roles_text" | sed -E 's/^model:[[:space:]]*//' | sort -u || true)"
+[ "$(printf '%s' "$local_models" | grep -c .)" -le 1 ] || fail "roles on two different local models ($(printf '%s' "$local_models" | paste -sd' ')): the local model server holds one; name the same local/<name> for every local role"
 if [ "$need_local" -eq 1 ] && [ -z "$models" ]; then fail "a role is on a local model (opencode:local/<name>): --models FILE, the model list, is needed"; fi
 if [ "$need_local" -eq 0 ] && [ -n "$models" ]; then fail "--models goes with a role on a local model (opencode:local/<name>); no role is on one"; fi
 if [ -n "$models" ]; then

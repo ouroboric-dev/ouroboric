@@ -352,6 +352,17 @@ check "no OpenRouter role: no OPENROUTER_API_KEY asked, exit 0" test "$rc" -eq 0
 check "and no usd cap in the config" bash -c '! grep -q "usd:" "$1"' _ "$W/factory.yaml"
 check "and the other caps stay" grep -q -x '  per_run: { tokens: 400000, turns: 100 }' "$W/factory.yaml"
 
+# The example's reviewer on another local model than the implementer: two local models are refused (spec 5.2.1).
+O3="$T/odin3"; cp -r "$O" "$O3"
+printf 'roles:\n  implementer: { agent: claude-code, model: sonnet }\n  reviewer: { agent: opencode, model: local/other }\nbudget:\n  per_run: { tokens: 400000, turns: 100 }\n  per_day: { tokens: 1000000, turns: 200 }\nsandbox:\n  engine: @ENGINE@\n  mounts:\n    - { host: @FOLDER@, engine: @BIND@ }\ngrader: { tasks_dir: @TASKS@, suite_dir: @SUITES@ }\n' \
+  >"$O3/testdata/smoke-grade/factory.real.example.yaml"
+before="$(find "$D" -maxdepth 1 -name 'smoke-real-*' | wc -l)"
+run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$O3" --env "$T/env-claude" --models "$T/models.yaml" --implementer opencode:local/qwen3.8-27b --dry-run
+check "roles on two different local models are refused" test "$rc" -eq 2
+check "and it says so, and made nothing" bash -c 'grep -q "two different local models" "$1" && [ "$(find "$2" -maxdepth 1 -name "smoke-real-*" | wc -l)" -eq "$3" ]' _ "$T/out" "$D" "$before"
+run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$O3" --env "$T/env-claude" --models "$T/models.yaml" --implementer opencode:local/other --dry-run
+check "the same local model on two roles is accepted" test "$rc" -eq 0
+
 # --- --brief-note: the brief is the note, a blank line, then the task's instruction (B-109). A changed brief is
 # another task version, so the run builds and is graded against a derived copy of the task in the run's folder.
 mkdir -p "$T/suites0/smoke-notes/v1"; cp -r "$M/smoke-notes/sample-suite/tests" "$T/suites0/smoke-notes/v1/tests"
