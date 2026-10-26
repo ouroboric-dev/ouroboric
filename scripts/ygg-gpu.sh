@@ -16,7 +16,7 @@
 # /usr/lib/wsl/drivers/<folder> that no longer exists).
 # The engine is checked first (before any wsl.exe -d, which boots a stopped distro), by setup too. The state is read by
 # one constant probe script in the distro; a wsl.exe that fails or says nothing is exit 2, not a missing state.
-# Root commands in the distro run as `wsl.exe -d <distro> -u root -- sh -c ...`: no sudo. It never starts, stops,
+# Root commands in the distro run as `wsl.exe -d <distro> -u root -- sh -s` (the script on stdin): no sudo. It never starts, stops,
 # restarts or re-creates the engine or the machine, and sets no engine variable (ygg-engine.sh does).
 # Pinned: the toolkit YGG_GPU_TOOLKIT (1.20.1) and the CUDA image YGG_GPU_IMAGE (by digest).
 # Tests: YGG_ENGINE_SH replaces the ygg-engine.sh that sits next to this script.
@@ -54,7 +54,8 @@ case "$machine" in podman-*) distro="$machine" ;; *) distro="podman-$machine" ;;
 distros="$(wsl.exe -l -q 2>/dev/null | tr -d '\0\r')" || true # wsl.exe prints UTF-16
 printf '%s\n' "$distros" | grep -q -x -F -- "$distro" || refuse "WSL has no distro $distro for the machine $machine"
 
-root() { wsl.exe -d "$distro" -u root -- sh -c "$1"; }
+# The script goes on stdin: wsl.exe hands a command line to the distro's default shell, which expands $... first.
+root() { printf '%s\n' "$1" | wsl.exe -d "$distro" -u root -- sh -s; }
 
 # The engine must answer before any wsl.exe -d call: a wsl.exe -d boots a stopped distro, and a machine that is
 # stopped is the engine's business, not this script's.
@@ -96,7 +97,9 @@ do_check() {
   state
   if [ "$st" != ok ]; then
     echo "missing: $st"
-    echo "fix: $0 setup --machine $machine${folder[*]:+ ${folder[*]}}"
+    printf 'fix: %s setup --machine %q' "$0" "$machine"
+    [ ${#folder[@]} -eq 0 ] || printf ' --folder %q' "$dir"
+    echo
     exit 3
   fi
   out="$("$engine_sh" run "${folder[@]}" -- podman run --rm --device nvidia.com/gpu=all "$image" \
@@ -111,7 +114,7 @@ if [ "$mode" = setup ]; then
   if [ "$st" = toolkit ]; then
     echo "ygg-gpu: installing the NVIDIA container toolkit $ver in $distro"
     v="$ver-1"
-    root "curl -fsSL $repo_url -o /etc/yum.repos.d/nvidia-container-toolkit.repo && dnf install -y nvidia-container-toolkit-$v nvidia-container-toolkit-base-$v libnvidia-container-tools-$v libnvidia-container1-$v" ||
+    root "curl -fsSL $repo_url -o /etc/yum.repos.d/nvidia-container-toolkit.repo && dnf install -y nvidia-container-toolkit-$v nvidia-container-toolkit-base-$v libnvidia-container-tools-$v libnvidia-container1-$v </dev/null" ||
       { echo "ygg-gpu: the toolkit install failed" >&2; exit 1; }
     st=spec
   fi

@@ -28,10 +28,16 @@ M="$T/m"            # the machine's distro: toolkit (file), spec (file), fs/ (dr
 export FAKE_M="$M" FAKE_LOG="$T/wsl.calls"
 cat >"$T/bin/wsl.exe" <<'FAKE'
 #!/bin/bash
-# wsl.exe -l -q | wsl.exe -d NAME -u root -- sh -c CMD
+# wsl.exe -l -q | wsl.exe -d NAME -u root -- sh -s (script on stdin: runs unchanged)
+# The real wsl.exe hands a command line to the distro's shell, which expands $... before sh runs: the `sh -c CMD` form
+# loses every $name in CMD (as on the real machine). The fake does the same, for names.
 if [ "$1" = "-l" ]; then printf 'Ubuntu\r\n%s\r\n' "$(cat "$FAKE_M/distro")" | sed 's/./&\x00/g'; exit 0; fi
-[ "$1" = "-d" ] && [ "$3" = "-u" ] && [ "$4" = "root" ] && [ "$5" = "--" ] && [ "$6" = "sh" ] && [ "$7" = "-c" ] || { echo "fake wsl: bad args $*" >&2; exit 64; }
-cmd="$8"
+[ "$1" = "-d" ] && [ "$3" = "-u" ] && [ "$4" = "root" ] && [ "$5" = "--" ] && [ "$6" = "sh" ] || { echo "fake wsl: bad args $*" >&2; exit 64; }
+case "$7" in
+  -s) [ $# -eq 7 ] || { echo "fake wsl: bad args $*" >&2; exit 64; }; cmd="$(cat)" ;;
+  -c) cmd="$(printf '%s' "$8" | sed -E 's/\$[A-Za-z_][A-Za-z0-9_]*//g')" ;;
+  *) echo "fake wsl: bad args $*" >&2; exit 64 ;;
+esac
 echo "$2: $cmd" >>"$FAKE_LOG"
 case "$cmd" in
   *"echo toolkit"*) # the in-distro probe: run it for real against the fake distro's files
@@ -41,6 +47,7 @@ case "$cmd" in
     probe="${probe//command -v nvidia-ctk >\/dev\/null 2>&1/test -e $FAKE_M/toolkit}"
     probe="${probe//\[ -d \"\$d\" \]/[ -d \"$FAKE_M/fs/\$(basename \"\$d\")\" ]}"
     exec sh -c "$probe" ;;
+  *'echo "[stdin'* | *'echo "[cmdline'*) exec sh -c "$cmd" ;;
   *"dnf install"*) touch "$FAKE_M/toolkit"; exit 0 ;;
   *"cdi generate"*) { echo "devices:"; for d in "$FAKE_M"/fs/*; do echo "  path: /usr/lib/wsl/drivers/$(basename "$d")/x.so"; done; } >"$FAKE_M/spec"; exit 0 ;;
   "command -v nvidia-ctk"*) [ -e "$FAKE_M/toolkit" ]; exit $? ;;
@@ -162,6 +169,16 @@ reset have-toolkit stale
 run "$S/ygg-gpu.sh" check
 check "and the fix has no --folder when none was given" bash -c "grep -F 'fix: ' '$T/out' | grep -q -v -F -- '--folder'"
 check "the probe is one script: the state function interpolates nothing into sh -c" bash -c "! grep -E 'root \"(cat|test -d)' '$S/ygg-gpu.sh'"
+
+# the real wsl.exe expands $... in a command line: scripts go on stdin (sh -s), never as sh -c "$script"
+check "root() sends scripts on stdin to sh -s, nothing on the command line" bash -c "! grep -q 'sh -c' '$S/ygg-gpu.sh' && grep -q 'sh -s' '$S/ygg-gpu.sh'"
+reset have-toolkit current
+
+run bash -c "printf '%s\n' 'x=1; echo \"[stdin \$x]\"' | '$T/bin/wsl.exe' -d podman-machine-default -u root -- sh -s"
+check "the fake runs a stdin script unchanged" has "[stdin 1]"
+# shellcheck disable=SC2016 # the $x must reach the fake unexpanded
+run "$T/bin/wsl.exe" -d podman-machine-default -u root -- sh -c 'x=1; echo "[cmdline $x]"'
+check "the fake loses \$x on the command line, as the real wsl.exe does" has "[cmdline ]"
 
 # --- refusals: nothing changes
 reset no-toolkit none

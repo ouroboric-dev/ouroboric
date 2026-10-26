@@ -146,9 +146,13 @@ fix_template='
 import json, sys
 t = json.loads(sys.stdin.read(), strict=False)["chat_template"]
 old = "{{- raise_exception(\x27System message must be at the beginning.\x27) }}"
+new = "{{- \x27<|im_start|>system\\n\x27 + content + \x27<|im_end|>\\n\x27 }}"
+if t.count(old) == 0 and t.count(new) >= 1:
+    print("ALREADY")
+    sys.exit(0)
 if t.count(old) != 1:
     sys.exit("ygg-models: did not find the line that refuses later system messages in the chat template exactly once; check the template by hand")
-open(sys.argv[1], "w").write(t.replace(old, "{{- \x27<|im_start|>system\\n\x27 + content + \x27<|im_end|>\\n\x27 }}"))
+open(sys.argv[1], "w").write(t.replace(old, new))
 '
 
 case "$cmd" in
@@ -185,7 +189,12 @@ case "$cmd" in
     http GET "/props?model=$model"
     [ "$code" = 200 ] || die "model $model: GET /props?model=$model answered $code at $url"
     tmp="$weights/chat-template.jinja.tmp"
-    if ! printf '%s' "$body" | python3 -I -c "$fix_template" "$tmp"; then rm -f -- "$tmp"; exit 1; fi
+    res="$(printf '%s' "$body" | python3 -I -c "$fix_template" "$tmp")" || { rm -f -- "$tmp"; exit 1; }
+    if [ "$res" = ALREADY ]; then
+      rm -f -- "$tmp"
+      echo "model $model: the fix is already in place (the server's template has the system turn); nothing saved"
+      exit 0
+    fi
     mv -f "$tmp" "$weights/chat-template.jinja"
     echo "saved $weights/chat-template.jinja; in the list, uncomment chat-template-file: /models/chat-template.jinja, then:"
     echo "  scripts/ygg-models.sh stop && scripts/ygg-models.sh start"

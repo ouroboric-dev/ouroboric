@@ -358,6 +358,9 @@ check "template: no temporary file is left, and it tells to uncomment chat-templ
 reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "no such line here"
 run bash "$M" --models "$LIST" template qwen3.8-27b
 check "template: a template without the line is refused, and nothing is saved" eval '[ $rc != 0 ] && has "did not find" && [ ! -e "$W/chat-template.jinja" ]'
+reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "A {{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }} B"
+run bash "$M" --models "$LIST" template qwen3.8-27b
+check "template: a template that has the fix already says so, exits 0 and saves nothing" eval '[ $rc = 0 ] && has "already in place" && [ ! -e "$W/chat-template.jinja" ]'
 reset; up; cp "$T/models.after.json" "$T/models.json"; mkprops "$TPL_OLD $TPL_OLD"
 run bash "$M" --models "$LIST" template qwen3.8-27b
 check "template: a line found twice is refused" eval '[ $rc != 0 ] && has "did not find" && [ ! -e "$W/chat-template.jinja" ]'

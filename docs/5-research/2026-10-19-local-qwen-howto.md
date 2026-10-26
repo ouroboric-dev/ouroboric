@@ -28,6 +28,8 @@ The model and the run state of the measurement scripts live in `~/.local/share/q
 outside every repo. The engine sees host files only through the `sandbox.mounts` of the factory folder's
 `factory.yaml` (for the founder's setup, `~/ygg-it`), so the weights and the state folder of the model list must
 be under a folder of those mounts: put the model under `~/ygg-it` and link it from there.
+A symlink in the weights folder that points outside the mounts does not resolve in the engine, so link only to
+files under them.
 
 ## Set up the server
 
@@ -156,7 +158,7 @@ provider's `baseURL` to `http://127.0.0.1:8099/v1`, and pass `--standalone`.
 ## Troubleshooting
 
 - **Every Claude Code request fails with HTTP 500, "System message must be at the beginning".** The
-  fixed chat template is missing. Run `scripts/ygg-models.sh template` and restart, as in
+  fixed chat template is missing. Run `scripts/ygg-models.sh template qwen3.8-27b` and restart, as in
   [Set up the server](#set-up-the-server).
 - **The server disappears in a long session, and `dmesg` shows `Out of memory: Killed process
   (llama-server)`.** WSL ran out of system RAM. Keep `cache-ram` and `ctx-checkpoints` low in the list's `args`,
