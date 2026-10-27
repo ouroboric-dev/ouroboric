@@ -51,7 +51,11 @@ if [ "${1:-}" = init ]; then
     echo "qwen-claude: $personal/hooks/merge-requires-green.sh is not there; the merge hook is left out" >&2
   fi
   if [ -d "$personal/skills" ]; then skills=1
-  else echo "qwen-claude: $personal/skills is not there; the skills link is left out" >&2; fi
+  else
+    echo "qwen-claude: $personal/skills is not there; the skills link is left out" >&2
+    # A link from an earlier init goes; a link elsewhere, or anything that is not a link, stays.
+    if [ -L "$dir/skills" ] && [ "$(readlink "$dir/skills")" = "$personal/skills" ]; then rm -f "$dir/skills"; fi
+  fi
   printf '{"permissions":{"defaultMode":"default"},"model":"%s","enabledPlugins":{%s},"extraKnownMarketplaces":{"%s":{"source":{"source":"github","repo":"anthropics/%s"}}}%s}\n' \
     "$QWEN_ALIAS" "$enabled" "$market" "$market" "$hook" > "$dir/settings.json"
   [ -e "$dir/.claude.json" ] || echo '{"hasCompletedOnboarding":true}' > "$dir/.claude.json"

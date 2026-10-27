@@ -81,12 +81,12 @@ check "init again keeps an existing .claude.json and the skills link" \
   eval '[ $rc = 0 ] && js "$Q/.claude.json" "c.get(\"mine\") == 1" && [ "$(readlink "$Q/skills")" = "$P/skills" ]'
 
 # Without the personal folder, or without its parts, init leaves the skills link and the hook out and says so.
-for case in none skills both; do
-  QD="$T/opt-$case" PD="$T/personal-$case"
-  [ "$case" = none ] || mkdir -p "$PD/skills"
-  [ "$case" != both ] || { mkdir -p "$PD/hooks"; : > "$PD/hooks/merge-requires-green.sh"; }
+for kind in none skills both; do
+  QD="$T/opt-$kind" PD="$T/personal-$kind"
+  [ "$kind" = none ] || mkdir -p "$PD/skills"
+  [ "$kind" != both ] || { mkdir -p "$PD/hooks"; : > "$PD/hooks/merge-requires-green.sh"; }
   QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
-  case "$case" in
+  case "$kind" in
     none) check "init without the personal folder: no hook, no skills link, valid JSON, one line per omission" \
       eval '[ $rc = 0 ] && js "$QD/settings.json" "\"hooks\" not in c and \"enabledPlugins\" in c" && [ ! -e "$QD/skills" ] && [ ! -L "$QD/skills" ] && [ "$(grep -c "left out" "$T/out")" = 2 ] && has "skills" && has "merge-requires-green.sh"' ;;
     skills) check "init with skills but no hook script: links the skills, no hook, valid JSON" \
@@ -95,6 +95,20 @@ for case in none skills both; do
       eval '[ $rc = 0 ] && js "$QD/settings.json" "c[\"hooks\"][\"PreToolUse\"][0][\"hooks\"][0][\"command\"] == \"$PD/hooks/merge-requires-green.sh\"" && [ "$(readlink "$QD/skills")" = "$PD/skills" ] && ! has "left out"' ;;
   esac
 done
+
+# A skills link from an earlier init goes when the personal skills folder is gone; a link elsewhere stays.
+QD="$T/opt-reinit" PD="$T/personal-reinit"; mkdir -p "$PD/skills"
+QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
+rm -rf "$PD/skills"
+QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
+check "init again after the personal skills folder is gone: the old link is removed, valid JSON, left out said" \
+  eval '[ $rc = 0 ] && [ ! -e "$QD/skills" ] && [ ! -L "$QD/skills" ] && js "$QD/settings.json" "\"enabledPlugins\" in c" && has "skills link is left out"'
+QD="$T/opt-else" PD="$T/personal-else"; mkdir -p "$QD" "$T/elsewhere-skills"; ln -s "$T/elsewhere-skills" "$QD/skills"
+QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
+check "a skills link that points elsewhere is never removed" eval '[ "$(readlink "$QD/skills")" = "$T/elsewhere-skills" ]'
+QD="$T/opt-dir" PD="$T/personal-dir"; mkdir -p "$QD/skills"; : > "$QD/skills/keep"
+QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
+check "a skills folder that is not a link is never removed" eval '[ -f "$QD/skills/keep" ]'
 
 run bash "$C" -p hi
 check "run with the server down: refuses with the start hint; claude does not run" \
