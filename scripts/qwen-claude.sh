@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Run Claude Code against the local Qwen 3.8 27B server, in a config dir of its own that has no
 # account (docs/5-research/2026-10-19-local-qwen-design.md). Start the server first: ygg-models.sh start.
-#   qwen-claude.sh init                set up the config dir: the personal setup's plugins, skills and
-#                                      merge hook, without its account, memory or account guard
+#   qwen-claude.sh init                set up the config dir: the three plugins, and the personal setup's
+#                                      skills link and merge hook when it has them, without its account,
+#                                      memory or account guard. A missing skills folder or hook script is
+#                                      left out, with one line on stderr for each
 #   qwen-claude.sh [CLAUDE ARGS...]    run Claude Code on the local model
 # Environment, besides qwen-lib.sh's:
 #   QWEN_CLAUDE_DIR    the local config dir ($HOME/.claude-qwen); never the work or personal one
-#   QWEN_PERSONAL_DIR  the personal config dir, only read ($HOME/.claude-personal)
+#   QWEN_PERSONAL_DIR  the personal config dir, only read ($HOME/.claude-personal); optional
 #   QWEN_CLAUDE_BIN    the claude binary (the one on PATH; the zsh `claude` function is not used)
 # Claude Code does not know this model, so CLAUDE_CODE_MAX_CONTEXT_TOKENS tells it the server's context.
 # It never writes to ~/.claude, ~/.claude.json or the personal config dir, and removes the cloud
@@ -42,10 +44,22 @@ if [ "${1:-}" = init ]; then
   mkdir -p "$dir"
   enabled="" sep=""
   for p in "${plugins[@]}"; do enabled+="$sep\"$p@$market\":true"; sep=","; done
-  printf '{"permissions":{"defaultMode":"default"},"model":"%s","enabledPlugins":{%s},"extraKnownMarketplaces":{"%s":{"source":{"source":"github","repo":"anthropics/%s"}}},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"%s/hooks/merge-requires-green.sh"}]}]}}\n' \
-    "$QWEN_ALIAS" "$enabled" "$market" "$market" "$personal" > "$dir/settings.json"
+  hook="" skills=""
+  if [ -f "$personal/hooks/merge-requires-green.sh" ]; then
+    hook=",\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"$personal/hooks/merge-requires-green.sh\"}]}]}"
+  else
+    echo "qwen-claude: $personal/hooks/merge-requires-green.sh is not there; the merge hook is left out" >&2
+  fi
+  if [ -d "$personal/skills" ]; then skills=1
+  else
+    echo "qwen-claude: $personal/skills is not there; the skills link is left out" >&2
+    # A link from an earlier init goes; a link elsewhere, or anything that is not a link, stays.
+    if [ -L "$dir/skills" ] && [ "$(readlink "$dir/skills")" = "$personal/skills" ]; then rm -f "$dir/skills"; fi
+  fi
+  printf '{"permissions":{"defaultMode":"default"},"model":"%s","enabledPlugins":{%s},"extraKnownMarketplaces":{"%s":{"source":{"source":"github","repo":"anthropics/%s"}}}%s}\n' \
+    "$QWEN_ALIAS" "$enabled" "$market" "$market" "$hook" > "$dir/settings.json"
   [ -e "$dir/.claude.json" ] || echo '{"hasCompletedOnboarding":true}' > "$dir/.claude.json"
-  [ -L "$dir/skills" ] || ln -s "$personal/skills" "$dir/skills"
+  if [ -n "$skills" ] && [ ! -L "$dir/skills" ]; then ln -s "$personal/skills" "$dir/skills"; fi
   CLAUDE_CONFIG_DIR="$dir" "$bin" plugin marketplace add "anthropics/$market"
   for p in "${plugins[@]}"; do CLAUDE_CONFIG_DIR="$dir" "$bin" plugin install "$p@$market"; done
   echo "set up $dir; run scripts/qwen-claude.sh to start a session"

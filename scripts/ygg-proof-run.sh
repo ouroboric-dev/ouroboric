@@ -79,10 +79,12 @@
 # steps 8 and 9, with the baseline the proof run recorded unless --baseline names another. The raw `ygg approve`,
 # `ygg reject` and `ygg resume` commands are printed too, as a fallback: they run without the wall clock, the filter
 # or the report.
-# The stale-binary guard: when YGG_CMD is not set, the ygg on PATH must have build facts (BINARY.build.txt, written by
+# The stale-binary guard: the ygg on PATH, or YGG_CMD when it is one executable file (a second ygg built beside the
+# one on PATH: `ygg-build.sh --out FILE --beside-path`), must have build facts (BINARY.build.txt, written by
 # scripts/ygg-build.sh) that name the HEAD of the umbrella's odin (--yggdrasil DIR/odin) and the binary's SHA-256.
 # A ygg with no facts, or other ones, is refused before anything is made ("run scripts/ygg-build.sh"); --any-ygg
-# skips the check and says so; a dry run prints the result and is not refused.
+# skips the check and says so; a dry run prints the result and is not refused. A YGG_CMD of several words (or one
+# that is no executable file) is used unchecked, and the script says so in one line.
 # For tests and other machines: YGG_CMD (how ygg runs), YGG_BIND (the bind mount, default /mnt/wsl/ygg-bind).
 set -euo pipefail
 shopt -u patsub_replacement 2>/dev/null || true
@@ -345,11 +347,9 @@ else
   fi
   if [ "$baseline" = "$cont" ]; then fail "--baseline $baseline is the run being continued; a run is not its own baseline"; fi
 fi
-# The stale-binary guard, before anything is made or run: only a ygg from PATH (YGG_CMD is not guarded).
-if [ -z "${YGG_CMD:-}" ]; then
-  guard_odin="$(cd -P -- "$ygg_dir/odin" 2>/dev/null && pwd -P || echo "$ygg_dir/odin")"
-  ygg_guard proof-run "$guard_odin" "$any_ygg" "$dry" || exit 2
-fi
+# The stale-binary guard, before anything is made or run: the ygg from PATH, or YGG_CMD (checked when it is one file).
+guard_odin="$(cd -P -- "$ygg_dir/odin" 2>/dev/null && pwd -P || echo "$ygg_dir/odin")"
+ygg_guard proof-run "$guard_odin" "$any_ygg" "$dry" "${YGG_CMD:-}" || exit 2
 # The baseline, found before anything is made or started: a bad one costs nothing. A baseline the proof run recorded
 # that is gone now only drops the comparison, so that the run can still be continued.
 base_dir=""

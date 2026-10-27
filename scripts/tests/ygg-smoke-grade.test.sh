@@ -344,7 +344,9 @@ check "and adds no mount" test "$(grep -c 'host:' "$(newest "smoke-grade-*")/ref
 # --- ygg-smoke-real.sh. The credentials are made-up values; none may appear anywhere in the output.
 MARK_A='sekret-claude-0123456789'
 MARK_B='sekret-openrouter-9876543210'
-rargs=(--folder "$D" --tasks "$M" --odin "$T/odin" --env "$T/factory.env")
+# The fake ygg-cmd is one executable file, so ygg-smoke-real.sh would check its build facts; these cases are not about
+# the guard (ygg-smoke-real.test.sh is), so they pass --any-ygg.
+rargs=(--folder "$D" --tasks "$M" --odin "$T/odin" --env "$T/factory.env" --any-ygg)
 run "$S/ygg-smoke-real.sh" "${rargs[@]}" --dry-run
 check "a missing credentials file is refused" test "$rc" -eq 2
 printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$MARK_A" >"$T/factory.env"

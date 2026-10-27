@@ -6,9 +6,10 @@
 # The suite is the PUBLIC sample suite of the task (no hidden suite of smoke-notes exists); the agents never mount
 # it. Needs DIR/factory.yaml (it names the engine; this script never writes it), the credentials file, the
 # devcontainer CLI 0.89.0, jq and python3, the engine up, the bind mount present, and a checkout of `mimir`. It
-#   1. checks the engine, the tools and the task, and that a ygg from PATH is not stale: when neither YGG_CMD nor a
-#      build from --odin gives the ygg, its build facts (BINARY.build.txt, written by scripts/ygg-build.sh) must name
-#      the HEAD of the odin checkout and the binary's SHA-256. A ygg with no facts, or other ones, is refused
+#   1. checks the engine, the tools and the task, and that the ygg is not stale: when a build from --odin does not
+#      give the ygg, the one from PATH, or YGG_CMD when it is one executable file (a YGG_CMD of several words is
+#      used unchecked, and the script says so), must have build facts (BINARY.build.txt, written by
+#      scripts/ygg-build.sh) that name the HEAD of the odin checkout and the binary's SHA-256. A ygg with no facts, or other ones, is refused
 #      ("run scripts/ygg-build.sh"); --any-ygg skips the check and says so; a dry run prints the result only;
 #   2. checks the credentials file WITHOUT reading it: the file exists, and each name the roles need is on one line
 #      with a value after it (grep -c counts the lines; no value is printed or kept). A claude-code role needs
@@ -111,9 +112,9 @@ case "$engine" in unix://*) ;; *) fail "sandbox.engine in $dir/factory.yaml is '
 for tool in jq python3 git timeout sha256sum; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
 tasks="$(cd "$tasks" 2>/dev/null && pwd)" || fail "no mimir folder at $tasks (--tasks)"
 odin="$(cd "$odin" 2>/dev/null && pwd)" || fail "no odin folder at $odin (--odin)"
-# The stale-binary guard, before anything is made: only a ygg from PATH (YGG_CMD and a build from --odin are not).
-if [ -z "${YGG_CMD:-}" ] && command -v ygg >/dev/null 2>&1; then
-  ygg_guard smoke-real "$odin" "$any_ygg" "$dry" || exit 2
+# The stale-binary guard, before anything is made: the ygg from PATH or YGG_CMD (a build from --odin is not guarded).
+if [ -n "${YGG_CMD:-}" ] || command -v ygg >/dev/null 2>&1; then
+  ygg_guard smoke-real "$odin" "$any_ygg" "$dry" "${YGG_CMD:-}" || exit 2
 fi
 realm="$odin/testdata/smoke-grade"
 public="$tasks/$task/sample-suite"

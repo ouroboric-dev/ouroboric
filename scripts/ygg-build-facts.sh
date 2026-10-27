@@ -5,15 +5,22 @@
 # format, built, umbrella, one line per module of go.work (odin among them) with its commit, and sha256, the SHA-256
 # of the binary it wrote. The commits are `git rev-parse --short=12 HEAD`, the width odin's version uses.
 #   ygg_facts_get BINARY NAME        print the value of NAME in BINARY.build.txt; fail when there is no such file or line
-#   ygg_stale_check BINARY ODIN      sets ygg_stale_msg; returns 0 when BINARY is the file ygg-build.sh wrote and was
+#   ygg_stale_check BINARY ODIN [BESIDE]
+#                                    sets ygg_stale_msg; returns 0 when BINARY is the file ygg-build.sh wrote and was
 #                                    built from the HEAD of the odin checkout ODIN, 1 otherwise. A stale message ends
 #                                    with the command to paste: "run: /abs/scripts/ygg-build.sh --yggdrasil UMBRELLA",
-#                                    where UMBRELLA is the folder that holds ODIN.
-#   ygg_guard PREFIX ODIN ANY DRY    the guard of the smoke scripts, for the ygg first on PATH, read through its links
-#                                    (readlink -f), since ygg-build.sh writes the facts beside the link's target. It
-#                                    prints one "PREFIX: ygg guard: ..." line and returns 1 when the script must
-#                                    refuse. ANY=1 (--any-ygg) skips the check and says so; DRY=1 (a dry run) prints
-#                                    the result and never refuses.
+#                                    where UMBRELLA is the folder that holds ODIN;
+#                                    a non-empty BESIDE (a YGG_CMD file, not PATH's ygg) adds " --out BINARY
+#                                    --beside-path", so that the command rebuilds that file.
+#   ygg_guard PREFIX ODIN ANY DRY [CMD]
+#                                    the guard of the smoke scripts, for the ygg first on PATH, or, when CMD (the
+#                                    script's YGG_CMD) is not empty, for CMD: a single word that resolves to an
+#                                    executable file is checked as the ygg from PATH is, and CMD of several words, or
+#                                    one that is no executable file (a test's stub), is used unchecked, with a line
+#                                    that says so. Links are read through (readlink -f), since ygg-build.sh writes the
+#                                    facts beside the link's target. It prints one "PREFIX: ygg guard: ..." line and
+#                                    returns 1 when the script must refuse. ANY=1 (--any-ygg) skips the check and says
+#                                    so; DRY=1 (a dry run) prints the result and never refuses.
 ygg_build_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ygg-build.sh"
 ygg_facts_get() {
   local f="$1.build.txt"
@@ -23,8 +30,9 @@ ygg_facts_get() {
 
 # shellcheck disable=SC2034 # ygg_stale_msg is read by the sourcing script
 ygg_stale_check() {
-  local bin="$1" odin="$2" built head sum want cmd
+  local bin="$1" odin="$2" beside="${3:-}" built head sum want cmd
   cmd="run: $ygg_build_script --yggdrasil $(dirname -- "$odin")"
+  [ -z "$beside" ] || cmd="$cmd --out $bin --beside-path"
   if [ -z "$bin" ]; then
     ygg_stale_msg="no ygg is on PATH; $cmd"
     return 1
@@ -52,13 +60,25 @@ ygg_stale_check() {
 }
 
 ygg_guard() {
-  local prefix="$1" odin="$2" any="$3" dry="$4" bin=""
-  if bin="$(command -v ygg 2>/dev/null)" && [ -n "$bin" ]; then bin="$(readlink -f -- "$bin")"; else bin=""; fi
+  local prefix="$1" odin="$2" any="$3" dry="$4" cmd="${5:-}" bin="" found="" beside=""
+  if [ -n "$cmd" ]; then
+    if [[ $cmd != *[[:space:]]* ]] && found="$(command -v -- "$cmd" 2>/dev/null)" && [ -f "$found" ] && [ -x "$found" ]; then
+      bin="$(readlink -f -- "$found")" beside=1
+    elif [ "$any" = 1 ]; then
+      echo "$prefix: ygg guard: skipped (--any-ygg): YGG_CMD ($cmd) is used without checking which odin it was built from"
+      return 0
+    else
+      echo "$prefix: ygg guard: YGG_CMD ($cmd) is not one executable file: it is used without checking which odin it was built from"
+      return 0
+    fi
+  elif found="$(command -v ygg 2>/dev/null)" && [ -n "$found" ]; then
+    bin="$(readlink -f -- "$found")"
+  fi
   if [ "$any" = 1 ]; then
     echo "$prefix: ygg guard: skipped (--any-ygg): ${bin:-the ygg} is used without checking which odin it was built from"
     return 0
   fi
-  if ygg_stale_check "$bin" "$odin"; then
+  if ygg_stale_check "$bin" "$odin" "$beside"; then
     echo "$prefix: ygg guard: ok: $ygg_stale_msg"
     return 0
   fi

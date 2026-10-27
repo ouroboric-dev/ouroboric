@@ -27,7 +27,8 @@ You need:
 - WSL2 with Ubuntu 22.04, about 25 GB of free disk, Homebrew, `uv`, and the factory's engine (a Podman machine
   with GPU access: `scripts/ygg-gpu.sh setup` prepares it). The server image builds `llama-server` itself, so the
   host needs no CUDA toolkit, no cmake and no build.
-- Claude Code (`claude`) on `PATH`, and the personal Claude Code config in `~/.claude-personal`.
+- Claude Code (`claude`) on `PATH`. The personal Claude Code config in `~/.claude-personal` is optional: without it, `init` leaves out the
+  skills link and the merge hook, and says so.
 
 The model and the run state of the measurement scripts live in `~/.local/share/qwen-local` (`QWEN_HOME`),
 outside every repo. The engine sees host files only through the `sandbox.mounts` of the factory folder's
@@ -66,7 +67,7 @@ files under them.
    It saves `chat-template.jinja` in the weights folder. Uncomment `chat-template-file` in the list, then run
    `scripts/ygg-models.sh stop && scripts/ygg-models.sh start`.
 1. Set up the local Claude Code config dir, `~/.claude-qwen`: `scripts/qwen-claude.sh init`. It
-   installs the personal setup's three plugins and links its skills. It never touches `~/.claude` or
+   installs the three plugins and, when the personal setup has them, links its skills and adds its merge hook. It never touches `~/.claude` or
    `~/.claude-personal`.
 
 The server's settings are the model list's `context` and `args` (reasoning effort, cache and checkpoint
