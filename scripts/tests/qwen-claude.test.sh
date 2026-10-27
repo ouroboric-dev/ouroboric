@@ -80,6 +80,22 @@ run bash "$C" init
 check "init again keeps an existing .claude.json and the skills link" \
   eval '[ $rc = 0 ] && js "$Q/.claude.json" "c.get(\"mine\") == 1" && [ "$(readlink "$Q/skills")" = "$P/skills" ]'
 
+# Without the personal folder, or without its parts, init leaves the skills link and the hook out and says so.
+for case in none skills both; do
+  QD="$T/opt-$case" PD="$T/personal-$case"
+  [ "$case" = none ] || mkdir -p "$PD/skills"
+  [ "$case" != both ] || { mkdir -p "$PD/hooks"; : > "$PD/hooks/merge-requires-green.sh"; }
+  QWEN_CLAUDE_DIR="$QD" QWEN_PERSONAL_DIR="$PD" run bash "$C" init
+  case "$case" in
+    none) check "init without the personal folder: no hook, no skills link, valid JSON, one line per omission" \
+      eval '[ $rc = 0 ] && js "$QD/settings.json" "\"hooks\" not in c and \"enabledPlugins\" in c" && [ ! -e "$QD/skills" ] && [ ! -L "$QD/skills" ] && [ "$(grep -c "left out" "$T/out")" = 2 ] && has "skills" && has "merge-requires-green.sh"' ;;
+    skills) check "init with skills but no hook script: links the skills, no hook, valid JSON" \
+      eval '[ $rc = 0 ] && js "$QD/settings.json" "\"hooks\" not in c" && [ "$(readlink "$QD/skills")" = "$PD/skills" ] && [ "$(grep -c "left out" "$T/out")" = 1 ] && has "merge-requires-green.sh"' ;;
+    both) check "init with skills and hook: both, and nothing left out" \
+      eval '[ $rc = 0 ] && js "$QD/settings.json" "c[\"hooks\"][\"PreToolUse\"][0][\"hooks\"][0][\"command\"] == \"$PD/hooks/merge-requires-green.sh\"" && [ "$(readlink "$QD/skills")" = "$PD/skills" ] && ! has "left out"' ;;
+  esac
+done
+
 run bash "$C" -p hi
 check "run with the server down: refuses with the start hint; claude does not run" \
   eval '[ $rc = 2 ] && has "ygg-models.sh start" && [ ! -e "$T/calls" ]'
