@@ -165,7 +165,7 @@ check "it says no commit is known for a binary it did not build" has "odin commi
 check "the line comes before the doctor" bash -c "grep -n 'smoke-real: ygg:' '$T/out' | head -n 1 | cut -d: -f1 | { read -r a; b=\$(grep -n 'ygg doctor on that config' '$T/out' | cut -d: -f1); [ \"\$a\" -lt \"\$b\" ]; }"
 
 # --- YGG_CMD
-PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --any-ygg
 check "YGG_CMD wins over PATH and the line names it" has "smoke-real: ygg: $T/other/ygg-custom"
 check "and does not name the PATH one" hasnt "$T/pathbin/ygg"
 
@@ -209,8 +209,21 @@ facts "$T/realbin/ygg" "$head12"
 PATH="$T/linkbin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}"
 check "guard: a link on PATH passes on the facts beside its target" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: ok: the ygg at $T/realbin/ygg' '$T/out' && grep -q -F 'built from odin $head12 (build facts)' '$T/out'"
 rm -rf "$T/linkbin" "$T/realbin"
+# YGG_CMD, one executable file, is guarded as the ygg from PATH is, by the facts beside it.
+rm -f "$T/other/ygg-custom.build.txt"
 PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
-check "guard: YGG_CMD is not guarded" bash -c "[ $rc -eq 0 ] && ! grep -q 'ygg guard' '$T/out'"
+check "guard: a YGG_CMD with no build facts is STALE in a dry run" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: STALE: the ygg at $T/other/ygg-custom has no build facts' '$T/out'"
+mark
+PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs_real[@]}"
+check "guard: a real run with a stale YGG_CMD is refused (exit 2), and makes nothing" bash -c "[ $rc -eq 2 ] && grep -q -F '$build_cmd' '$T/out'" && check "guard: and no smoke folder was made for it" none_made
+PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}" --any-ygg
+check "guard: --any-ygg skips a stale YGG_CMD and says so" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: skipped (--any-ygg)' '$T/out'"
+facts "$T/other/ygg-custom" "$head12"
+PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "guard: a YGG_CMD built from odin's HEAD passes" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: ok: the ygg at $T/other/ygg-custom' '$T/out'"
+rm -f "$T/other/ygg-custom.build.txt"
+PATH="$T/pathbin:$BASEPATH" YGG_CMD="$T/other/ygg-custom --extra" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
+check "guard: a YGG_CMD of several words is used unchecked, and the script says so" bash -c "[ $rc -eq 0 ] && grep -q -F 'smoke-real: ygg guard: YGG_CMD ($T/other/ygg-custom --extra) is not one executable file: it is used without checking' '$T/out'"
 PATH="$T/gobin:$BASEPATH" run "$S/ygg-smoke-real.sh" "${rargs[@]}"
 check "guard: a build from --odin is not guarded" bash -c "[ $rc -eq 0 ] && ! grep -q 'ygg guard' '$T/out'"
 rm -f "$T/pathbin/ygg.build.txt"
@@ -448,7 +461,8 @@ run_real() {
   case "${YGG_CMD:-}" in "$T"/*) ;; *) echo "FAIL run_real refused: YGG_CMD '${YGG_CMD:-}' is not under $T"; fail=1; return 1 ;; esac
   [ -x "$YGG_CMD" ] || { echo "FAIL run_real refused: $YGG_CMD is not executable"; fail=1; return 1; }
   [ "${YGG_ENGINE_CHECK:-}" = 0 ] || { echo "FAIL run_real refused: YGG_ENGINE_CHECK is not 0"; fail=1; return 1; }
-  run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$O" --env "$T/factory.env" "$@"
+  # The fake is one executable file, so the guard checks it: --any-ygg, since these cases are not about the guard.
+  run "$S/ygg-smoke-real.sh" --folder "$D" --tasks "$M" --odin "$O" --env "$T/factory.env" --any-ygg "$@"
 }
 # The fake ygg: doctor and status exit 0; run writes a made-up ledger with one finding raised, fixed and closed.
 FY="$T/fakeygg/ygg"; mkdir -p "$T/fakeygg"

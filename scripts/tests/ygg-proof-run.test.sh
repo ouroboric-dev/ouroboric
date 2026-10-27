@@ -124,7 +124,10 @@ printf '#!/bin/sh\necho 0.89.0\n' >"$FB/devcontainer"
 chmod +x "$FB/ygg" "$FB/devcontainer"
 export YGG_CMD="$FB/ygg" PATH="$FB:$PATH"
 
-BASE=(--folder "$D" --env "$ENVF" --tasks "$TK" --suites "$SU" --yggdrasil "$YG")
+# The stub ygg is YGG_CMD, one executable file, so the guard checks it: the cases that are not about the guard pass
+# --any-ygg (BASE); the guard's own cases use GBASE, without it.
+GBASE=(--folder "$D" --env "$ENVF" --tasks "$TK" --suites "$SU" --yggdrasil "$YG")
+BASE=("${GBASE[@]}" --any-ygg)
 proof() { "$SCRIPT" "${BASE[@]}" "$@"; }
 made() { find "$D" -maxdepth 1 -name 'proof-*' | head -n 1; }
 refuses() { [ "$rc" -eq 2 ] && has "$1" && [ -z "$(made)" ]; }
@@ -318,33 +321,47 @@ head12="$(git -C "$YG/odin" rev-parse --short=12 HEAD)"
 facts() { printf 'format: 1\nodin: %s\nsha256: %s\n' "$2" "$(sha256sum "$1" | cut -d' ' -f1)" >"$1.build.txt"; } # BINARY ODIN_COMMIT
 build_cmd="run: $(cd "$S" && pwd)/ygg-build.sh --yggdrasil $YG"
 rm -f "$FB/ygg.build.txt"
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard --dry-run
 check "guard: a dry run with a ygg with no build facts is not refused" test "$rc" -eq 0
 check "guard: it prints STALE and says to run the build script" has "proof-run: ygg guard: STALE: the ygg at $FB/ygg has no build facts"
 check "guard: it gives the whole build command and says the dry run did not refuse" has "$build_cmd (a dry run: not refused)"
 : >"$T/ygg.calls"
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard
 check "guard: a real run with no build facts is refused, and makes nothing" refuses "$build_cmd"
 check "guard: the refusal names --any-ygg" has "--any-ygg"
 check "guard: no ygg verb ran before the refusal" test ! -s "$T/ygg.calls"
 facts "$FB/ygg" 000000000000
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard
 check "guard: a binary from another commit is refused, with both commits" refuses "built from odin 000000000000, but the checkout $YG/odin is at $head12"
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg --dry-run
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard --any-ygg --dry-run
 check "guard: --any-ygg passes a stale binary and says so" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2"' _ "$rc" "$T/out"
 : >"$T/ygg.calls"
-run env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --any-ygg
+run env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard --any-ygg
 check "guard: a real run with --any-ygg and a stale binary runs, and says it skipped the check" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2" && grep -q "^run " "$3"' _ "$rc" "$T/out" "$T/ygg.calls"
 rm -rf "$D"/proof-*
 facts "$FB/ygg" "$head12"
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard --dry-run
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard --dry-run
 check "guard: a binary built from odin's HEAD passes" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: ok" "$2"' _ "$rc" "$T/out"
 cp "$FB/ygg" "$T/ygg.keep"; printf '# rebuilt by hand\n' >>"$FB/ygg"
-runq env -u YGG_CMD "$SCRIPT" "${BASE[@]}" --name guard
+runq env -u YGG_CMD "$SCRIPT" "${GBASE[@]}" --name guard
 check "guard: a binary changed after its facts were written is refused" refuses "is not the binary ygg-build.sh wrote"
 mv "$T/ygg.keep" "$FB/ygg"
-runq "$SCRIPT" "${BASE[@]}" --name guard --dry-run
-check "guard: YGG_CMD is not guarded" bash -c '[ "$1" -eq 0 ] && ! grep -q "ygg guard" "$2"' _ "$rc" "$T/out"
+# YGG_CMD, one executable file, is guarded as the ygg from PATH is, by the facts beside it.
+rm -f "$FB/ygg.build.txt"
+runq "$SCRIPT" "${GBASE[@]}" --name guard --dry-run
+check "guard: a YGG_CMD with no build facts is STALE in a dry run" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: STALE: the ygg at $2/ygg has no build facts" "$3"' _ "$rc" "$FB" "$T/out"
+rm -f "$T/ygg.calls"
+runq "$SCRIPT" "${GBASE[@]}" --name guard
+check "guard: a real run with a stale YGG_CMD is refused, and makes nothing" refuses "$build_cmd"
+check "guard: no ygg verb ran before the refusal" test ! -s "$T/ygg.calls"
+runq "$SCRIPT" "${GBASE[@]}" --name guard --any-ygg --dry-run
+check "guard: --any-ygg skips a stale YGG_CMD and says so" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: skipped (--any-ygg)" "$2"' _ "$rc" "$T/out"
+facts "$FB/ygg" "$head12"
+runq "$SCRIPT" "${GBASE[@]}" --name guard --dry-run
+check "guard: a YGG_CMD built from odin's HEAD passes" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: ok" "$2"' _ "$rc" "$T/out"
+rm -f "$FB/ygg.build.txt"
+YGG_CMD="$FB/ygg --extra" runq "$SCRIPT" "${GBASE[@]}" --name guard --dry-run
+check "guard: a YGG_CMD of several words is used unchecked, and the script says so" bash -c '[ "$1" -eq 0 ] && grep -q -F "proof-run: ygg guard: YGG_CMD ($2/ygg --extra) is not one executable file: it is used without checking" "$3"' _ "$rc" "$FB" "$T/out"
 rm -f "$FB/ygg.build.txt"; rm -rf "$D"/proof-* "$YG/odin"
 
 # --- the suites folder is never listed or read
@@ -667,7 +684,7 @@ fresh; plant_base; run proof --name go --dry-run --baseline "$OLD"
 check "the dry run names the baseline it found and its folder" bash -c 'grep -F "baseline run $2" "$1" | grep -q -F "proof-old-20200101-000000"' _ "$T/out" "$OLD"
 
 # --- the ouroboric review (I1): --continue continues a stopped or paused run inside the script
-CBASE=(--folder "$D" --env "$ENVF")
+CBASE=(--folder "$D" --env "$ENVF" --any-ygg)
 cont() { "$SCRIPT" "${CBASE[@]}" "$@"; }
 runc() { pathok; "$@" >"$T/out" 2>&1; rc=$?; } # a continuation makes no folder: no wait
 clearlogs() { rm -f "$T/ygg.calls" "$T/ygg.env" "$T/timeout.args"; }

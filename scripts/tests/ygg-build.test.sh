@@ -105,6 +105,24 @@ check "the ygg first on PATH is not touched" grep -q old "$T/pathbin/ygg"
 check "a ygg earlier on PATH than --out is a hard error" test "$rc" -eq 2
 check "the error names both paths" bash -c "grep -q -F '$T/elsewhere/ygg' '$T/out' && grep -q -F 'resolves to $T/pathbin/ygg' '$T/out'"
 
+# --- --beside-path: a second ygg beside the one on PATH (B-214)
+fresh
+PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/elsewhere/ygg" --beside-path
+check "--beside-path builds OUT while another ygg is first on PATH, exit 0" bash -c "[ $rc -eq 0 ] && [ -x '$T/elsewhere/ygg' ]"
+check "the ygg first on PATH is not touched" grep -q old "$T/pathbin/ygg"
+check "it writes the facts beside OUT" grep -q "^odin: $(sha odin)\$" "$T/elsewhere/ygg.build.txt"
+check "it prints the YGG_CMD line" has "YGG_CMD=$T/elsewhere/ygg"
+check "it notes that PATH resolves elsewhere" has "resolves to $T/pathbin/ygg"
+fresh_none
+PATH="$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/elsewhere/ygg" --beside-path
+check "--beside-path with no ygg on PATH builds too, and prints the YGG_CMD line" bash -c "[ $rc -eq 0 ] && grep -q -F 'YGG_CMD=$T/elsewhere/ygg' '$T/out'"
+fresh
+PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --beside-path
+check "--beside-path without --out is a usage error (exit 2), and builds nothing" bash -c "[ $rc -eq 2 ] && grep -q usage '$T/out' && ! grep -q '^built ' '$FAKE_LOG'"
+fresh
+PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/pathbin/ygg" --beside-path
+check "--beside-path with OUT the ygg on PATH passes and prints no YGG_CMD line" bash -c "[ $rc -eq 0 ] && ! grep -q 'YGG_CMD=' '$T/out'"
+
 # --- an OUT that is not a Go binary, or not a file: refused, and named; --force overwrites a file
 fresh; printf '#!/bin/sh\necho a wrapper\n' >"$T/pathbin/ygg"
 PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U"
@@ -191,9 +209,9 @@ stale "$T/pathbin/ygg" "$U/odin" >"$T/out"
 check "a binary from another commit is stale, with both commits" has "built from odin 000000000000, but the checkout $U/odin is at $(sha odin)"
 
 # --- the guard (ygg_guard, as the smoke scripts call it): no ygg on PATH, and a ygg on PATH through a link
-guard() { # ODIN ANY DRY: runs ygg_guard with this test's PATH and prints its line and its result
+guard() { # ODIN ANY DRY [CMD]: runs ygg_guard with this test's PATH and prints its line and its result
   # shellcheck source-path=SCRIPTDIR source=../ygg-build-facts.sh
-  ( . "$S/ygg-build-facts.sh"; if ygg_guard test "$1" "$2" "$3"; then echo "PASS"; else echo "REFUSED"; fi ) 2>&1
+  ( . "$S/ygg-build-facts.sh"; if ygg_guard test "$1" "$2" "$3" "${4:-}"; then echo "PASS"; else echo "REFUSED"; fi ) 2>&1
 }
 fresh_none
 PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 >"$T/out"
@@ -214,6 +232,25 @@ check "a dry run prints STALE and passes" bash -c "grep -q 'STALE: .*(a dry run:
 PATH="$T/linkbin:$GB:$BASEPATH" guard "$U/odin" 1 0 >"$T/out"
 check "--any-ygg skips the check and passes" bash -c "grep -q -F 'test: ygg guard: skipped (--any-ygg)' '$T/out' && grep -q PASS '$T/out'"
 rm -rf "$T/linkbin" "$T/real"
+
+# The guard for a YGG_CMD (the fifth argument): one executable file is checked, anything else is used unchecked.
+fresh_none; old "$T/second/ygg"; : >"$T/second/note"
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 "$T/second/ygg" >"$T/out"
+check "CMD: a file with no facts is STALE and refused, though no ygg is on PATH" bash -c "grep -q -F 'test: ygg guard: STALE: the ygg at $T/second/ygg has no build facts' '$T/out' && grep -q REFUSED '$T/out'"
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 1 "$T/second/ygg" >"$T/out"
+check "CMD: a dry run prints STALE and passes" bash -c "grep -q 'STALE: .*(a dry run: not refused)' '$T/out' && grep -q PASS '$T/out'"
+PATH="$GB:$BASEPATH" guard "$U/odin" 1 0 "$T/second/ygg" >"$T/out"
+check "CMD: --any-ygg skips the check and passes" bash -c "grep -q -F 'test: ygg guard: skipped (--any-ygg): $T/second/ygg' '$T/out' && grep -q PASS '$T/out'"
+PATH="$T/pathbin:$GB:$BASEPATH" run "$S/ygg-build.sh" --yggdrasil "$U" --out "$T/second/ygg" --beside-path
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 "$T/second/ygg" >"$T/out"
+check "CMD: after ygg-build.sh --beside-path the guard passes" bash -c "grep -q -F 'test: ygg guard: ok: the ygg at $T/second/ygg was built from odin $(sha odin)' '$T/out' && grep -q PASS '$T/out'"
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 "$T/second/ygg --extra" >"$T/out"
+check "CMD: several words are used unchecked, with a line that says so" bash -c "grep -q -F 'test: ygg guard: YGG_CMD ($T/second/ygg --extra) is not one executable file: it is used without checking' '$T/out' && grep -q PASS '$T/out'"
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 "$T/second/none" >"$T/out"
+check "CMD: a word that is no file is used unchecked too" bash -c "grep -q -F 'is not one executable file' '$T/out' && grep -q PASS '$T/out'"
+PATH="$GB:$BASEPATH" guard "$U/odin" 0 0 "$T/second/note" >"$T/out"
+check "CMD: a file that is not executable is used unchecked" bash -c "grep -q -F 'is not one executable file' '$T/out' && grep -q PASS '$T/out'"
+rm -rf "$T/second"
 
 hermetic_done
 echo; [ "$fail" -eq 0 ] && echo "ygg-build.test.sh: all ok" || echo "ygg-build.test.sh: FAILURES"

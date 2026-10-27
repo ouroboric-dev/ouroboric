@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build `ygg` from the umbrella's checkouts, with its go.work, and prove that the shell will run what was built.
-#   ygg-build.sh [--yggdrasil DIR] [--out FILE] [--allow-behind] [--force]
+#   ygg-build.sh [--yggdrasil DIR] [--out FILE [--beside-path]] [--allow-behind] [--force]
 # DIR is the umbrella (default: the yggdrasil folder beside this repo). It must hold go.work and odin.
 #   1. For each module that DIR/go.work uses: a tree with uncommitted changes is refused, and so is a checkout
 #      behind its origin/main (unless --allow-behind). Nothing is fetched: the comparison is with the local
@@ -14,24 +14,29 @@
 #      odin and every module of go.work with its commit, and the SHA-256 of OUT (see ygg-build-facts.sh). The smoke
 #      scripts read it to refuse a stale ygg.
 #   4. `command -v ygg` must resolve to OUT, or this is an error naming both paths (fix PATH or pass --out). Then it
-#      prints OUT, its time and the commits.
+#      prints OUT, its time and the commits. With --beside-path (it needs --out) this is a note instead: OUT is a
+#      second ygg beside the one on PATH, the script builds it, writes its facts and prints `YGG_CMD=OUT`, the way
+#      to run it: ygg-proof-run.sh and ygg-smoke-real.sh check a YGG_CMD of one executable file against its facts
+#      as they check the ygg from PATH. A plain --out still fails when PATH resolves to another ygg.
 # It never writes to DIR, never starts the engine and never uses the network. Exit 0 built, 2 a refusal.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR source=ygg-build-facts.sh
 . "$HERE/ygg-build-facts.sh"
-ygg_dir="$HERE/../../yggdrasil" out="" allow_behind=0 force=0
-usage() { echo "usage: ygg-build.sh [--yggdrasil DIR] [--out FILE] [--allow-behind] [--force]" >&2; exit 2; }
+ygg_dir="$HERE/../../yggdrasil" out="" allow_behind=0 force=0 beside=0
+usage() { echo "usage: ygg-build.sh [--yggdrasil DIR] [--out FILE [--beside-path]] [--allow-behind] [--force]" >&2; exit 2; }
 fail() { echo "ygg-build: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --yggdrasil) [ $# -ge 2 ] || usage; ygg_dir="$2"; shift 2 ;;
     --out) [ $# -ge 2 ] || usage; out="$2"; shift 2 ;;
+    --beside-path) beside=1; shift ;;
     --allow-behind) allow_behind=1; shift ;;
     --force) force=1; shift ;;
     *) usage ;;
   esac
 done
+[ "$beside" -eq 0 ] || [ -n "$out" ] || usage
 for tool in git go sha256sum; do command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"; done
 [ -d "$ygg_dir" ] || fail "no umbrella folder at $ygg_dir (--yggdrasil)"
 ygg_dir="$(cd "$ygg_dir" && pwd)"
@@ -113,6 +118,14 @@ mv -f -- "$tmp_facts" "$out.build.txt"
 # 4. The proof that the shell runs it.
 on_path="$(command -v ygg 2>/dev/null || true)"
 if [ -z "$on_path" ] || [ "$(readlink -f -- "$on_path")" != "$(readlink -f -- "$out")" ]; then
+  if [ "$beside" -eq 1 ]; then
+    echo "ygg-build: built $out ($(date -r "$out" '+%Y-%m-%d %H:%M:%S')); \`command -v ygg\` resolves to ${on_path:-nothing}, not to it (--beside-path)"
+    echo "ygg-build: the facts are in $out.build.txt; the commits:"
+    for line in "${facts[@]}"; do echo "ygg-build:   ${line/: / }"; done
+    echo "ygg-build: to run it, set:"
+    echo "YGG_CMD=$out"
+    exit 0
+  fi
   fail "built $out, but \`command -v ygg\` resolves to ${on_path:-nothing}; put $(dirname "$out") first on PATH, or build to that ygg with --out ${on_path:-FILE}"
 fi
 echo "ygg-build: built $out ($(date -r "$out" '+%Y-%m-%d %H:%M:%S')); \`command -v ygg\` resolves to it"

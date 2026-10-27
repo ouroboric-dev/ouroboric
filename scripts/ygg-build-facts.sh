@@ -9,11 +9,15 @@
 #                                    built from the HEAD of the odin checkout ODIN, 1 otherwise. A stale message ends
 #                                    with the command to paste: "run: /abs/scripts/ygg-build.sh --yggdrasil UMBRELLA",
 #                                    where UMBRELLA is the folder that holds ODIN.
-#   ygg_guard PREFIX ODIN ANY DRY    the guard of the smoke scripts, for the ygg first on PATH, read through its links
-#                                    (readlink -f), since ygg-build.sh writes the facts beside the link's target. It
-#                                    prints one "PREFIX: ygg guard: ..." line and returns 1 when the script must
-#                                    refuse. ANY=1 (--any-ygg) skips the check and says so; DRY=1 (a dry run) prints
-#                                    the result and never refuses.
+#   ygg_guard PREFIX ODIN ANY DRY [CMD]
+#                                    the guard of the smoke scripts, for the ygg first on PATH, or, when CMD (the
+#                                    script's YGG_CMD) is not empty, for CMD: a single word that resolves to an
+#                                    executable file is checked as the ygg from PATH is, and CMD of several words, or
+#                                    one that is no executable file (a test's stub), is used unchecked, with a line
+#                                    that says so. Links are read through (readlink -f), since ygg-build.sh writes the
+#                                    facts beside the link's target. It prints one "PREFIX: ygg guard: ..." line and
+#                                    returns 1 when the script must refuse. ANY=1 (--any-ygg) skips the check and says
+#                                    so; DRY=1 (a dry run) prints the result and never refuses.
 ygg_build_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ygg-build.sh"
 ygg_facts_get() {
   local f="$1.build.txt"
@@ -52,8 +56,20 @@ ygg_stale_check() {
 }
 
 ygg_guard() {
-  local prefix="$1" odin="$2" any="$3" dry="$4" bin=""
-  if bin="$(command -v ygg 2>/dev/null)" && [ -n "$bin" ]; then bin="$(readlink -f -- "$bin")"; else bin=""; fi
+  local prefix="$1" odin="$2" any="$3" dry="$4" cmd="${5:-}" bin="" found=""
+  if [ -n "$cmd" ]; then
+    if [[ $cmd != *[[:space:]]* ]] && found="$(command -v -- "$cmd" 2>/dev/null)" && [ -f "$found" ] && [ -x "$found" ]; then
+      bin="$(readlink -f -- "$found")"
+    elif [ "$any" = 1 ]; then
+      echo "$prefix: ygg guard: skipped (--any-ygg): YGG_CMD ($cmd) is used without checking which odin it was built from"
+      return 0
+    else
+      echo "$prefix: ygg guard: YGG_CMD ($cmd) is not one executable file: it is used without checking which odin it was built from"
+      return 0
+    fi
+  elif found="$(command -v ygg 2>/dev/null)" && [ -n "$found" ]; then
+    bin="$(readlink -f -- "$found")"
+  fi
   if [ "$any" = 1 ]; then
     echo "$prefix: ygg guard: skipped (--any-ygg): ${bin:-the ygg} is used without checking which odin it was built from"
     return 0
